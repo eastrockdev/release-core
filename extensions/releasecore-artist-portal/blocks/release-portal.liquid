@@ -1,0 +1,78 @@
+{% liquid
+  assign rc_preview_all = false
+  if request.design_mode and block.settings.preview_all_releases
+    assign rc_preview_all = true
+  endif
+%}
+<div
+  id="releasecore-portal"
+  class="rc-portal"
+  data-rc-portal
+  data-appearance="{{ block.settings.appearance }}"
+  data-layout="contained"
+  data-accent="{{ block.settings.accent_color }}"
+  data-proxy-base="{{ block.settings.proxy_path | escape }}"
+  data-logged-in="{% if customer %}true{% else %}false{% endif %}"
+  data-preview-all="{% if rc_preview_all %}true{% else %}false{% endif %}"
+  data-customer-name="{% if customer %}{{ customer.name | escape }}{% endif %}"
+  data-show-add="{% if block.settings.show_add_release %}true{% else %}false{% endif %}"
+  style="--rc-accent: {{ block.settings.accent_color }};"
+>
+  <div class="rc-shell rc-library-shell">
+    <div class="rc-library-header">
+      <div>
+        {% if block.settings.eyebrow != blank %}<div class="rc-eyebrow">{{ block.settings.eyebrow }}</div>{% endif %}
+        <h1 class="rc-title">{{ block.settings.heading }}</h1>
+        {% if block.settings.subheading != blank %}<p class="rc-subtitle">{{ block.settings.subheading }}</p>{% endif %}
+      </div>
+      {% if rc_preview_all %}<span class="rc-preview-chip">Preview mode</span>{% endif %}
+    </div>
+
+    {% if rc_preview_all %}<div class="rc-preview-note rc-library-preview">Theme editor preview · showing every ReleaseCore release in this development store. Editing is disabled.</div>{% endif %}
+
+    {% if customer or rc_preview_all %}
+      <div data-rc-portal-body>
+        <div class="rc-library-grid rc-library-grid-loading rc-library-grid-stable" aria-busy="true">
+          <div class="rc-dashboard-release rc-loader-release-card" aria-hidden="true"><div class="rc-skeleton rc-dashboard-cover"></div><div class="rc-dashboard-date-row"><span class="rc-skeleton rc-loader-date"></span><span class="rc-skeleton rc-loader-status"></span></div><div class="rc-skeleton rc-loader-title"></div><div class="rc-skeleton rc-loader-artist"></div></div>
+          <div class="rc-dashboard-add rc-library-add rc-loader-add-card" aria-hidden="true"><span class="rc-skeleton rc-dashboard-plus"></span><span class="rc-skeleton rc-loader-add-title"></span><span class="rc-skeleton rc-loader-add-copy"></span><span class="rc-skeleton rc-loader-add-link"></span></div>
+        </div>
+      </div>
+      <div data-rc-modal-host></div>
+    {% else %}
+      <div class="rc-dashboard-grid rc-library-login-grid">
+        <a class="rc-dashboard-add rc-dashboard-signin" href="{{ routes.account_login_url }}">
+          <span class="rc-dashboard-plus">↗</span>
+          <strong>Sign in to manage releases</strong>
+          <span>Your drafts, submissions, corrections and distribution progress live here.</span>
+          <b>Sign in&nbsp;&nbsp;→</b>
+        </a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% # theme-check-disable AssetSizeJavaScript %}
+<script src="{{ 'releasecore-portal.js' | asset_url }}" defer></script>
+{% # theme-check-enable AssetSizeJavaScript %}
+
+{% schema %}
+{
+  "name": "My releases",
+  "target": "section",
+  "stylesheet": "releasecore-portal.css",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Music distribution" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "My releases" },
+    { "type": "text", "id": "subheading", "label": "Subheading", "default": "Build releases, manage track information and follow each project through review and distribution." },
+    { "type": "checkbox", "id": "show_add_release", "label": "Show add release card", "default": true },
+    { "type": "select", "id": "appearance", "label": "Appearance", "default": "reactive", "options": [
+      { "value": "reactive", "label": "Reactive / inherit theme" },
+      { "value": "dark", "label": "Dark" },
+      { "value": "light", "label": "Light" }
+    ]},
+    { "type": "color", "id": "accent_color", "label": "Accent", "default": "#8f7cff" },
+    { "type": "checkbox", "id": "preview_all_releases", "label": "Theme editor: preview all releases", "default": false, "info": "Development preview only. Shows all releases read-only when customizing the theme." },
+    { "type": "text", "id": "proxy_path", "label": "ReleaseCore proxy path", "default": "/apps/releasecore" }
+  ]
+}
+{% endschema %}

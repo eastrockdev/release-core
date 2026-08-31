@@ -1,0 +1,68 @@
+{% liquid
+  assign rc_preview_all = false
+  if request.design_mode and block.settings.preview_all_releases
+    assign rc_preview_all = true
+  endif
+%}
+<div
+  class="rc-recent"
+  data-rc-recent
+  data-appearance="{{ block.settings.appearance }}"
+  data-layout="contained"
+  data-accent="{{ block.settings.accent_color }}"
+  data-limit="{{ block.settings.limit }}"
+  data-proxy-base="{{ block.settings.proxy_path | escape }}"
+  data-portal-url="{{ block.settings.portal_url | escape }}"
+  data-logged-in="{% if customer %}true{% else %}false{% endif %}"
+  data-preview-all="{% if rc_preview_all %}true{% else %}false{% endif %}"
+  data-show-add="{% if block.settings.show_add_release %}true{% else %}false{% endif %}"
+  data-geometry-state="pending"
+  data-customer-name="{% if customer %}{{ customer.name | escape }}{% endif %}"
+  style="--rc-accent: {{ block.settings.accent_color }};"
+>
+  <div class="rc-shell rc-recent-shell">
+    {% if rc_preview_all %}<div class="rc-preview-note rc-recent-preview">Theme editor preview · showing all ReleaseCore releases read-only.</div>{% endif %}
+    <div data-rc-recent-body>
+      {% if customer or rc_preview_all %}
+        <div class="rc-dashboard-grid rc-dashboard-grid-loading rc-dashboard-grid-stable" aria-busy="true">
+          <div class="rc-dashboard-release rc-loader-release-card" aria-hidden="true"><div class="rc-skeleton rc-dashboard-cover"></div><div class="rc-dashboard-date-row"><span class="rc-skeleton rc-loader-date"></span><span class="rc-skeleton rc-loader-status"></span></div><div class="rc-skeleton rc-loader-title"></div><div class="rc-skeleton rc-loader-artist"></div></div>
+          <div class="rc-dashboard-add rc-loader-add-card" style="--rc-add-span:3" aria-hidden="true"><span class="rc-skeleton rc-dashboard-plus"></span><span class="rc-skeleton rc-loader-add-title"></span><span class="rc-skeleton rc-loader-add-copy"></span><span class="rc-skeleton rc-loader-add-link"></span></div>
+        </div>
+      {% else %}
+        <div class="rc-dashboard-grid">
+          <a class="rc-dashboard-add rc-dashboard-signin" href="{{ routes.account_login_url }}">
+            <span class="rc-dashboard-plus">↗</span>
+            <strong>Sign in to view releases</strong>
+            <span>Your active music distribution projects will appear here.</span>
+          </a>
+        </div>
+      {% endif %}
+    </div>
+    <div data-rc-recent-modal-host></div>
+  </div>
+</div>
+
+{% # theme-check-disable AssetSizeJavaScript %}
+<script src="{{ 'releasecore-recent.js' | asset_url }}" defer></script>
+{% # theme-check-enable AssetSizeJavaScript %}
+
+{% schema %}
+{
+  "name": "Recent releases",
+  "target": "section",
+  "stylesheet": "releasecore-portal.css",
+  "settings": [
+    { "type": "range", "id": "limit", "label": "Releases shown", "min": 1, "max": 4, "step": 1, "default": 4 },
+    { "type": "checkbox", "id": "show_add_release", "label": "Show add release card", "default": true },
+    { "type": "select", "id": "appearance", "label": "Appearance", "default": "reactive", "options": [
+      { "value": "reactive", "label": "Reactive / inherit theme" },
+      { "value": "dark", "label": "Dark" },
+      { "value": "light", "label": "Light" }
+    ]},
+    { "type": "color", "id": "accent_color", "label": "Accent", "default": "#8f7cff" },
+    { "type": "checkbox", "id": "preview_all_releases", "label": "Theme editor: preview all releases", "default": false, "info": "Development preview only. Shows all releases read-only when customizing the theme." },
+    { "type": "url", "id": "portal_url", "label": "Full releases page" },
+    { "type": "text", "id": "proxy_path", "label": "ReleaseCore proxy path", "default": "/apps/releasecore" }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,48 @@
+[[extensions]]
+name = "Release event occurred"
+type = "flow_trigger"
+handle = "release-event-occurred"
+uid = "7e8ceb16-5051-e951-812c-a44bf91d8ea0ab5d762a"
+description = "Starts a workflow when a ReleaseCore release reaches a configured workflow or distribution event."
+
+[settings]
+
+[[settings.fields]]
+type = "customer_reference"
+description = "The Shopify customer who owns the release in the artist portal."
+
+[[settings.fields]]
+type = "single_line_text_field"
+key = "Event type"
+
+[[settings.fields]]
+type = "single_line_text_field"
+key = "Release ID"
+
+[[settings.fields]]
+type = "single_line_text_field"
+key = "Release title"
+
+[[settings.fields]]
+type = "single_line_text_field"
+key = "Release type"
+
+[[settings.fields]]
+type = "single_line_text_field"
+key = "Release status"
+
+[[settings.fields]]
+type = "single_line_text_field"
+key = "Distribution status"
+
+[[settings.fields]]
+type = "single_line_text_field"
+key = "UPC"
+
+[[settings.fields]]
+type = "single_line_text_field"
+key = "Catalog number"
+
+[[settings.fields]]
+type = "number_decimal"
+key = "Track count"

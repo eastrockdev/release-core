@@ -1,0 +1,222 @@
+import { Readable } from "node:stream";
+import { authenticate } from "../shopify.server";
+import { CREDIT_ROLES, GENRES, LANGUAGES, PRO_OPTIONS } from "../lib/releasecore";
+import {
+  addPortalCredit,
+  addPortalTrack,
+  completePortalUpload,
+  createPortalRelease,
+  listPortalReleases,
+  portalIdentity,
+  portalReleaseDetail,
+  removePortalCredit,
+  requirePortalCustomer,
+  resolvePortalReviewItem,
+  stagePortalUpload,
+  submitPortalRelease,
+  updatePortalRelease,
+  updatePortalTrack,
+  uploadPortalMaster,
+  stagePortalMasterUpload,
+  completePortalMasterUpload,
+} from "../lib/portal.server";
+import { portalReleaseAccess } from "../lib/automations.server";
+import db from "../db.server";
+import {
+  getR2SignedReadUrl,
+  localStorageReadStream,
+  localStorageStat,
+} from "../lib/storage.server";
+
+function pathFromRequest(request) {
+  const pathname = new URL(request.url).pathname;
+  return pathname.replace(/^\/releasecore-proxy\/?/, "").replace(/^\/+|\/+$/g, "");
+}
+
+function errorResponse(error) {
+  if (error instanceof Response) return error;
+  console.error("ReleaseCore portal request failed", error);
+  return Response.json(
+    {
+      ok: false,
+      error: error instanceof Error ? error.message : "ReleaseCore could not complete this request.",
+      blockers: error?.blockers || undefined,
+    },
+    { status: 400 },
+  );
+}
+
+async function masterAudioResponse({ request, identity, fileId, previewAll }) {
+  const file = await db.releaseFile.findFirst({
+    where: previewAll
+      ? { id: fileId, kind: "MASTER_WAV", release: { shop: identity.shop } }
+      : { id: fileId, kind: "MASTER_WAV", release: { shop: identity.shop, ownerCustomerId: identity.customerId } },
+  });
+  if (!file || !file.storageKey) return new Response("Audio not found.", { status: 404 });
+
+  if (file.storageProvider === "R2") {
+    const signedUrl = await getR2SignedReadUrl(file.storageKey, {
+      filename: file.filename || "master.wav",
+      mimeType: file.mimeType || "audio/wav",
+    });
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: signedUrl,
+        "Cache-Control": "private, no-store",
+      },
+    });
+  }
+
+  if (file.storageProvider !== "LOCAL_DEV") return new Response("Audio not found.", { status: 404 });
+  const info = await localStorageStat(file.storageKey);
+  const total = info.size;
+  const range = request.headers.get("range");
+  const headers = {
+    "Content-Type": file.mimeType || "audio/wav",
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "private, no-store",
+    "Content-Disposition": `inline; filename="${String(file.filename || "master.wav").replace(/["\r\n]/g, "_")}"`,
+  };
+  if (range) {
+    const match = range.match(/bytes=(\d*)-(\d*)/);
+    if (!match) return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${total}` } });
+    const start = match[1] ? Number(match[1]) : 0;
+    const end = match[2] ? Math.min(Number(match[2]), total - 1) : total - 1;
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || start > end || start >= total) return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${total}` } });
+    const stream = localStorageReadStream(file.storageKey, { start, end });
+    return new Response(Readable.toWeb(stream), { status: 206, headers: { ...headers, "Content-Length": String(end - start + 1), "Content-Range": `bytes ${start}-${end}/${total}` } });
+  }
+  const stream = localStorageReadStream(file.storageKey);
+  return new Response(Readable.toWeb(stream), { status: 200, headers: { ...headers, "Content-Length": String(total) } });
+}
+
+export const loader = async ({ request }) => {
+  try {
+    const context = await authenticate.public.appProxy(request);
+    const identity = portalIdentity(request, context.session);
+    const previewAll = process.env.NODE_ENV !== "production" && identity.url.searchParams.get("preview") === "all";
+    if (!previewAll) requirePortalCustomer(identity);
+    const path = pathFromRequest(request);
+
+    const audioMatch = path.match(/^portal\/audio\/([^/]+)$/);
+    if (audioMatch) return masterAudioResponse({ request, identity, fileId: audioMatch[1], previewAll });
+
+    if (path === "portal/releases") {
+      const limit = identity.url.searchParams.get("limit");
+      const releases = await listPortalReleases({ ...identity, admin: context.admin, limit, previewAll });
+      const access = await portalReleaseAccess({ admin: context.admin, shop: identity.shop, customerId: identity.customerId, previewAll });
+      return Response.json({ ok: true, releases, access });
+    }
+
+    const detailMatch = path.match(/^portal\/releases\/([^/]+)$/);
+    if (detailMatch) {
+      const release = await portalReleaseDetail({ ...identity, admin: context.admin, releaseId: detailMatch[1], previewAll });
+      if (!release) return Response.json({ ok: false, error: "Release not found." }, { status: 404 });
+      return Response.json({
+        ok: true,
+        release,
+        options: { genres: GENRES, languages: LANGUAGES, creditRoles: CREDIT_ROLES, proOptions: PRO_OPTIONS },
+      });
+    }
+
+    return Response.json({ ok: false, error: "Portal endpoint not found." }, { status: 404 });
+  } catch (error) {
+    return errorResponse(error);
+  }
+};
+
+export const action = async ({ request }) => {
+  try {
+    const context = await authenticate.public.appProxy(request);
+    const identity = portalIdentity(request, context.session);
+    requirePortalCustomer(identity);
+    const path = pathFromRequest(request);
+
+    if (path === "portal/uploads/master/stage") {
+      const target = await stagePortalMasterUpload({
+        request,
+        admin: context.admin,
+        ...identity,
+      });
+      return Response.json({ ok: true, target });
+    }
+
+    if (path === "portal/uploads/master/complete") {
+      const file = await completePortalMasterUpload({
+        request,
+        admin: context.admin,
+        ...identity,
+      });
+      return Response.json({ ok: true, file });
+    }
+
+    if (path === "portal/uploads/master") {
+      const file = await uploadPortalMaster({ request, admin: context.admin, ...identity, url: identity.url });
+      return Response.json({ ok: true, file });
+    }
+
+    const formData = await request.formData();
+
+    if (path === "portal/uploads/stage") {
+      const target = await stagePortalUpload({ admin: context.admin, ...identity, formData });
+      return Response.json({ ok: true, target });
+    }
+
+    if (path === "portal/uploads/complete") {
+      const file = await completePortalUpload({ admin: context.admin, ...identity, formData });
+      return Response.json({ ok: true, file });
+    }
+
+    if (path !== "portal/releases") {
+      return Response.json({ ok: false, error: "Portal endpoint not found." }, { status: 404 });
+    }
+
+    const intent = String(formData.get("intent") || "");
+    const releaseId = String(formData.get("releaseId") || "");
+    const trackId = String(formData.get("trackId") || "");
+
+    if (intent === "create-release") {
+      const release = await createPortalRelease({
+        admin: context.admin,
+        ...identity,
+        type: formData.get("type"),
+        title: formData.get("title"),
+        artistName: formData.get("artistName"),
+      });
+      return Response.json({ ok: true, releaseId: release.id });
+    }
+    if (intent === "update-release") {
+      await updatePortalRelease({ ...identity, releaseId, formData });
+      return Response.json({ ok: true });
+    }
+    if (intent === "add-track") {
+      const track = await addPortalTrack({ ...identity, releaseId });
+      return Response.json({ ok: true, trackId: track.id });
+    }
+    if (intent === "update-track") {
+      await updatePortalTrack({ ...identity, releaseId, trackId, formData });
+      return Response.json({ ok: true });
+    }
+    if (intent === "add-credit") {
+      await addPortalCredit({ ...identity, releaseId, trackId, formData });
+      return Response.json({ ok: true });
+    }
+    if (intent === "remove-credit") {
+      await removePortalCredit({ ...identity, releaseId, trackId, creditId: String(formData.get("creditId") || "") });
+      return Response.json({ ok: true });
+    }
+    if (intent === "submit-release") {
+      await submitPortalRelease({ admin: context.admin, ...identity, releaseId });
+      return Response.json({ ok: true });
+    }
+    if (intent === "resolve-review-item") {
+      await resolvePortalReviewItem({ ...identity, releaseId, reviewItemId: String(formData.get("reviewItemId") || "") });
+      return Response.json({ ok: true });
+    }
+
+    return Response.json({ ok: false, error: "Unknown portal action." }, { status: 400 });
+  } catch (error) {
+    return errorResponse(error);
+  }
+};

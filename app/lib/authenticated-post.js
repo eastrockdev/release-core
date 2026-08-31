@@ -1,0 +1,30 @@
+export async function authenticatedPost(shopify, url, formData) {
+  // Shopify App Bridge ID tokens are intentionally short lived. Fetch a fresh
+  // token for every mutation and send it explicitly to our own backend.
+  const idToken = await shopify.idToken();
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      Accept: "application/json",
+    },
+    body: formData,
+  });
+
+  const contentType = response.headers.get("content-type") || "";
+  let data = null;
+
+  if (contentType.includes("application/json")) {
+    data = await response.json();
+  } else {
+    const text = await response.text();
+    data = { error: text || `Request failed with status ${response.status}.` };
+  }
+
+  if (!response.ok || data?.ok === false) {
+    throw new Error(data?.error || `Request failed with status ${response.status}.`);
+  }
+
+  return data;
+}
