@@ -4,6 +4,8 @@ import { FILE_KINDS, fileContentTypeForKind, isReplaceableKind, stagedResourceFo
 import { maybeAutoAssignIsrc } from "./isrc.server";
 import { calculateReleaseReadiness, releaseCanSubmit, releaseIsEditable } from "./workflow";
 import {
+  abortR2MultipartMasterUpload,
+  completeR2MultipartMasterUpload,
   createR2MasterUploadTarget,
   deleteLocalStorageKey,
   deleteR2StorageKey,
@@ -413,7 +415,7 @@ async function bestEffortDeleteShopifyFile(admin, fileId) {
   if (!admin || !fileId) return;
   try {
     await admin.graphql(`mutation ReleaseCorePortalDeleteFile($fileIds:[ID!]!){fileDelete(fileIds:$fileIds){deletedFileIds userErrors{message}}}`, { variables: { fileIds: [fileId] } });
-  } catch {}
+  } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
 }
 
 export async function completePortalUpload({ admin, shop, customerId, formData }) {
@@ -504,6 +506,7 @@ export async function stagePortalMasterUpload({ request, shop, customerId }) {
     trackId,
     filename: descriptor.name,
     mimeType: descriptor.mime,
+    sizeBytes: descriptor.size,
   });
 }
 
@@ -520,6 +523,9 @@ export async function completePortalMasterUpload({
   const mimeType = String(formData.get("mimeType") || "audio/wav");
   const sizeBytes = Number(formData.get("sizeBytes") || 0);
   const storageKey = String(formData.get("storageKey") || "");
+  const intent = String(formData.get("intent") || "complete");
+  const uploadMode = String(formData.get("uploadMode") || "SINGLE_PUT");
+  const uploadId = String(formData.get("uploadId") || "");
 
   const release = await getPortalRelease({
     shop,
@@ -543,7 +549,42 @@ export async function completePortalMasterUpload({
 
   if (!storageKey) throw new Error("R2 storage key is missing.");
 
-  const verified = await verifyR2MasterObject({
+  if (intent === "abort") {
+    if (!uploadId) throw new Error("The multipart upload ID is missing.");
+    await abortR2MultipartMasterUpload({
+      shop,
+      releaseId,
+      trackId,
+      storageKey,
+      uploadId,
+    });
+    return { aborted: true };
+  }
+
+  let multipartCompleted = false;
+  let committed = false;
+  try {
+    if (uploadMode === "MULTIPART") {
+      if (!uploadId) throw new Error("The multipart upload ID is missing.");
+      let parts;
+      try {
+        parts = JSON.parse(String(formData.get("parts") || "[]"));
+      } catch {
+        throw new Error("The multipart completion payload is invalid.");
+      }
+      await completeR2MultipartMasterUpload({
+        shop,
+        releaseId,
+        trackId,
+        storageKey,
+        uploadId,
+        parts,
+        expectedSize: descriptor.size,
+      });
+      multipartCompleted = true;
+    }
+
+    const verified = await verifyR2MasterObject({
     shop,
     releaseId,
     trackId,
@@ -552,16 +593,14 @@ export async function completePortalMasterUpload({
     expectedMimeType: descriptor.mime,
   });
 
-  const existing = await db.releaseFile.findMany({
+    const existing = await db.releaseFile.findMany({
     where: { releaseId, trackId, kind: FILE_KINDS.MASTER_WAV },
   });
-  const stalePreviews = await db.releaseFile.findMany({
+    const stalePreviews = await db.releaseFile.findMany({
     where: { releaseId, trackId, kind: FILE_KINDS.PREVIEW_MP3 },
   });
 
-  let created;
-  try {
-    created = await db.$transaction(async (tx) => {
+    const created = await db.$transaction(async (tx) => {
       if (existing.length) {
         await tx.releaseFile.deleteMany({
           where: { id: { in: existing.map((item) => item.id) } },
@@ -594,22 +633,36 @@ export async function completePortalMasterUpload({
 
       return file;
     });
-  } catch (error) {
-    try { await deleteR2StorageKey(storageKey); } catch {}
-    throw error;
+    committed = true;
+
+    for (const item of existing) {
+    try { await deleteStoredPortalMaster(item); } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
   }
 
-  for (const item of existing) {
-    try { await deleteStoredPortalMaster(item); } catch {}
-  }
-
-  for (const item of stalePreviews) {
+    for (const item of stalePreviews) {
     if (item.storageProvider === "SHOPIFY_FILES" && item.storageKey) {
       await bestEffortDeleteShopifyFile(admin, item.storageKey);
     }
   }
 
-  return created;
+    return created;
+  } catch (error) {
+    if (uploadId && !multipartCompleted) {
+      try {
+        await abortR2MultipartMasterUpload({
+          shop,
+          releaseId,
+          trackId,
+          storageKey,
+          uploadId,
+        });
+      } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
+    }
+    if (!committed && (!uploadId || multipartCompleted)) {
+      try { await deleteR2StorageKey(storageKey); } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
+    }
+    throw error;
+  }
 }
 
 export async function uploadPortalMaster({ request, admin, shop, customerId, url }) {
@@ -640,7 +693,7 @@ export async function uploadPortalMaster({ request, admin, shop, customerId, url
     await db.release.update({ where: { id: releaseId }, data: { updatedAt: new Date() } });
     return file;
   } catch (error) {
-    if (savedKey) try { await deleteLocalStorageKey(savedKey); } catch {}
+    if (savedKey) try { await deleteLocalStorageKey(savedKey); } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
     throw error;
   }
 }

@@ -54,14 +54,127 @@ function uploadDirectPutTarget(target, file, onProgress) {
   });
 }
 
-function masterCompleteData({ releaseId, trackId, file, storageKey }) {
+const R2_MULTIPART_CONCURRENCY = 3;
+const R2_PART_MAX_ATTEMPTS = 3;
+
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function uploadR2PartTarget(target, blob, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(target.method || "PUT", target.uploadUrl, true);
+    for (const [name, value] of Object.entries(target.headers || {})) {
+      xhr.setRequestHeader(name, value);
+    }
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress?.(event.loaded);
+    };
+    const networkError = () => {
+      const error = new Error(`Multipart upload part ${target.partNumber} was interrupted.`);
+      error.code = "R2_PART_INTERRUPTED";
+      reject(error);
+    };
+    xhr.onerror = networkError;
+    xhr.onabort = networkError;
+    xhr.ontimeout = networkError;
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(`R2 rejected upload part ${target.partNumber} (${xhr.status}).`));
+        return;
+      }
+      const etag = xhr.getResponseHeader("ETag");
+      if (!etag) {
+        reject(new Error("R2 uploaded a part but did not expose its ETag. Add ETag to the bucket CORS exposeHeaders list."));
+        return;
+      }
+      onProgress?.(blob.size);
+      resolve({ partNumber: target.partNumber, etag });
+    };
+    xhr.send(blob);
+  });
+}
+
+async function uploadR2PartWithRetries({ target, blob, onProgress }) {
+  let lastError;
+  for (let attempt = 1; attempt <= R2_PART_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      onProgress?.(0);
+      return await uploadR2PartTarget(target, blob, onProgress);
+    } catch (error) {
+      lastError = error;
+      if (attempt < R2_PART_MAX_ATTEMPTS) await delay(400 * 2 ** (attempt - 1));
+    }
+  }
+  throw lastError || new Error(`Upload part ${target.partNumber} failed.`);
+}
+
+async function uploadMultipartR2Target(target, file, onProgress) {
+  const partSize = Number(target.partSize || 0);
+  const targets = Array.isArray(target.parts)
+    ? [...target.parts].sort((a, b) => a.partNumber - b.partNumber)
+    : [];
+  const expectedCount = Math.ceil(file.size / partSize);
+  if (!partSize || !targets.length || targets.length !== expectedCount) {
+    throw new Error("ReleaseCore returned an invalid multipart upload target.");
+  }
+
+  const loadedByPart = new Map();
+  const completed = new Array(targets.length);
+  let nextIndex = 0;
+  let firstError = null;
+
+  const reportProgress = () => {
+    const loaded = [...loadedByPart.values()].reduce((total, value) => total + value, 0);
+    onProgress?.(Math.min(99, Math.round((loaded / file.size) * 100)));
+  };
+
+  const worker = async () => {
+    while (!firstError) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= targets.length) return;
+      const part = targets[index];
+      const start = (part.partNumber - 1) * partSize;
+      const blob = file.slice(start, Math.min(start + partSize, file.size));
+      try {
+        completed[index] = await uploadR2PartWithRetries({
+          target: part,
+          blob,
+          onProgress: (loaded) => {
+            loadedByPart.set(part.partNumber, loaded);
+            reportProgress();
+          },
+        });
+      } catch (error) {
+        firstError = error;
+      }
+    }
+  };
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(R2_MULTIPART_CONCURRENCY, targets.length) },
+      () => worker(),
+    ),
+  );
+  if (firstError) throw firstError;
+  onProgress?.(100);
+  return completed.sort((a, b) => a.partNumber - b.partNumber);
+}
+
+function masterCompleteData({ releaseId, trackId, file, target, parts = [] }) {
   const completeData = new FormData();
   completeData.set("releaseId", releaseId);
   completeData.set("trackId", trackId);
   completeData.set("filename", file.name);
   completeData.set("mimeType", file.type || "audio/wav");
   completeData.set("sizeBytes", String(file.size));
-  completeData.set("storageKey", storageKey);
+  completeData.set("storageKey", target.storageKey);
+  completeData.set("uploadMode", target.mode || "SINGLE_PUT");
+  if (target.uploadId) completeData.set("uploadId", target.uploadId);
+  if (parts.length) completeData.set("parts", JSON.stringify(parts));
   return completeData;
 }
 
@@ -80,12 +193,19 @@ async function stageMasterR2({ shopify, releaseId, trackId, file }) {
   );
 }
 
-async function finalizeMasterR2({ shopify, releaseId, trackId, file, storageKey }) {
+async function finalizeMasterR2({ shopify, releaseId, trackId, file, target, parts }) {
   return authenticatedPost(
     shopify,
     "/api/uploads/master/complete",
-    masterCompleteData({ releaseId, trackId, file, storageKey }),
+    masterCompleteData({ releaseId, trackId, file, target, parts }),
   );
+}
+
+async function abortMasterR2({ shopify, releaseId, trackId, file, target }) {
+  if (!target?.uploadId || !target?.storageKey) return;
+  const data = masterCompleteData({ releaseId, trackId, file, target });
+  data.set("intent", "abort");
+  await authenticatedPost(shopify, "/api/uploads/master/complete", data);
 }
 
 async function uploadMasterToR2({ shopify, releaseId, trackId, file, onStage }) {
@@ -118,21 +238,44 @@ async function uploadMasterToR2({ shopify, releaseId, trackId, file, onStage }) 
       });
     }
 
-    if (!staged?.target?.uploadUrl || !staged?.target?.storageKey) {
+    const target = staged?.target;
+    const isMultipart = target?.mode === "MULTIPART";
+    const validTarget = target?.storageKey && (
+      isMultipart
+        ? target.uploadId && Array.isArray(target.parts) && target.parts.length
+        : target.uploadUrl
+    );
+    if (!validTarget) {
       throw new Error("ReleaseCore did not return a valid R2 upload target.");
     }
 
+    let completedParts = [];
     try {
       onStage?.({ phase: "uploading", percent: 1 });
-      await uploadDirectPutTarget(
-        staged.target,
-        file,
-        (percent) => onStage?.({ phase: "uploading", percent }),
-      );
+      if (isMultipart) {
+        completedParts = await uploadMultipartR2Target(
+          target,
+          file,
+          (percent) => onStage?.({
+            phase: "uploading",
+            percent,
+            message: `Uploading master in ${target.parts.length} parts…`,
+          }),
+        );
+      } else {
+        await uploadDirectPutTarget(
+          target,
+          file,
+          (percent) => onStage?.({ phase: "uploading", percent }),
+        );
+      }
     } catch (uploadError) {
       lastError = uploadError;
-
-      if (uploadError?.code === "R2_NETWORK_INTERRUPTED") {
+      if (isMultipart) {
+        try {
+          await abortMasterR2({ shopify, releaseId, trackId, file, target });
+        } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
+      } else if (uploadError?.code === "R2_NETWORK_INTERRUPTED") {
         try {
           onStage?.({
             phase: "finalizing",
@@ -144,7 +287,7 @@ async function uploadMasterToR2({ shopify, releaseId, trackId, file, onStage }) 
             releaseId,
             trackId,
             file,
-            storageKey: staged.target.storageKey,
+            target,
           });
         } catch {
           // Object was not committed (or was incomplete). Retry with a fresh target.
@@ -161,7 +304,8 @@ async function uploadMasterToR2({ shopify, releaseId, trackId, file, onStage }) 
       releaseId,
       trackId,
       file,
-      storageKey: staged.target.storageKey,
+      target,
+      parts: completedParts,
     });
   }
 

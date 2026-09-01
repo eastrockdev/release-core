@@ -53,6 +53,7 @@ export const action = async ({ request }) => {
       trackId,
       filename: descriptor.name,
       mimeType: descriptor.mime,
+      sizeBytes: descriptor.size,
     });
 
     return Response.json({ ok: true, target });

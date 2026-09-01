@@ -2,6 +2,8 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { FILE_KINDS, validateUploadDescriptor } from "../lib/releasecore-files";
 import {
+  abortR2MultipartMasterUpload,
+  completeR2MultipartMasterUpload,
   deleteLocalStorageKey,
   deleteR2StorageKey,
   verifyR2MasterObject,
@@ -46,6 +48,9 @@ export const action = async ({ request }) => {
   }
 
   let newStorageKey = null;
+  let uploadScope = null;
+  let multipartUploadId = null;
+  let multipartCompleted = false;
   let committed = false;
 
   try {
@@ -57,7 +62,12 @@ export const action = async ({ request }) => {
     const mimeType = String(formData.get("mimeType") || "audio/wav");
     const sizeBytes = Number(formData.get("sizeBytes") || 0);
     const storageKey = String(formData.get("storageKey") || "");
+    const intent = String(formData.get("intent") || "complete");
+    const uploadMode = String(formData.get("uploadMode") || "SINGLE_PUT");
+    const uploadId = String(formData.get("uploadId") || "");
     newStorageKey = storageKey;
+    multipartUploadId = uploadId;
+    uploadScope = { shop: session.shop, releaseId, trackId, storageKey };
 
     const release = await db.release.findFirst({
       where: { id: releaseId, shop: session.shop },
@@ -94,6 +104,43 @@ export const action = async ({ request }) => {
         { ok: false, error: "R2 storage key is missing." },
         { status: 400 },
       );
+    }
+
+    if (intent === "abort") {
+      if (!uploadId) {
+        return Response.json(
+          { ok: false, error: "The multipart upload ID is missing." },
+          { status: 400 },
+        );
+      }
+      await abortR2MultipartMasterUpload({
+        shop: session.shop,
+        releaseId,
+        trackId,
+        storageKey,
+        uploadId,
+      });
+      return Response.json({ ok: true, aborted: true });
+    }
+
+    if (uploadMode === "MULTIPART") {
+      if (!uploadId) throw new Error("The multipart upload ID is missing.");
+      let parts;
+      try {
+        parts = JSON.parse(String(formData.get("parts") || "[]"));
+      } catch {
+        throw new Error("The multipart completion payload is invalid.");
+      }
+      await completeR2MultipartMasterUpload({
+        shop: session.shop,
+        releaseId,
+        trackId,
+        storageKey,
+        uploadId,
+        parts,
+        expectedSize: descriptor.size,
+      });
+      multipartCompleted = true;
     }
 
     const verified = await verifyR2MasterObject({
@@ -169,10 +216,18 @@ export const action = async ({ request }) => {
       file,
     });
   } catch (error) {
-    if (newStorageKey && !committed) {
+    if (multipartUploadId && uploadScope && !multipartCompleted) {
+      try {
+        await abortR2MultipartMasterUpload({
+          ...uploadScope,
+          uploadId: multipartUploadId,
+        });
+      } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
+    }
+    if (newStorageKey && !committed && (!multipartUploadId || multipartCompleted)) {
       try {
         await deleteR2StorageKey(newStorageKey);
-      } catch {}
+      } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
     }
 
     console.error("ReleaseCore: master upload completion failed", error);

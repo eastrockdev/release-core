@@ -469,6 +469,8 @@
       if (!/\.wav$/i.test(file.name)) return Promise.reject(new Error('Master files must be WAV.'));
 
       const maxAttempts = 3;
+      const partAttempts = 3;
+      const concurrency = 3;
 
       const stageMaster = async () => {
         const stage = new FormData();
@@ -484,19 +486,37 @@
         });
       };
 
-      const completeMaster = async (storageKey) => {
+      const completeMaster = async (target, parts = []) => {
         const complete = new FormData();
         complete.set('releaseId', state.detail.id);
         complete.set('trackId', trackId);
         complete.set('filename', file.name);
         complete.set('mimeType', file.type || 'audio/wav');
         complete.set('sizeBytes', String(file.size));
-        complete.set('storageKey', storageKey);
+        complete.set('storageKey', target.storageKey);
+        complete.set('uploadMode', target.mode || 'SINGLE_PUT');
+        if (target.uploadId) complete.set('uploadId', target.uploadId);
+        if (parts.length) complete.set('parts', JSON.stringify(parts));
 
         return jsonFetch(`${proxy}/portal/uploads/master/complete`, {
           method:'POST',
           body:complete,
         });
+      };
+
+      const abortMaster = async (target) => {
+        if (!target?.uploadId || !target?.storageKey) return;
+        const abort = new FormData();
+        abort.set('intent', 'abort');
+        abort.set('releaseId', state.detail.id);
+        abort.set('trackId', trackId);
+        abort.set('filename', file.name);
+        abort.set('mimeType', file.type || 'audio/wav');
+        abort.set('sizeBytes', String(file.size));
+        abort.set('storageKey', target.storageKey);
+        abort.set('uploadMode', 'MULTIPART');
+        abort.set('uploadId', target.uploadId);
+        await jsonFetch(`${proxy}/portal/uploads/master/complete`, { method:'POST', body:abort });
       };
 
       const putToR2 = (target) => new Promise((resolve, reject) => {
@@ -535,6 +555,89 @@
         xhr.send(file);
       });
 
+      const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+      const putPart = (target, blob, onProgress) => new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open(target.method || 'PUT', target.uploadUrl, true);
+        for (const [name, value] of Object.entries(target.headers || {})) xhr.setRequestHeader(name, value);
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) onProgress(event.loaded);
+        };
+        const networkError = () => reject(new Error(`Upload part ${target.partNumber} was interrupted.`));
+        xhr.onerror = networkError;
+        xhr.onabort = networkError;
+        xhr.ontimeout = networkError;
+        xhr.onload = () => {
+          if (xhr.status < 200 || xhr.status >= 300) {
+            reject(new Error(`R2 rejected upload part ${target.partNumber} (${xhr.status}).`));
+            return;
+          }
+          const etag = xhr.getResponseHeader('ETag');
+          if (!etag) {
+            reject(new Error('R2 uploaded a part but did not expose its ETag. Add ETag to the bucket CORS exposeHeaders list.'));
+            return;
+          }
+          onProgress(blob.size);
+          resolve({ partNumber:target.partNumber, etag });
+        };
+        xhr.send(blob);
+      });
+
+      const putPartWithRetries = async (target, blob, onProgress) => {
+        let lastError;
+        for (let attempt = 1; attempt <= partAttempts; attempt += 1) {
+          try {
+            onProgress(0);
+            return await putPart(target, blob, onProgress);
+          } catch (error) {
+            lastError = error;
+            if (attempt < partAttempts) await wait(400 * (2 ** (attempt - 1)));
+          }
+        }
+        throw lastError;
+      };
+
+      const putMultipartToR2 = async (target) => {
+        const partSize = Number(target.partSize || 0);
+        const targets = Array.isArray(target.parts)
+          ? [...target.parts].sort((a,b) => a.partNumber - b.partNumber)
+          : [];
+        const expectedCount = Math.ceil(file.size / partSize);
+        if (!partSize || !targets.length || targets.length !== expectedCount) {
+          throw new Error('ReleaseCore returned an invalid multipart upload target.');
+        }
+        const loadedByPart = new Map();
+        const completed = new Array(targets.length);
+        let nextIndex = 0;
+        let firstError = null;
+        const report = () => {
+          const loaded = [...loadedByPart.values()].reduce((sum,value) => sum + value, 0);
+          setUploadProgress(input, Math.min(99, Math.round((loaded/file.size)*100)), `Uploading master in ${targets.length} parts…`);
+        };
+        const worker = async () => {
+          while (!firstError) {
+            const index = nextIndex;
+            nextIndex += 1;
+            if (index >= targets.length) return;
+            const part = targets[index];
+            const start = (part.partNumber - 1) * partSize;
+            const blob = file.slice(start, Math.min(start + partSize, file.size));
+            try {
+              completed[index] = await putPartWithRetries(part, blob, (loaded) => {
+                loadedByPart.set(part.partNumber, loaded);
+                report();
+              });
+            } catch (error) {
+              firstError = error;
+            }
+          }
+        };
+        await Promise.all(Array.from({ length:Math.min(concurrency, targets.length) }, () => worker()));
+        if (firstError) throw firstError;
+        return completed.sort((a,b) => a.partNumber - b.partNumber);
+      };
+
       return (async () => {
         setUploadProgress(input, 1, 'Preparing master…');
 
@@ -572,7 +675,7 @@
               xhr.onerror = () => reject(new Error('The master upload could not reach ReleaseCore.'));
               xhr.onload = async () => {
                 let data = {};
-                try { data = JSON.parse(xhr.responseText || '{}'); } catch {}
+                try { data = JSON.parse(xhr.responseText || '{}'); } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
                 if (xhr.status >= 200 && xhr.status < 300 && data.ok !== false) {
                   await refreshDetail();
                   resolve();
@@ -584,19 +687,30 @@
             });
           }
 
-          if (!staged?.target?.uploadUrl || !staged?.target?.storageKey) {
+          const target = staged?.target;
+          const isMultipart = target?.mode === 'MULTIPART';
+          const validTarget = target?.storageKey && (
+            isMultipart
+              ? target.uploadId && Array.isArray(target.parts) && target.parts.length
+              : target.uploadUrl
+          );
+          if (!validTarget) {
             throw new Error('ReleaseCore did not return a valid private master upload target.');
           }
 
+          let completedParts = [];
           try {
-            await putToR2(staged.target);
+            if (isMultipart) completedParts = await putMultipartToR2(target);
+            else await putToR2(target);
           } catch (uploadError) {
             lastError = uploadError;
 
-            if (uploadError?.code === 'R2_NETWORK_INTERRUPTED') {
+            if (isMultipart) {
+              try { await abortMaster(target); } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
+            } else if (uploadError?.code === 'R2_NETWORK_INTERRUPTED') {
               try {
                 setUploadProgress(input, 100, 'Verifying uploaded master…');
-                await completeMaster(staged.target.storageKey);
+                await completeMaster(target);
                 await refreshDetail();
                 return;
               } catch {
@@ -609,7 +723,7 @@
           }
 
           setUploadProgress(input, 100, 'Finalizing…');
-          await completeMaster(staged.target.storageKey);
+          await completeMaster(target, completedParts);
           await refreshDetail();
           return;
         }
