@@ -1,46 +1,22 @@
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
-import { useState } from "react";
-import { Form, useActionData, useLoaderData } from "react-router";
 import { login } from "../../shopify.server";
-import { loginErrorMessage } from "./error.server";
 
 export const loader = async ({ request }) => {
-  const errors = loginErrorMessage(await login(request));
-
-  return { errors };
+  const url = new URL(request.url);
+  if (url.searchParams.get("shop")) {
+    await login(request);
+  }
+  return null;
 };
 
-export const action = async ({ request }) => {
-  const errors = loginErrorMessage(await login(request));
-
-  return {
-    errors,
-  };
-};
-
-export default function Auth() {
-  const loaderData = useLoaderData();
-  const actionData = useActionData();
-  const [shop, setShop] = useState("");
-  const { errors } = actionData || loaderData;
-
+export default function AuthLogin() {
   return (
     <AppProvider embedded={false}>
-      <s-page>
-        <Form method="post">
-          <s-section heading="Log in">
-            <s-text-field
-              name="shop"
-              label="Shop domain"
-              details="example.myshopify.com"
-              value={shop}
-              onChange={(e) => setShop(e.currentTarget.value)}
-              autocomplete="on"
-              error={errors.shop}
-            ></s-text-field>
-            <s-button type="submit">Log in</s-button>
-          </s-section>
-        </Form>
+      <s-page heading="Open ReleaseCore from Shopify">
+        <s-section>
+          <p>ReleaseCore installation and authentication begin on Shopify. Open Apps in Shopify Admin and select ReleaseCore to continue.</p>
+          <p>This page does not accept manually entered shop domains.</p>
+        </s-section>
       </s-page>
     </AppProvider>
   );

@@ -23,7 +23,9 @@ export async function authenticatedPost(shopify, url, formData) {
   }
 
   if (!response.ok || data?.ok === false) {
-    throw new Error(data?.error || `Request failed with status ${response.status}.`);
+    const message = data?.error || `Request failed with status ${response.status}.`;
+    const reference = data?.requestId ? ` Reference: ${data.requestId}.` : "";
+    throw new Error(`${message}${reference}`);
   }
 
   return data;

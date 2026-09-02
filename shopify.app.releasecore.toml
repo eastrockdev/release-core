@@ -1,19 +1,30 @@
-# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+# ReleaseCore canonical Shopify application configuration.
+# This file is intentionally production-safe; Shopify CLI rewrites callback URLs
+# during local development because automatically_update_urls_on_dev is enabled.
 
 client_id = "9eea48ea641cddd9fca95c0264a1499e"
 name = "ReleaseCore"
 application_url = "https://releasecore-web-production.up.railway.app"
 embedded = true
 
-[webhooks]
-api_version = "2026-10"
-
 [access_scopes]
-# ReleaseCore currently needs:
-# - Products: future release/product creation
-# - Metaobjects: structured Shopify data
-# - Files: artwork, split sheets, and supporting documents
+# Only scopes used by current ReleaseCore features are declared.
 scopes = "read_customers,read_products,write_products,read_files,write_files,write_metaobject_definitions,write_metaobjects,write_app_proxy"
+
+[webhooks]
+api_version = "2026-07"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/compliance"
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
 
 [auth]
 redirect_urls = [
@@ -22,7 +33,7 @@ redirect_urls = [
 
 [build]
 include_config_on_deploy = true
-automatically_update_urls_on_dev = false
+automatically_update_urls_on_dev = true
 
 [app_proxy]
 url = "/releasecore-proxy"

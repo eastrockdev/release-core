@@ -1,125 +1,87 @@
-# @shopify/shopify-app-template-react-router
+# ReleaseCore changelog
 
-## 2026.02.09
-- Add declarative product metafield definition and demonstrate metafield usage in the product creation flow
-- Add declarative metaobject definition and demonstrate metaobject upsert in the product creation flow
+## M11.6 — App Store compliance
 
-## 2026.01.08
-- [#170](https://github.com/Shopify/shopify-app-template-react-router/pull/170) - Update React Router minimum version to v7.12.0
+### Phase 3 — Production verification and review closure
 
-## 2025.12.11
+- Added a live production verifier for public legal/support/install routes and invalid-HMAC webhook rejection.
+- Changed compliance webhook handling to persist the privacy request, acknowledge Shopify immediately, and continue long-running export/redaction processing without holding the delivery open.
+- Removed unnecessary ReleaseCore app-name branding from buyer-facing theme-extension copy to align with current storefront branding requirements.
+- Added GraphQL-only and storefront-branding assertions to App Store readiness validation.
+- Added a production/review sign-off runbook covering Railway deployment, Shopify app-version release, signed webhook tests, fresh-store/incognito testing, idle uninstall/reinstall, protected customer data, and reviewer evidence.
 
-- [#151](https://github.com/Shopify/shopify-app-template-react-router/pull/151) Update `@shopify/shopify-app-react-router` to v1.1.0 and `@shopify/shopify-app-session-storage-prisma` to v8.0.0, add refresh token fields (`refreshToken` and `refreshTokenExpires`) to Session model in Prisma schema, and adopt the `expiringOfflineAccessTokens` flag for enhanced security through token rotation. See [expiring vs non-expiring offline tokens](https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/offline-access-tokens#expiring-vs-non-expiring-offline-tokens) for more information.
+### Phase 2 — Submission readiness and merchant onboarding
 
-## 2025.10.10
+- Reconciled the canonical and production Shopify TOML configuration onto the actual ReleaseCore App Store app, production Railway URL, stable webhook version, required scopes, compliance subscriptions, and app proxy.
+- Removed the Shopify starter public shop-domain login form and replaced it with a ReleaseCore public landing page that relies on Shopify-owned installation/authentication flows.
+- Added public Privacy Policy and Support routes suitable for the App Store listing.
+- Added merchant-facing Storefront setup with Theme Editor deep links for Release Portal, Recent Releases, and Artist Profile app blocks.
+- Added App Home onboarding, an App Store submission runbook, `check:app-store`, and CI coverage for submission-readiness regressions.
 
-- [#95](https://github.com/Shopify/shopify-app-template-react-router/pull/95) Swap the product link for [admin intents](https://shopify.dev/docs/apps/build/admin/admin-intents).
+### Phase 1.1 — Privacy route client/server boundary hotfix
 
-## 2025.10.02
+- Moved privacy topic constants into a client-safe shared module so the Privacy admin route no longer pulls `privacy.server.js` into the browser bundle.
+- Made server-only privacy processors lazy imports inside route loaders/actions and added a compliance regression check for the boundary.
 
-- [#81](https://github.com/Shopify/shopify-app-template-react-router/pull/81) Add shopify global to eslint for ui extensions
+### Phase 1 — Privacy webhooks and protected customer data
 
-## 2025.10.01
+- Added the three mandatory Shopify compliance webhook topics: `customers/data_request`, `customers/redact`, and `shop/redact`.
+- Added durable privacy-request records, customer-data exports, customer redaction, and full shop redaction including private master storage cleanup.
+- Added an authenticated Privacy admin queue with downloadable customer-data exports and retry controls.
+- Declared the `read_customers` scope required by ReleaseCore customer search/notification features.
+- Added `check:compliance` and CI coverage while preserving expiring offline access tokens.
 
-- [#79](https://github.com/Shopify/shopify-app-template-react-router/pull/78) Update API version to 2025-10.
-- [#77](https://github.com/Shopify/shopify-app-template-react-router/pull/77) Update `@shopify/shopify-app-react-router` to V1.
-- [#73](https://github.com/Shopify/shopify-app-template-react-router/pull/73/files) Rename @shopify/app-bridge-ui-types to @shopify/polaris-types
+## M11.5 — Product hardening
 
-## 2025.08.30
+### Phase 4 — Tenant/security closure
 
-- [#70](https://github.com/Shopify/shopify-app-template-react-router/pull/70/files) Upgrade `@shopify/app-bridge-ui-types` from 0.2.1 to 0.3.1.
+- Removed the server-side Theme Editor `preview=all` data bypass and replaced it with local sample preview cards.
+- Made storefront portal reads require a signed-in customer on every app-proxy data/audio endpoint.
+- Scoped master-object deletion to the current shop, release, and track before R2/local cleanup can run.
+- Made production master storage fail closed unless Cloudflare R2 is explicitly configured.
+- Added `check:tenancy` and CI coverage for these boundaries.
 
-## 2025.08.17
+### Phase 3 — Repository cleanup and quality gates
 
-- [#58](https://github.com/Shopify/shopify-app-template-react-router/pull/58) Update Shopify & React Router dependencies.  Use Shopify React Router in graphqlrc, not shopify-api
-- [#57](https://github.com/Shopify/shopify-app-template-react-router/pull/57) Update Webhook API version in `shopify.app.toml` to `2025-07`
-- [#56](https://github.com/Shopify/shopify-app-template-react-router/pull/56) Remove local CLI from package.json in favor of global CLI installation
-- [#53](https://github.com/Shopify/shopify-app-template-react-router/pull/53) Add the Shopify Dev MCP to the template
+- Centralized best-effort Shopify Files cleanup and removed duplicated `fileDelete` implementations.
+- Removed obsolete Shopify starter-template routes, declarative demo schema, and completed SQLite-to-PostgreSQL migration tooling.
+- Replaced the inherited Shopify template README/changelog with ReleaseCore-specific repository documentation.
+- Removed dead helpers and cleaned stale lint exceptions, empty catches, unused values, and obsolete development wording.
+- Added cleanup validation and made lint part of the aggregate local/CI quality gate.
 
-## 2025.08.16
+### Phase 2.2 — Credits & publishing responsive hotfix
 
-- [#52](https://github.com/Shopify/shopify-app-template-react-router/pull/52) Use `ApiVersion.July25` rather than `LATEST_API_VERSION` in `.graphqlrc`.
+- Prevented contributor-credit rows from overflowing the Shopify embedded-app canvas.
+- Made credit controls and actions responsive without changing publishing ownership logic.
 
-## 2025.07.24
+### Phase 2.1 — Contextual action feedback
 
-- [14](https://github.com/Shopify/shopify-app-template-react-router/pull/14/files) Add [App Bridge web components](https://shopify.dev/docs/api/app-home/app-bridge-web-components) to the template.
+- Moved admin action feedback into the section where the action occurs.
+- Preserved scroll position across revalidation and strengthened upload/progress visibility.
 
-## July 2025
+### Phase 2 — Domain-service extraction
 
-Forked the [shopify-app-template repo](https://github.com/Shopify/shopify-app-template-remix)
+- Moved release, settings, distribution, and automation server behavior out of route components into domain services.
+- Expanded transaction boundaries for multi-record writes while preserving existing workflows.
 
-# @shopify/shopify-app-template-remix
+### Phase 1 — Security and tenant boundaries
 
-## 2025.03.18
+- Added tenant-scoped database helpers, merchant-safe error responses, request IDs, and sanitized server diagnostics.
+- Added security-boundary validation and CI coverage.
 
--[#998](https://github.com/Shopify/shopify-app-template-remix/pull/998) Update to Vite 6
+## M11.4 — Cross-browser design system
 
-## 2025.03.01
+- Standardized admin controls, buttons, form states, focus treatment, dates, mobile touch targets, reduced motion, and high-contrast behavior.
+- Completed Safari, Chromium, Firefox, mobile-browser, and storefront hardening passes.
 
-- [#982](https://github.com/Shopify/shopify-app-template-remix/pull/982) Add Shopify Dev Assistant extension to the VSCode extension recommendations
+## M11.3 — ISRC assignment modes
 
-## 2025.01.31
+- Added ReleaseCore-assigned and administrator/aggregator-provided ISRC workflows without overwriting existing identifiers.
 
-- [#952](https://github.com/Shopify/shopify-app-template-remix/pull/952) Update to Shopify App API v2025-01
+## M11.2 — Merchant-facing UX and copy
 
-## 2025.01.23
+- Standardized merchant terminology, status language, empty states, and admin presentation.
 
-- [#923](https://github.com/Shopify/shopify-app-template-remix/pull/923) Update `@shopify/shopify-app-session-storage-prisma` to v6.0.0
+## M11.1 — Multipart master WAV uploads
 
-## 2025.01.8
-
-- [#923](https://github.com/Shopify/shopify-app-template-remix/pull/923) Enable GraphQL autocomplete for Javascript
-
-## 2024.12.19
-
-- [#904](https://github.com/Shopify/shopify-app-template-remix/pull/904) bump `@shopify/app-bridge-react` to latest
--
-## 2024.12.18
-
-- [875](https://github.com/Shopify/shopify-app-template-remix/pull/875) Add Scopes Update Webhook
-## 2024.12.05
-
-- [#910](https://github.com/Shopify/shopify-app-template-remix/pull/910) Install `openssl` in Docker image to fix Prisma (see [#25817](https://github.com/prisma/prisma/issues/25817#issuecomment-2538544254))
-- [#907](https://github.com/Shopify/shopify-app-template-remix/pull/907) Move `@remix-run/fs-routes` to `dependencies` to fix Docker image build
-- [#899](https://github.com/Shopify/shopify-app-template-remix/pull/899) Disable v3_singleFetch flag
-- [#898](https://github.com/Shopify/shopify-app-template-remix/pull/898) Enable the `removeRest` future flag so new apps aren't tempted to use the REST Admin API.
-
-## 2024.12.04
-
-- [#891](https://github.com/Shopify/shopify-app-template-remix/pull/891) Enable remix future flags.
-
-## 2024.11.26
-
-- [888](https://github.com/Shopify/shopify-app-template-remix/pull/888) Update restResources version to 2024-10
-
-## 2024.11.06
-
-- [881](https://github.com/Shopify/shopify-app-template-remix/pull/881) Update to the productCreate mutation to use the new ProductCreateInput type
-
-## 2024.10.29
-
-- [876](https://github.com/Shopify/shopify-app-template-remix/pull/876) Update shopify-app-remix to v3.4.0 and shopify-app-session-storage-prisma to v5.1.5
-
-## 2024.10.02
-
-- [863](https://github.com/Shopify/shopify-app-template-remix/pull/863) Update to Shopify App API v2024-10 and shopify-app-remix v3.3.2
-
-## 2024.09.18
-
-- [850](https://github.com/Shopify/shopify-app-template-remix/pull/850) Removed "~" import alias
-
-## 2024.09.17
-
-- [842](https://github.com/Shopify/shopify-app-template-remix/pull/842) Move webhook processing to individual routes
-
-## 2024.08.19
-
-Replaced deprecated `productVariantUpdate` with `productVariantsBulkUpdate`
-
-## v2024.08.06
-
-Allow `SHOP_REDACT` webhook to process without admin context
-
-## v2024.07.16
-
-Started tracking changes and releases using calver
+- Added resilient Cloudflare R2 multipart uploads for large master WAV files with part retries, completion verification, and safe replacement behavior.

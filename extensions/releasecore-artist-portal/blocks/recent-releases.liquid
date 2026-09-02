@@ -21,7 +21,7 @@
   style="--rc-accent: {{ block.settings.accent_color }};"
 >
   <div class="rc-shell rc-recent-shell">
-    {% if rc_preview_all %}<div class="rc-preview-note rc-recent-preview">Theme editor preview · showing all ReleaseCore releases read-only.</div>{% endif %}
+    {% if rc_preview_all %}<div class="rc-preview-note rc-recent-preview">Theme editor preview · showing sample releases. No customer or release data is loaded.</div>{% endif %}
     <div data-rc-recent-body>
       {% if customer or rc_preview_all %}
         <div class="rc-dashboard-grid rc-dashboard-grid-loading rc-dashboard-grid-stable" aria-busy="true">
@@ -60,7 +60,7 @@
       { "value": "light", "label": "Light" }
     ]},
     { "type": "color", "id": "accent_color", "label": "Accent", "default": "#8f7cff" },
-    { "type": "checkbox", "id": "preview_all_releases", "label": "Theme editor: preview all releases", "default": false, "info": "Development preview only. Shows all releases read-only when customizing the theme." },
+    { "type": "checkbox", "id": "preview_all_releases", "label": "Theme editor: preview sample releases", "default": false, "info": "Shows sample release cards while customizing the theme. No customer or release data is loaded." },
     { "type": "url", "id": "portal_url", "label": "Full releases page" },
     { "type": "text", "id": "proxy_path", "label": "ReleaseCore proxy path", "default": "/apps/releasecore" }
   ]

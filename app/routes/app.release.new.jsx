@@ -99,10 +99,7 @@ export default function NewRelease() {
                     type="button"
                     key={option.type}
                     onClick={() => setType(option.type)}
-                    style={{
-                      ...styles.option,
-                      ...(selected ? styles.optionSelected : {}),
-                    }}
+                    className="rc-choice-button"
                     aria-pressed={selected}
                   >
                     <div style={styles.optionTop}>
@@ -149,25 +146,22 @@ export default function NewRelease() {
                     ? "After Hours"
                     : "Midnight in New Haven"
               }`}
-              style={styles.input}
+              className="rc-control"
             />
             <div style={styles.help}>
               Optional for now. You can change the title from the release
               workspace at any time.
             </div>
 
-            {error ? <div style={styles.error}>{error}</div> : null}
+            {error ? <div className="rc-notice rc-notice--bad" style={{ marginTop: 12 }}>{error}</div> : null}
 
-            <div style={styles.footerActions}>
+            <div className="rc-form-actions rc-release-new-actions" style={styles.footerActions}>
               <s-button onClick={() => navigate("/app/releases")}>Cancel</s-button>
               <button
                 type="button"
                 disabled={saving}
                 onClick={createRelease}
-                style={{
-                  ...styles.submit,
-                  ...(saving ? styles.submitDisabled : {}),
-                }}
+                className="rc-button rc-button--primary"
               >
                 {saving ? "Creating…" : `Create ${typeLabel(type)}`}
               </button>

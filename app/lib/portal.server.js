@@ -2,19 +2,22 @@ import db from "../db.server";
 import { CREDIT_ROLES, isPublishingRole, isValidReleaseType, starterTitle, typeLabel } from "./releasecore";
 import { FILE_KINDS, fileContentTypeForKind, isReplaceableKind, stagedResourceForKind, validateUploadDescriptor } from "./releasecore-files";
 import { maybeAutoAssignIsrc } from "./isrc.server";
+import { isrcAssignmentMode } from "./isrc";
 import { calculateReleaseReadiness, releaseCanSubmit, releaseIsEditable } from "./workflow";
 import {
   abortR2MultipartMasterUpload,
   completeR2MultipartMasterUpload,
   createR2MasterUploadTarget,
-  deleteLocalStorageKey,
-  deleteR2StorageKey,
+  deleteMasterStorageObject,
   masterStorageProvider,
   saveMasterStream,
   verifyR2MasterObject,
 } from "./storage.server";
 import { dispatchLatestEvent, portalReleaseAccess } from "./automations.server";
 import { releaseDatePolicy, releaseDateOnly, validateReleaseDateLeadTime } from "./release-date";
+import { contributorIdentityProtection } from "./identity-protection.server";
+import { publicError } from "./http-security.server";
+import { deleteShopifyFilesBestEffort } from "./shopify-files.server";
 
 export function portalIdentity(request, session) {
   const url = new URL(request.url);
@@ -30,9 +33,9 @@ export function requirePortalCustomer(identity) {
   }
 }
 
-export async function getPortalRelease({ shop, customerId, releaseId, include = {}, previewAll = false }) {
+export async function getPortalRelease({ shop, customerId, releaseId, include = {} }) {
   return db.release.findFirst({
-    where: previewAll ? { id: releaseId, shop } : { id: releaseId, shop, ownerCustomerId: customerId },
+    where: { id: releaseId, shop, ownerCustomerId: customerId },
     include,
   });
 }
@@ -93,9 +96,9 @@ function summary(release) {
   };
 }
 
-export async function listPortalReleases({ shop, customerId, admin, limit, previewAll = false }) {
+export async function listPortalReleases({ shop, customerId, admin, limit }) {
   const releases = await db.release.findMany({
-    where: previewAll ? { shop } : { shop, ownerCustomerId: customerId },
+    where: { shop, ownerCustomerId: customerId },
     orderBy: { updatedAt: "desc" },
     ...(limit ? { take: Math.max(1, Math.min(Number(limit) || 4, 12)) } : {}),
     include: {
@@ -108,12 +111,11 @@ export async function listPortalReleases({ shop, customerId, admin, limit, previ
   return releases.map(summary);
 }
 
-export async function portalReleaseDetail({ shop, customerId, releaseId, admin, previewAll = false }) {
+export async function portalReleaseDetail({ shop, customerId, releaseId, admin }) {
   const release = await getPortalRelease({
     shop,
     customerId,
     releaseId,
-    previewAll,
     include: {
       files: { orderBy: { createdAt: "asc" } },
       artists: { include: { artist: true }, orderBy: { position: "asc" } },
@@ -146,17 +148,17 @@ export async function portalReleaseDetail({ shop, customerId, releaseId, admin, 
   }
   return {
     ...release,
-    editable: previewAll ? false : releaseIsEditable(release.status),
-    canSubmit: previewAll ? false : releaseCanSubmit(release.status),
-    previewMode: previewAll,
+    editable: releaseIsEditable(release.status),
+    canSubmit: releaseCanSubmit(release.status),
     readiness,
+    isrcMode: isrcAssignmentMode(settings),
     releaseDatePolicy: datePolicy,
   };
 }
 
 export async function findOrCreatePortalArtist({ shop, customerId, name }) {
   const cleanName = String(name || "").trim();
-  if (!cleanName) throw new Error("Enter the primary artist name.");
+  if (!cleanName) throw publicError("Enter the primary artist name.");
 
   const existing = await db.portalArtistAccess.findFirst({
     where: { shop, customerId, artist: { name: cleanName } },
@@ -175,17 +177,17 @@ export async function findOrCreatePortalArtist({ shop, customerId, name }) {
 
 export async function createPortalRelease({ admin, shop, customerId, type, title, artistName }) {
   const normalizedType = String(type || "").toUpperCase();
-  if (!isValidReleaseType(normalizedType)) throw new Error("Choose Single, EP or Album.");
+  if (!isValidReleaseType(normalizedType)) throw publicError("Choose Single, EP or Album.");
   const access = await portalReleaseAccess({ admin, shop, customerId });
   const eligibility = access.options?.[normalizedType];
-  if (!eligibility?.allowed) throw new Error(eligibility?.reason || "Your account does not have access to this release type.");
+  if (!eligibility?.allowed) throw publicError(eligibility?.reason || "Your account does not have access to this release type.");
   const cleanTitle = String(title || "").trim();
   const releaseTitle = cleanTitle || starterTitle(normalizedType);
   let artist;
   if (access.artistAccess?.mode === "SOLO") {
-    if (!access.artistAccess?.soloArtist?.id) throw new Error("Your account is configured for solo-artist access, but an artist profile has not been assigned yet. Contact the store administrator.");
+    if (!access.artistAccess?.soloArtist?.id) throw publicError("Your account is configured for solo-artist access, but an artist profile has not been assigned yet. Contact the store administrator.");
     artist = await db.artist.findFirst({ where: { id: access.artistAccess.soloArtist.id, shop } });
-    if (!artist) throw new Error("Your assigned solo artist profile could not be found.");
+    if (!artist) throw publicError("Your assigned solo artist profile could not be found.");
   } else {
     artist = await findOrCreatePortalArtist({ shop, customerId, name: artistName });
   }
@@ -223,16 +225,16 @@ export async function createPortalRelease({ admin, shop, customerId, type, title
 
 export async function updatePortalRelease({ shop, customerId, releaseId, formData }) {
   const release = await getPortalRelease({ shop, customerId, releaseId });
-  if (!release) throw new Error("Release not found.");
-  if (!releaseIsEditable(release.status)) throw new Error("This release is locked while it is under review or finalized.");
+  if (!release) throw publicError("Release not found.");
+  if (!releaseIsEditable(release.status)) throw publicError("This release is locked while it is under review or finalized.");
   const title = String(formData.get("title") || "").trim();
   const primaryGenre = String(formData.get("primaryGenre") || "").trim() || null;
   const releaseDateRaw = String(formData.get("releaseDate") || "").trim();
-  if (!title) throw new Error("Release title is required.");
+  if (!title) throw publicError("Release title is required.");
   const settings = (await db.appSettings.findUnique({ where: { shop } })) || {};
-  if (releaseDateRaw && !/^\d{4}-\d{2}-\d{2}$/.test(releaseDateRaw)) throw new Error("Choose a valid release date.");
+  if (releaseDateRaw && !/^\d{4}-\d{2}-\d{2}$/.test(releaseDateRaw)) throw publicError("Choose a valid release date.");
   const leadTime = validateReleaseDateLeadTime(releaseDateRaw || null, settings);
-  if (!leadTime.ok) throw new Error(leadTime.message);
+  if (!leadTime.ok) throw publicError(leadTime.message);
   return db.release.update({
     where: { id: release.id },
     data: { title, primaryGenre, releaseDate: releaseDateRaw ? new Date(`${releaseDateRaw}T12:00:00.000Z`) : null },
@@ -246,9 +248,9 @@ export async function addPortalTrack({ shop, customerId, releaseId }) {
     releaseId,
     include: { tracks: true, artists: { where: { role: "PRIMARY" }, orderBy: { position: "asc" } } },
   });
-  if (!release) throw new Error("Release not found.");
-  if (!releaseIsEditable(release.status)) throw new Error("This release is locked.");
-  if (release.type === "SINGLE") throw new Error("Singles can only contain one track.");
+  if (!release) throw publicError("Release not found.");
+  if (!releaseIsEditable(release.status)) throw publicError("This release is locked.");
+  if (release.type === "SINGLE") throw publicError("Singles can only contain one track.");
   const settings = await db.appSettings.findUnique({ where: { shop } });
   const position = Math.max(0, ...release.tracks.map((track) => track.position)) + 1;
   const track = await db.track.create({
@@ -273,12 +275,12 @@ export async function addPortalTrack({ shop, customerId, releaseId }) {
 
 export async function updatePortalTrack({ shop, customerId, releaseId, trackId, formData }) {
   const release = await getPortalRelease({ shop, customerId, releaseId, include: { tracks: true } });
-  if (!release) throw new Error("Release not found.");
-  if (!releaseIsEditable(release.status)) throw new Error("This release is locked.");
+  if (!release) throw publicError("Release not found.");
+  if (!releaseIsEditable(release.status)) throw publicError("This release is locked.");
   const track = release.tracks.find((item) => item.id === trackId);
-  if (!track) throw new Error("Track not found.");
+  if (!track) throw publicError("Track not found.");
   const title = String(formData.get("title") || "").trim();
-  if (!title) throw new Error("Track title is required.");
+  if (!title) throw publicError("Track title is required.");
   return db.track.update({
     where: { id: track.id },
     data: {
@@ -293,17 +295,17 @@ export async function updatePortalTrack({ shop, customerId, releaseId, trackId, 
 
 export async function addPortalCredit({ shop, customerId, releaseId, trackId, formData }) {
   const release = await getPortalRelease({ shop, customerId, releaseId, include: { tracks: true } });
-  if (!release) throw new Error("Release not found.");
-  if (!releaseIsEditable(release.status)) throw new Error("This release is locked.");
-  if (!release.tracks.some((track) => track.id === trackId)) throw new Error("Track not found.");
+  if (!release) throw publicError("Release not found.");
+  if (!releaseIsEditable(release.status)) throw publicError("This release is locked.");
+  if (!release.tracks.some((track) => track.id === trackId)) throw publicError("Track not found.");
   const role = String(formData.get("role") || "").toUpperCase();
-  if (!CREDIT_ROLES.includes(role)) throw new Error("Choose a valid credit role.");
+  if (!CREDIT_ROLES.includes(role)) throw publicError("Choose a valid credit role.");
   const legalName = String(formData.get("legalName") || "").trim();
-  if (!legalName) throw new Error("Contributor legal name is required.");
+  if (!legalName) throw publicError("Contributor legal name is required.");
   const ownershipRaw = String(formData.get("ownershipPercent") || "").trim();
   const ownershipPercent = ownershipRaw === "" ? null : Number(ownershipRaw);
   if (isPublishingRole(role) && (!Number.isFinite(ownershipPercent) || ownershipPercent < 0 || ownershipPercent > 100)) {
-    throw new Error("Songwriter/composer ownership must be between 0 and 100%.");
+    throw publicError("Songwriter/composer ownership must be between 0 and 100%.");
   }
 
   let contributor = await db.contributor.findFirst({ where: { shop, ownerCustomerId: customerId, legalName } });
@@ -312,13 +314,23 @@ export async function addPortalCredit({ shop, customerId, releaseId, trackId, fo
     pro: String(formData.get("pro") || "").trim() || null,
     ipi: String(formData.get("ipi") || "").trim() || null,
   };
-  if (contributor) contributor = await db.contributor.update({ where: { id: contributor.id }, data: contributorData });
-  else contributor = await db.contributor.create({ data: { shop, ownerCustomerId: customerId, legalName, ...contributorData } });
+  if (contributor) {
+    const protection = await contributorIdentityProtection({ shop, contributorId: contributor.id });
+    const identityChanged = ["stageName", "pro", "ipi"].some(
+      (field) => (contributorData[field] || null) !== (contributor[field] || null),
+    );
+    if (protection.identityLocked && identityChanged) {
+      throw publicError("This contributor identity is locked because it appears on a submitted release. Contact an administrator to request a verified correction.");
+    }
+    if (!protection.identityLocked) {
+      contributor = await db.contributor.update({ where: { id: contributor.id }, data: contributorData });
+    }
+  } else contributor = await db.contributor.create({ data: { shop, ownerCustomerId: customerId, legalName, ...contributorData } });
 
   if (isPublishingRole(role)) {
     const existingCredits = await db.trackCredit.findMany({ where: { trackId, role: { in: ["SONGWRITER", "COMPOSER"] }, NOT: { contributorId: contributor.id, role } } });
     const total = existingCredits.reduce((sum, item) => sum + (item.ownershipPercent || 0), 0) + (ownershipPercent || 0);
-    if (total > 100.00001) throw new Error(`Publishing ownership cannot exceed 100%. Current result would be ${total}%.`);
+    if (total > 100.00001) throw publicError(`Publishing ownership cannot exceed 100%. Current result would be ${total}%.`);
   }
 
   return db.trackCredit.upsert({
@@ -330,26 +342,26 @@ export async function addPortalCredit({ shop, customerId, releaseId, trackId, fo
 
 export async function removePortalCredit({ shop, customerId, releaseId, trackId, creditId }) {
   const release = await getPortalRelease({ shop, customerId, releaseId, include: { tracks: true } });
-  if (!release) throw new Error("Release not found.");
-  if (!releaseIsEditable(release.status)) throw new Error("This release is locked.");
-  if (!release.tracks.some((track) => track.id === trackId)) throw new Error("Track not found.");
+  if (!release) throw publicError("Release not found.");
+  if (!releaseIsEditable(release.status)) throw publicError("This release is locked.");
+  if (!release.tracks.some((track) => track.id === trackId)) throw publicError("Track not found.");
   const credit = await db.trackCredit.findFirst({ where: { id: creditId, trackId } });
-  if (!credit) throw new Error("Credit not found.");
+  if (!credit) throw publicError("Credit not found.");
   await db.trackCredit.delete({ where: { id: credit.id } });
 }
 
 export async function submitPortalRelease({ admin, shop, customerId, releaseId }) {
   const release = await portalReleaseDetail({ shop, customerId, releaseId });
-  if (!release) throw new Error("Release not found.");
-  if (!releaseCanSubmit(release.status)) throw new Error("This release cannot be submitted from its current status.");
+  if (!release) throw publicError("Release not found.");
+  if (!releaseCanSubmit(release.status)) throw publicError("This release cannot be submitted from its current status.");
   const unresolved = (release.reviewItems || []).filter((item) => item.status === "OPEN");
   if (release.status === "CHANGES_REQUESTED" && unresolved.length) {
-    const error = new Error("Mark all requested corrections addressed before resubmitting.");
+    const error = publicError("Mark all requested corrections addressed before resubmitting.");
     error.blockers = unresolved.map((item) => ({ message: item.message, trackId: item.trackId }));
     throw error;
   }
   if (!release.readiness.ready) {
-    const error = new Error("Finish the required release information before submitting.");
+    const error = publicError("Finish the required release information before submitting.");
     error.blockers = release.readiness.blockers;
     throw error;
   }
@@ -369,10 +381,10 @@ export async function submitPortalRelease({ admin, shop, customerId, releaseId }
 
 export async function resolvePortalReviewItem({ shop, customerId, releaseId, reviewItemId }) {
   const release = await getPortalRelease({ shop, customerId, releaseId });
-  if (!release) throw new Error("Release not found.");
-  if (release.status !== "CHANGES_REQUESTED") throw new Error("This release does not currently have an active corrections workflow.");
+  if (!release) throw publicError("Release not found.");
+  if (release.status !== "CHANGES_REQUESTED") throw publicError("This release does not currently have an active corrections workflow.");
   const item = await db.releaseReviewItem.findFirst({ where: { id: reviewItemId, releaseId, status: "OPEN" } });
-  if (!item) throw new Error("Change request not found or already resolved.");
+  if (!item) throw publicError("Change request not found or already resolved.");
   await db.$transaction([
     db.releaseReviewItem.update({ where: { id: item.id }, data: { status: "RESOLVED", resolvedAt: new Date() } }),
     db.submissionEvent.create({ data: { releaseId, type: "CHANGE_RESOLVED", actorLabel: "Artist portal", trackId: item.trackId, message: item.message } }),
@@ -384,14 +396,14 @@ export async function stagePortalUpload({ admin, shop, customerId, formData }) {
   const releaseId = String(formData.get("releaseId") || "");
   const trackId = String(formData.get("trackId") || "");
   const kind = String(formData.get("kind") || "");
-  if (![FILE_KINDS.COVER_ART, FILE_KINDS.SPLIT_SHEET, FILE_KINDS.SUPPORTING_DOCUMENT].includes(kind)) throw new Error("This file type cannot be uploaded directly from the artist portal.");
+  if (![FILE_KINDS.COVER_ART, FILE_KINDS.SPLIT_SHEET, FILE_KINDS.SUPPORTING_DOCUMENT].includes(kind)) throw publicError("This file type cannot be uploaded directly from the artist portal.");
   const filename = String(formData.get("filename") || "");
   const mimeType = String(formData.get("mimeType") || "");
   const sizeBytes = Number(formData.get("sizeBytes") || 0);
   const release = await getPortalRelease({ shop, customerId, releaseId, include: { tracks: true } });
-  if (!release) throw new Error("Release not found.");
-  if (!releaseIsEditable(release.status)) throw new Error("This release is locked.");
-  if (trackId && !release.tracks.some((track) => track.id === trackId)) throw new Error("Track not found.");
+  if (!release) throw publicError("Release not found.");
+  if (!releaseIsEditable(release.status)) throw publicError("This release is locked.");
+  if (trackId && !release.tracks.some((track) => track.id === trackId)) throw publicError("Track not found.");
   const descriptor = validateUploadDescriptor({ kind, filename, mimeType, sizeBytes, trackId });
   const response = await admin.graphql(
     `#graphql
@@ -405,17 +417,10 @@ export async function stagePortalUpload({ admin, shop, customerId, formData }) {
   );
   const json = await response.json();
   const payload = json?.data?.stagedUploadsCreate;
-  if (payload?.userErrors?.length) throw new Error(payload.userErrors.map((item) => item.message).join(" "));
+  if (payload?.userErrors?.length) throw publicError(payload.userErrors.map((item) => item.message).join(" "));
   const target = payload?.stagedTargets?.[0];
   if (!target?.url || !target?.resourceUrl) throw new Error("Shopify did not return an upload target.");
   return target;
-}
-
-async function bestEffortDeleteShopifyFile(admin, fileId) {
-  if (!admin || !fileId) return;
-  try {
-    await admin.graphql(`mutation ReleaseCorePortalDeleteFile($fileIds:[ID!]!){fileDelete(fileIds:$fileIds){deletedFileIds userErrors{message}}}`, { variables: { fileIds: [fileId] } });
-  } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
 }
 
 export async function completePortalUpload({ admin, shop, customerId, formData }) {
@@ -423,17 +428,17 @@ export async function completePortalUpload({ admin, shop, customerId, formData }
   const releaseId = String(formData.get("releaseId") || "");
   const trackId = String(formData.get("trackId") || "") || null;
   const kind = String(formData.get("kind") || "");
-  if (![FILE_KINDS.COVER_ART, FILE_KINDS.SPLIT_SHEET, FILE_KINDS.SUPPORTING_DOCUMENT].includes(kind)) throw new Error("This file type cannot be uploaded directly from the artist portal.");
+  if (![FILE_KINDS.COVER_ART, FILE_KINDS.SPLIT_SHEET, FILE_KINDS.SUPPORTING_DOCUMENT].includes(kind)) throw publicError("This file type cannot be uploaded directly from the artist portal.");
   const filename = String(formData.get("filename") || "");
   const mimeType = String(formData.get("mimeType") || "");
   const sizeBytes = Number(formData.get("sizeBytes") || 0);
   const resourceUrl = String(formData.get("resourceUrl") || "");
   const release = await getPortalRelease({ shop, customerId, releaseId, include: { tracks: true } });
-  if (!release) throw new Error("Release not found.");
-  if (!releaseIsEditable(release.status)) throw new Error("This release is locked.");
-  if (trackId && !release.tracks.some((track) => track.id === trackId)) throw new Error("Track not found.");
+  if (!release) throw publicError("Release not found.");
+  if (!releaseIsEditable(release.status)) throw publicError("This release is locked.");
+  if (trackId && !release.tracks.some((track) => track.id === trackId)) throw publicError("Track not found.");
   const descriptor = validateUploadDescriptor({ kind, filename, mimeType, sizeBytes, trackId });
-  if (!resourceUrl) throw new Error("Upload resource URL is missing.");
+  if (!resourceUrl) throw publicError("Upload resource URL is missing.");
   const response = await admin.graphql(
     `#graphql
       mutation ReleaseCorePortalCreateFile($files:[FileCreateInput!]!){
@@ -443,29 +448,47 @@ export async function completePortalUpload({ admin, shop, customerId, formData }
   );
   const json = await response.json();
   const payload = json?.data?.fileCreate;
-  if (payload?.userErrors?.length) throw new Error(payload.userErrors.map((item) => item.message).join(" "));
+  if (payload?.userErrors?.length) throw publicError(payload.userErrors.map((item) => item.message).join(" "));
   const shopifyFile = payload?.files?.[0];
   if (!shopifyFile?.id) throw new Error("Shopify did not create the file.");
 
-  if (isReplaceableKind(kind)) {
-    const existing = await db.releaseFile.findMany({ where: { releaseId, trackId, kind } });
-    for (const item of existing) if (item.storageProvider === "SHOPIFY_FILES") await bestEffortDeleteShopifyFile(admin, item.storageKey);
-    if (existing.length) await db.releaseFile.deleteMany({ where: { id: { in: existing.map((item) => item.id) } } });
-  }
-  const file = await db.releaseFile.create({
-    data: { releaseId, trackId, kind, filename: descriptor.name, storageProvider: "SHOPIFY_FILES", storageKey: shopifyFile.id, url: shopifyFile.url || shopifyFile.image?.url || null, mimeType: descriptor.mime, sizeBytes: descriptor.size, status: shopifyFile.fileStatus || "UPLOADED" },
+  const existing = isReplaceableKind(kind)
+    ? await db.releaseFile.findMany({
+        where: { releaseId, trackId, kind, release: { shop, ownerCustomerId: customerId } },
+      })
+    : [];
+  const file = await db.$transaction(async (tx) => {
+    if (existing.length) {
+      await tx.releaseFile.deleteMany({
+        where: { id: { in: existing.map((item) => item.id) } },
+      });
+    }
+    const created = await tx.releaseFile.create({
+      data: { releaseId, trackId, kind, filename: descriptor.name, storageProvider: "SHOPIFY_FILES", storageKey: shopifyFile.id, url: shopifyFile.url || shopifyFile.image?.url || null, mimeType: descriptor.mime, sizeBytes: descriptor.size, status: shopifyFile.fileStatus || "UPLOADED" },
+    });
+    await tx.release.updateMany({
+      where: { id: releaseId, shop, ownerCustomerId: customerId },
+      data: { updatedAt: new Date() },
+    });
+    return created;
   });
-  await db.release.update({ where: { id: releaseId }, data: { updatedAt: new Date() } });
+  await deleteShopifyFilesBestEffort(
+    admin,
+    existing
+      .filter((item) => item.storageProvider === "SHOPIFY_FILES")
+      .map((item) => item.storageKey),
+    { context: "portal replaced upload cleanup" },
+  );
   return file;
 }
 
-async function deleteStoredPortalMaster(file) {
+async function deleteStoredPortalMaster(file, scope) {
   if (!file?.storageKey) return;
-  if (file.storageProvider === "R2") {
-    await deleteR2StorageKey(file.storageKey);
-  } else if (file.storageProvider === "LOCAL_DEV") {
-    await deleteLocalStorageKey(file.storageKey);
-  }
+  await deleteMasterStorageObject({
+    storageProvider: file.storageProvider,
+    storageKey: file.storageKey,
+    ...scope,
+  });
 }
 
 export async function stagePortalMasterUpload({ request, shop, customerId }) {
@@ -482,10 +505,10 @@ export async function stagePortalMasterUpload({ request, shop, customerId }) {
     releaseId,
     include: { tracks: true },
   });
-  if (!release) throw new Error("Release not found.");
-  if (!releaseIsEditable(release.status)) throw new Error("This release is locked.");
+  if (!release) throw publicError("Release not found.");
+  if (!releaseIsEditable(release.status)) throw publicError("This release is locked.");
   if (!release.tracks.some((item) => item.id === trackId)) {
-    throw new Error("Track not found.");
+    throw publicError("Track not found.");
   }
 
   const descriptor = validateUploadDescriptor({
@@ -533,10 +556,10 @@ export async function completePortalMasterUpload({
     releaseId,
     include: { tracks: true },
   });
-  if (!release) throw new Error("Release not found.");
-  if (!releaseIsEditable(release.status)) throw new Error("This release is locked.");
+  if (!release) throw publicError("Release not found.");
+  if (!releaseIsEditable(release.status)) throw publicError("This release is locked.");
   if (!release.tracks.some((item) => item.id === trackId)) {
-    throw new Error("Track not found.");
+    throw publicError("Track not found.");
   }
 
   const descriptor = validateUploadDescriptor({
@@ -547,10 +570,10 @@ export async function completePortalMasterUpload({
     trackId,
   });
 
-  if (!storageKey) throw new Error("R2 storage key is missing.");
+  if (!storageKey) throw publicError("The master upload session is incomplete. Please upload the file again.");
 
   if (intent === "abort") {
-    if (!uploadId) throw new Error("The multipart upload ID is missing.");
+    if (!uploadId) throw publicError("The master upload session is incomplete. Please retry the upload.");
     await abortR2MultipartMasterUpload({
       shop,
       releaseId,
@@ -565,12 +588,12 @@ export async function completePortalMasterUpload({
   let committed = false;
   try {
     if (uploadMode === "MULTIPART") {
-      if (!uploadId) throw new Error("The multipart upload ID is missing.");
+      if (!uploadId) throw publicError("The master upload session is incomplete. Please retry the upload.");
       let parts;
       try {
         parts = JSON.parse(String(formData.get("parts") || "[]"));
       } catch {
-        throw new Error("The multipart completion payload is invalid.");
+        throw publicError("The master upload could not be finalized. Please retry the upload.");
       }
       await completeR2MultipartMasterUpload({
         shop,
@@ -594,11 +617,11 @@ export async function completePortalMasterUpload({
   });
 
     const existing = await db.releaseFile.findMany({
-    where: { releaseId, trackId, kind: FILE_KINDS.MASTER_WAV },
-  });
+      where: { releaseId, trackId, kind: FILE_KINDS.MASTER_WAV, release: { shop, ownerCustomerId: customerId } },
+    });
     const stalePreviews = await db.releaseFile.findMany({
-    where: { releaseId, trackId, kind: FILE_KINDS.PREVIEW_MP3 },
-  });
+      where: { releaseId, trackId, kind: FILE_KINDS.PREVIEW_MP3, release: { shop, ownerCustomerId: customerId } },
+    });
 
     const created = await db.$transaction(async (tx) => {
       if (existing.length) {
@@ -626,8 +649,8 @@ export async function completePortalMasterUpload({
         },
       });
 
-      await tx.release.update({
-        where: { id: releaseId },
+      await tx.release.updateMany({
+        where: { id: releaseId, shop, ownerCustomerId: customerId },
         data: { updatedAt: new Date() },
       });
 
@@ -636,14 +659,16 @@ export async function completePortalMasterUpload({
     committed = true;
 
     for (const item of existing) {
-    try { await deleteStoredPortalMaster(item); } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
+    try { await deleteStoredPortalMaster(item, { shop, releaseId, trackId }); } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
   }
 
-    for (const item of stalePreviews) {
-    if (item.storageProvider === "SHOPIFY_FILES" && item.storageKey) {
-      await bestEffortDeleteShopifyFile(admin, item.storageKey);
-    }
-  }
+    await deleteShopifyFilesBestEffort(
+      admin,
+      stalePreviews
+        .filter((item) => item.storageProvider === "SHOPIFY_FILES")
+        .map((item) => item.storageKey),
+      { context: "portal stale preview cleanup" },
+    );
 
     return created;
   } catch (error) {
@@ -659,41 +684,63 @@ export async function completePortalMasterUpload({
       } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
     }
     if (!committed && (!uploadId || multipartCompleted)) {
-      try { await deleteR2StorageKey(storageKey); } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
+      try {
+        await deleteMasterStorageObject({ storageProvider: "R2", storageKey, shop, releaseId, trackId });
+      } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
     }
     throw error;
   }
 }
 
 export async function uploadPortalMaster({ request, admin, shop, customerId, url }) {
+  if (masterStorageProvider() !== "LOCAL_DEV") {
+    throw publicError("Direct master uploads are unavailable for this store. Please retry the staged upload.", { status: 409 });
+  }
   const releaseId = url.searchParams.get("releaseId") || "";
   const trackId = url.searchParams.get("trackId") || "";
   const filename = decodeURIComponent(url.searchParams.get("filename") || "master.wav");
   const mimeType = decodeURIComponent(url.searchParams.get("mimeType") || "audio/wav");
   const sizeBytes = Number(url.searchParams.get("sizeBytes") || request.headers.get("content-length") || 0);
   const release = await getPortalRelease({ shop, customerId, releaseId, include: { tracks: true } });
-  if (!release) throw new Error("Release not found.");
-  if (!releaseIsEditable(release.status)) throw new Error("This release is locked.");
+  if (!release) throw publicError("Release not found.");
+  if (!releaseIsEditable(release.status)) throw publicError("This release is locked.");
   const track = release.tracks.find((item) => item.id === trackId);
-  if (!track) throw new Error("Track not found.");
+  if (!track) throw publicError("Track not found.");
   const descriptor = validateUploadDescriptor({ kind: FILE_KINDS.MASTER_WAV, filename, mimeType, sizeBytes, trackId });
   let savedKey = null;
   try {
     savedKey = await saveMasterStream({ stream: request.body, shop, releaseId, trackId, filename: descriptor.name });
-    const existing = await db.releaseFile.findMany({ where: { releaseId, trackId, kind: FILE_KINDS.MASTER_WAV } });
+    const existing = await db.releaseFile.findMany({
+      where: { releaseId, trackId, kind: FILE_KINDS.MASTER_WAV, release: { shop, ownerCustomerId: customerId } },
+    });
     for (const item of existing) {
-      if (item.storageProvider === "R2" && item.storageKey) await deleteR2StorageKey(item.storageKey);
-      else if (item.storageProvider === "LOCAL_DEV" && item.storageKey) await deleteLocalStorageKey(item.storageKey);
+      if (!item.storageKey || !["R2", "LOCAL_DEV"].includes(item.storageProvider)) continue;
+      await deleteMasterStorageObject({ storageProvider: item.storageProvider, storageKey: item.storageKey, shop, releaseId, trackId });
     }
     if (existing.length) await db.releaseFile.deleteMany({ where: { id: { in: existing.map((item) => item.id) } } });
-    const stalePreviews = await db.releaseFile.findMany({ where: { releaseId, trackId, kind: FILE_KINDS.PREVIEW_MP3 } });
-    for (const item of stalePreviews) if (item.storageProvider === "SHOPIFY_FILES" && item.storageKey) await bestEffortDeleteShopifyFile(admin, item.storageKey);
+    const stalePreviews = await db.releaseFile.findMany({
+      where: { releaseId, trackId, kind: FILE_KINDS.PREVIEW_MP3, release: { shop, ownerCustomerId: customerId } },
+    });
+    await deleteShopifyFilesBestEffort(
+      admin,
+      stalePreviews
+        .filter((item) => item.storageProvider === "SHOPIFY_FILES")
+        .map((item) => item.storageKey),
+      { context: "portal legacy master preview cleanup" },
+    );
     if (stalePreviews.length) await db.releaseFile.deleteMany({ where: { id: { in: stalePreviews.map((item) => item.id) } } });
     const file = await db.releaseFile.create({ data: { releaseId, trackId, kind: FILE_KINDS.MASTER_WAV, filename: descriptor.name, storageProvider: "LOCAL_DEV", storageKey: savedKey, mimeType: descriptor.mime, sizeBytes: descriptor.size, status: "READY" } });
-    await db.release.update({ where: { id: releaseId }, data: { updatedAt: new Date() } });
+    await db.release.updateMany({
+      where: { id: releaseId, shop, ownerCustomerId: customerId },
+      data: { updatedAt: new Date() },
+    });
     return file;
   } catch (error) {
-    if (savedKey) try { await deleteLocalStorageKey(savedKey); } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
+    if (savedKey) {
+      try {
+        await deleteMasterStorageObject({ storageProvider: "LOCAL_DEV", storageKey: savedKey, shop, releaseId, trackId });
+      } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
+    }
     throw error;
   }
 }

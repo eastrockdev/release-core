@@ -1,5 +1,4 @@
-// ReleaseCore development schema
-// SQLite is appropriate for local development. Move to PostgreSQL before production.
+// ReleaseCore PostgreSQL schema
 
 generator client {
   provider = "prisma-client-js"
@@ -32,37 +31,37 @@ model Session {
 }
 
 model Release {
-  id           String            @id @default(cuid())
-  shop         String
-  type         String
-  title        String            @default("Untitled Release")
-  status       String            @default("DRAFT")
-  distributionStatus String         @default("NOT_QUEUED")
-  distributionUpdatedAt DateTime?
-  aggregatorReference String?
-  distributionNotes String?
-  upc          String?              @unique
-  upcAssignedAt DateTime?
-  catalogNumber String?
-  catalogNumberAssignedAt DateTime?
-  ownerCustomerId String?
-  shopifyReleaseProductId String?     @unique
+  id                          String                 @id @default(cuid())
+  shop                        String
+  type                        String
+  title                       String                 @default("Untitled Release")
+  status                      String                 @default("DRAFT")
+  distributionStatus          String                 @default("NOT_QUEUED")
+  distributionUpdatedAt       DateTime?
+  aggregatorReference         String?
+  distributionNotes           String?
+  upc                         String?                @unique
+  upcAssignedAt               DateTime?
+  catalogNumber               String?
+  catalogNumberAssignedAt     DateTime?
+  ownerCustomerId             String?
+  shopifyReleaseProductId     String?                @unique
   shopifyReleaseProductHandle String?
-  artistName   String?           // legacy/display cache; normalized artists live in ReleaseArtist
-  primaryGenre String?
-  releaseDate  DateTime?
-  submittedAt      DateTime?
-  lastSubmittedAt  DateTime?
-  reviewStartedAt  DateTime?
-  decisionAt       DateTime?
-  createdAt        DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  tracks       Track[]
-  artists      ReleaseArtist[]
-  files        ReleaseFile[]
-  events       SubmissionEvent[]
-  notifications NotificationDelivery[]
-  reviewItems  ReleaseReviewItem[]
+  artistName                  String? // legacy/display cache; normalized artists live in ReleaseArtist
+  primaryGenre                String?
+  releaseDate                 DateTime?
+  submittedAt                 DateTime?
+  lastSubmittedAt             DateTime?
+  reviewStartedAt             DateTime?
+  decisionAt                  DateTime?
+  createdAt                   DateTime               @default(now())
+  updatedAt                   DateTime               @updatedAt
+  tracks                      Track[]
+  artists                     ReleaseArtist[]
+  files                       ReleaseFile[]
+  events                      SubmissionEvent[]
+  notifications               NotificationDelivery[]
+  reviewItems                 ReleaseReviewItem[]
 
   @@unique([shop, catalogNumber])
   @@index([shop, status])
@@ -72,46 +71,57 @@ model Release {
 }
 
 model Track {
-  id        String        @id @default(cuid())
-  releaseId String
-  position  Int
-  title     String        @default("Untitled Track")
-  version   String?
-  language  String?
-  explicit  Boolean       @default(false)
-  isrc      String?       @unique
-  isrcAssignedAt DateTime?
-  shopifyProductId String?      @unique
+  id                   String              @id @default(cuid())
+  releaseId            String
+  position             Int
+  title                String              @default("Untitled Track")
+  version              String?
+  language             String?
+  explicit             Boolean             @default(false)
+  isrc                 String?             @unique
+  isrcAssignedAt       DateTime?
+  shopifyProductId     String?             @unique
   shopifyProductHandle String?
-  lyrics    String?
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  release   Release       @relation(fields: [releaseId], references: [id], onDelete: Cascade)
-  artists   TrackArtist[]
-  credits   TrackCredit[]
-  files       ReleaseFile[]
-  reviewItems ReleaseReviewItem[]
+  lyrics               String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  release              Release             @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  artists              TrackArtist[]
+  credits              TrackCredit[]
+  files                ReleaseFile[]
+  reviewItems          ReleaseReviewItem[]
 
   @@unique([releaseId, position])
   @@index([releaseId])
 }
 
 model Artist {
-  id            String          @id @default(cuid())
-  shop          String
-  name          String
-  legalName     String?
-  email         String?
-  spotifyUrl    String?
-  appleMusicUrl String?
-  websiteUrl    String?
-  notes         String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  releases      ReleaseArtist[]
-  tracks        TrackArtist[]
-  portalAccess  PortalArtistAccess[]
+  id                 String                 @id @default(cuid())
+  shop               String
+  name               String
+  legalName          String?
+  email              String?
+  spotifyUrl         String?
+  appleMusicUrl      String?
+  websiteUrl         String?
+  imageUrl           String?
+  imageFileId        String?
+  biography          String?
+  pro                String?
+  ipi                String?
+  instagramUrl       String?
+  facebookUrl        String?
+  tiktokUrl          String?
+  youtubeUrl         String?
+  xUrl               String?
+  notes              String?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  releases           ReleaseArtist[]
+  tracks             TrackArtist[]
+  portalAccess       PortalArtistAccess[]
   soloPortalPolicies PortalCustomerPolicy[]
+  contributors       ArtistContributor[]
 
   @@index([shop, name])
 }
@@ -148,7 +158,6 @@ model TrackArtist {
   @@index([artistId])
 }
 
-
 model PortalArtistAccess {
   id         String   @id @default(cuid())
   shop       String
@@ -179,22 +188,36 @@ model PortalCustomerPolicy {
 }
 
 model Contributor {
-  id            String        @id @default(cuid())
-  shop          String
+  id              String              @id @default(cuid())
+  shop            String
   ownerCustomerId String?
-  legalName     String
-  stageName     String?
-  email         String?
-  pro           String?
-  ipi           String?
-  publisherName String?
-  notes         String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  credits       TrackCredit[]
+  legalName       String
+  stageName       String?
+  email           String?
+  pro             String?
+  ipi             String?
+  publisherName   String?
+  notes           String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  credits         TrackCredit[]
+  artists         ArtistContributor[]
 
   @@index([shop, legalName])
   @@index([shop, ownerCustomerId])
+}
+
+model ArtistContributor {
+  id            String      @id @default(cuid())
+  artistId      String
+  contributorId String
+  createdAt     DateTime    @default(now())
+  artist        Artist      @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  contributor   Contributor @relation(fields: [contributorId], references: [id], onDelete: Cascade)
+
+  @@unique([artistId, contributorId])
+  @@index([artistId])
+  @@index([contributorId])
 }
 
 model TrackCredit {
@@ -214,28 +237,28 @@ model TrackCredit {
 }
 
 model ReleaseFile {
-  id         String   @id @default(cuid())
-  releaseId  String
-  trackId    String?
-  kind       String
-  filename   String
+  id              String   @id @default(cuid())
+  releaseId       String
+  trackId         String?
+  kind            String
+  filename        String
   storageProvider String   @default("SHOPIFY_FILES")
   storageKey      String?
   url             String?
   mimeType        String?
-  sizeBytes  Int?
-  status     String   @default("PENDING")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  release    Release  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
-  track      Track?   @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  sizeBytes       Int?
+  status          String   @default("PENDING")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  release         Release  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  track           Track?   @relation(fields: [trackId], references: [id], onDelete: Cascade)
 
   @@index([releaseId])
   @@index([trackId])
 }
 
 model SubmissionEvent {
-  id         String   @id @default(cuid())
+  id         String                 @id @default(cuid())
   releaseId  String
   type       String
   message    String?
@@ -243,30 +266,29 @@ model SubmissionEvent {
   fromStatus String?
   toStatus   String?
   trackId    String?
-  createdAt  DateTime @default(now())
-  release    Release  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  createdAt  DateTime               @default(now())
+  release    Release                @relation(fields: [releaseId], references: [id], onDelete: Cascade)
   deliveries NotificationDelivery[]
 
   @@index([releaseId, createdAt])
 }
 
-
 model NotificationDelivery {
-  id          String          @id @default(cuid())
-  shop        String
-  releaseId   String
-  eventId     String
-  channel     String
-  recipient   String?
-  status      String          @default("PENDING")
-  attempts    Int             @default(0)
-  providerId  String?
-  lastError   String?
-  sentAt      DateTime?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  release     Release         @relation(fields: [releaseId], references: [id], onDelete: Cascade)
-  event       SubmissionEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  id         String          @id @default(cuid())
+  shop       String
+  releaseId  String
+  eventId    String
+  channel    String
+  recipient  String?
+  status     String          @default("PENDING")
+  attempts   Int             @default(0)
+  providerId String?
+  lastError  String?
+  sentAt     DateTime?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  release    Release         @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  event      SubmissionEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, channel])
   @@index([shop, createdAt])
@@ -290,83 +312,85 @@ model ReleaseReviewItem {
 }
 
 model AppSettings {
-  id                     String   @id @default(cuid())
-  shop                   String   @unique
-  countryCode            String?
-  registrantCode         String?
-  autoAssignIsrc         Boolean  @default(true)
-  defaultLabelName       String?
-  defaultCopyrightHolder String?
-  defaultGenre           String?
-  defaultLanguage        String?
-  requireLyrics            Boolean  @default(true)
-  requirePublishing        Boolean  @default(true)
-  requireSplitSheet        Boolean  @default(false)
-  requireCredits           Boolean  @default(false)
-  requireIsrc              Boolean  @default(true)
-  requireTrackLanguage     Boolean  @default(true)
-  releaseLeadTimeEnabled   Boolean  @default(false)
-  releaseLeadTimeDays      Int      @default(14)
-  upcMode                  String   @default("AGGREGATOR")
-  gs1CompanyPrefix         String?
-  catalogMode              String   @default("AUTO")
-  catalogPrefix            String?
-  catalogIncludeYear       Boolean  @default(true)
-  catalogSequenceWidth     Int      @default(4)
-  autoAssignCatalogNumber  Boolean  @default(true)
-  defaultTrackPrice        Float    @default(1.29)
-  generateShopifyAudioPreview Boolean @default(false)
-  audioPreviewDurationSeconds Int     @default(60)
-  audioPreviewBitrateKbps     Int     @default(192)
+  id                                     String  @id @default(cuid())
+  shop                                   String  @unique
+  countryCode                            String?
+  registrantCode                         String?
+  isrcMode                               String  @default("AUTO")
+  autoAssignIsrc                         Boolean @default(true)
+  defaultLabelName                       String?
+  defaultCopyrightHolder                 String?
+  defaultGenre                           String?
+  defaultLanguage                        String?
+  requireLyrics                          Boolean @default(true)
+  requirePublishing                      Boolean @default(true)
+  requireSplitSheet                      Boolean @default(false)
+  requireCredits                         Boolean @default(false)
+  requireIsrc                            Boolean @default(true)
+  requireTrackLanguage                   Boolean @default(true)
+  releaseLeadTimeEnabled                 Boolean @default(false)
+  releaseLeadTimeDays                    Int     @default(14)
+  upcMode                                String  @default("AGGREGATOR")
+  gs1CompanyPrefix                       String?
+  catalogMode                            String  @default("AUTO")
+  catalogPrefix                          String?
+  catalogIncludeYear                     Boolean @default(true)
+  catalogSequenceWidth                   Int     @default(4)
+  autoAssignCatalogNumber                Boolean @default(true)
+  defaultTrackPrice                      Float   @default(1.29)
+  generateShopifyAudioPreview            Boolean @default(false)
+  audioPreviewDurationSeconds            Int     @default(60)
+  audioPreviewBitrateKbps                Int     @default(192)
+  lockArtistNameEditing                  Boolean @default(true)
+  lockContributorIdentityAfterSubmission Boolean @default(true)
 
   // Storefront release creation access controls. Required tags are comma-separated.
-  releaseSingleEnabled       Boolean @default(true)
-  releaseSingleRequiredTags  String?
-  releaseEpEnabled           Boolean @default(true)
-  releaseEpRequiredTags      String?
-  releaseAlbumEnabled        Boolean @default(true)
-  releaseAlbumRequiredTags   String?
-  releaseTagMatchMode        String  @default("ANY")
-  releaseAccessLockMessage   String?
+  releaseSingleEnabled      Boolean @default(true)
+  releaseSingleRequiredTags String?
+  releaseEpEnabled          Boolean @default(true)
+  releaseEpRequiredTags     String?
+  releaseAlbumEnabled       Boolean @default(true)
+  releaseAlbumRequiredTags  String?
+  releaseTagMatchMode       String  @default("ANY")
+  releaseAccessLockMessage  String?
 
   // Automation / communications. Event lists are comma-separated ReleaseCore event keys.
-  artistEmailEvents          String  @default("SUBMITTED,CHANGES_REQUESTED,APPROVED,REJECTED,SUBMITTED_TO_STORES,DELIVERED")
-  adminEmailEvents           String  @default("SUBMITTED,CHANGES_REQUESTED,APPROVED,REJECTED")
-  flowEvents                 String  @default("SUBMITTED,CHANGES_REQUESTED,APPROVED,REJECTED,PROCESSING,SUBMITTED_TO_STORES,DELIVERED,SHOPIFY_PRODUCTS_SYNCED")
+  artistEmailEvents     String  @default("SUBMITTED,CHANGES_REQUESTED,APPROVED,REJECTED,SUBMITTED_TO_STORES,DELIVERED")
+  adminEmailEvents      String  @default("SUBMITTED,CHANGES_REQUESTED,APPROVED,REJECTED")
+  flowEvents            String  @default("SUBMITTED,CHANGES_REQUESTED,APPROVED,REJECTED,PROCESSING,SUBMITTED_TO_STORES,DELIVERED,SHOPIFY_PRODUCTS_SYNCED")
   // Merchant-owned SMTP delivery. Password is encrypted at rest by ReleaseCore.
-  smtpEnabled                Boolean @default(false)
-  smtpHost                   String?
-  smtpPort                   Int     @default(587)
-  smtpSecurity               String  @default("STARTTLS")
-  smtpUsername               String?
-  smtpPasswordEncrypted      String?
+  smtpEnabled           Boolean @default(false)
+  smtpHost              String?
+  smtpPort              Int     @default(587)
+  smtpSecurity          String  @default("STARTTLS")
+  smtpUsername          String?
+  smtpPasswordEncrypted String?
 
-  emailSenderName            String?
-  emailFromAddress           String?
-  emailReplyTo               String?
-  adminNotificationEmail     String?
-  emailBrandName             String?
-  emailFooterText            String?
-  portalUrl                  String?
+  emailSenderName        String?
+  emailFromAddress       String?
+  emailReplyTo           String?
+  adminNotificationEmail String?
+  emailBrandName         String?
+  emailFooterText        String?
+  portalUrl              String?
 
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model IsrcSequence {
-  id             String   @id @default(cuid())
-  shop           String
-  countryCode    String
-  registrantCode String
-  year           Int
-  nextDesignation Int     @default(1)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              String   @id @default(cuid())
+  shop            String
+  countryCode     String
+  registrantCode  String
+  year            Int
+  nextDesignation Int      @default(1)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@unique([shop, countryCode, registrantCode, year])
   @@index([shop, year])
 }
-
 
 model UpcSequence {
   id                String   @id @default(cuid())
@@ -380,7 +404,6 @@ model UpcSequence {
   @@index([shop])
 }
 
-
 model CatalogSequence {
   id           String   @id @default(cuid())
   shop         String
@@ -392,4 +415,24 @@ model CatalogSequence {
 
   @@unique([shop, prefix, yearKey])
   @@index([shop, yearKey])
+}
+
+model PrivacyRequest {
+  id               String    @id @default(cuid())
+  shop             String
+  topic            String
+  shopifyRequestId String
+  customerId       String?
+  customerEmail    String?
+  status           String    @default("PENDING")
+  attempts         Int       @default(0)
+  lastError        String?
+  requestedAt      DateTime  @default(now())
+  processedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([shop, topic, shopifyRequestId])
+  @@index([shop, status, requestedAt])
+  @@index([shop, customerId])
 }

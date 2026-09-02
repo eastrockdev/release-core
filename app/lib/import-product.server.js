@@ -1,4 +1,5 @@
 import db from "../db.server";
+import { publicError } from "./http-security.server";
 
 const VALID_TYPES = new Set(["SINGLE", "EP", "ALBUM"]);
 
@@ -34,7 +35,9 @@ function mfList(map, namespace, key) {
   try {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) return parsed.map(clean).filter(Boolean);
-  } catch {}
+  } catch {
+    // Fall back to legacy comma-separated metafield values.
+  }
   return raw.split(",").map((value) => value.trim()).filter(Boolean);
 }
 
@@ -142,7 +145,7 @@ async function safeIdentifiers({ shop, upc, catalogNumber, isrc }) {
 
 export async function importShopifyProductAsRelease({ admin, shop, productId, requestedType = "AUTO", importState = "CATALOG", titleOverride = "", artistOverride = "" }) {
   if (!admin) throw new Error("Shopify Admin API is unavailable.");
-  if (!productId?.startsWith("gid://shopify/Product/")) throw new Error("Choose a Shopify product to import.");
+  if (!productId?.startsWith("gid://shopify/Product/")) throw publicError("Choose a Shopify product to import.", { status: 400 });
 
   const existingRelease = await db.release.findFirst({
     where: {
@@ -158,7 +161,7 @@ export async function importShopifyProductAsRelease({ admin, shop, productId, re
   }
 
   const product = await queryShopifyProduct(admin, productId);
-  if (!product) throw new Error("Shopify product not found.");
+  if (!product) throw publicError("Shopify product not found.", { status: 404 });
 
   const fields = metafieldMap(product);
   const variant = product.variants?.nodes?.[0] || {};
@@ -166,7 +169,7 @@ export async function importShopifyProductAsRelease({ admin, shop, productId, re
   const type = requestedType === "AUTO"
     ? (VALID_TYPES.has(detectedType) ? detectedType : "SINGLE")
     : clean(requestedType).toUpperCase();
-  if (!VALID_TYPES.has(type)) throw new Error("Choose Single, EP or Album.");
+  if (!VALID_TYPES.has(type)) throw publicError("Choose Single, EP or Album.", { status: 400 });
 
   const settings = await db.appSettings.findUnique({ where: { shop } });
   const title = clean(titleOverride) || mfText(fields, "releasecore", "release_title") || clean(product.title) || "Imported Release";

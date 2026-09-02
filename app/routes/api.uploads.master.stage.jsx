@@ -1,8 +1,9 @@
 import { authenticate } from "../shopify.server";
-import db from "../db.server";
 import { FILE_KINDS, validateUploadDescriptor } from "../lib/releasecore-files";
 import { createR2MasterUploadTarget } from "../lib/storage.server";
 import { releaseIsEditable } from "../lib/workflow";
+import { apiErrorResponse } from "../lib/http-security.server";
+import { findShopRelease } from "../lib/tenant-db.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -18,10 +19,7 @@ export const action = async ({ request }) => {
     const mimeType = String(formData.get("mimeType") || "audio/wav");
     const sizeBytes = Number(formData.get("sizeBytes") || 0);
 
-    const release = await db.release.findFirst({
-      where: { id: releaseId, shop: session.shop },
-      include: { tracks: true },
-    });
+    const release = await findShopRelease(session.shop, releaseId, { include: { tracks: true } });
 
     if (!release) {
       return Response.json({ ok: false, error: "Release not found." }, { status: 404 });
@@ -58,15 +56,6 @@ export const action = async ({ request }) => {
 
     return Response.json({ ok: true, target });
   } catch (error) {
-    console.error("ReleaseCore: master upload staging failed", error);
-    return Response.json(
-      {
-        ok: false,
-        error: error instanceof Error
-          ? error.message
-          : "ReleaseCore could not prepare this master upload.",
-      },
-      { status: 500 },
-    );
+    return apiErrorResponse(request, error, { context: "master upload staging", fallback: "ReleaseCore could not prepare this master upload." });
   }
 };

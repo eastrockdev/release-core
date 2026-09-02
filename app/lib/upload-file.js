@@ -1,7 +1,7 @@
 import { authenticatedPost } from "./authenticated-post";
 import { FILE_KINDS } from "./releasecore-files";
 
-function uploadMultipartTarget(target, file, onProgress) {
+export function uploadMultipartTarget(target, file, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const body = new FormData();
@@ -386,7 +386,7 @@ export function validateCoverArtworkDimensions(file) {
       URL.revokeObjectURL(url);
       if (width !== height) return reject(new Error(`Cover artwork must be square. This file is ${width}×${height}px.`));
       if (width < 3000 || height < 3000) return reject(new Error(`Cover artwork must be at least 3000×3000px. This file is ${width}×${height}px.`));
-      if (width * height > 25_000_000) return reject(new Error(`Cover artwork exceeds Shopify's 25-megapixel development upload limit. This file is ${width}×${height}px.`));
+      if (width * height > 25_000_000) return reject(new Error(`Cover artwork exceeds Shopify's 25-megapixel image limit. This file is ${width}×${height}px.`));
       resolve({ width, height });
     };
     image.onerror = () => {

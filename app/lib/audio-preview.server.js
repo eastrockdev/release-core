@@ -5,6 +5,7 @@ import os from "node:os";
 import db from "../db.server";
 import { FILE_KINDS } from "./releasecore-files";
 import { downloadR2StorageKeyToFile, localStoragePath } from "./storage.server";
+import { deleteShopifyFilesBestEffort } from "./shopify-files.server";
 
 const MAX_SHOPIFY_FILE_BYTES = 20 * 1024 * 1024;
 
@@ -78,18 +79,6 @@ async function waitForGenericFile(admin, fileId) {
   return { id: fileId, fileStatus: "PROCESSING", url: null };
 }
 
-async function deleteShopifyFile(admin, fileId) {
-  if (!fileId) return;
-  try {
-    await admin.graphql(`#graphql
-      mutation ReleaseCoreDeletePreview($fileIds: [ID!]!) {
-        fileDelete(fileIds: $fileIds) { deletedFileIds userErrors { message } }
-      }`, { variables: { fileIds: [fileId] } });
-  } catch (error) {
-    console.warn("ReleaseCore: old MP3 preview cleanup skipped", error);
-  }
-}
-
 export async function generateTrackMp3Preview({ admin, shop, trackId, settings = {} }) {
   const track = await db.track.findFirst({
     where: { id: trackId, release: { shop } },
@@ -107,6 +96,8 @@ export async function generateTrackMp3Preview({ admin, shop, trackId, settings =
   const safeBase = `${String(track.release.title || "release").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 50)}-track-${String(track.position).padStart(2, "0")}` || `track-${track.position}`;
   const filename = `${safeBase}-preview.mp3`;
   const outputPath = path.join(tempDir, filename);
+  let newShopifyFileId = null;
+  let committed = false;
 
   try {
     const masterInputPath =
@@ -128,27 +119,53 @@ export async function generateTrackMp3Preview({ admin, shop, trackId, settings =
     const target = await stagedTarget(admin, { filename, sizeBytes: info.size });
     await uploadTarget(target, filename, bytes);
     const created = await createShopifyFile(admin, target.resourceUrl);
+    newShopifyFileId = created.id;
     const ready = await waitForGenericFile(admin, created.id);
 
     const old = track.files.filter((file) => file.kind === FILE_KINDS.PREVIEW_MP3);
-    for (const file of old) if (file.storageProvider === "SHOPIFY_FILES" && file.storageKey && file.storageKey !== created.id) await deleteShopifyFile(admin, file.storageKey);
-    if (old.length) await db.releaseFile.deleteMany({ where: { id: { in: old.map((file) => file.id) } } });
-
-    const preview = await db.releaseFile.create({
-      data: {
-        releaseId: track.releaseId,
-        trackId: track.id,
-        kind: FILE_KINDS.PREVIEW_MP3,
-        filename,
-        storageProvider: "SHOPIFY_FILES",
-        storageKey: created.id,
-        url: ready.url || created.url || null,
-        mimeType: "audio/mpeg",
-        sizeBytes: info.size,
-        status: ready.fileStatus || created.fileStatus || "UPLOADED",
-      },
+    const preview = await db.$transaction(async (tx) => {
+      if (old.length) {
+        await tx.releaseFile.deleteMany({
+          where: { id: { in: old.map((file) => file.id) } },
+        });
+      }
+      return tx.releaseFile.create({
+        data: {
+          releaseId: track.releaseId,
+          trackId: track.id,
+          kind: FILE_KINDS.PREVIEW_MP3,
+          filename,
+          storageProvider: "SHOPIFY_FILES",
+          storageKey: created.id,
+          url: ready.url || created.url || null,
+          mimeType: "audio/mpeg",
+          sizeBytes: info.size,
+          status: ready.fileStatus || created.fileStatus || "UPLOADED",
+        },
+      });
     });
+    committed = true;
+
+    await deleteShopifyFilesBestEffort(
+      admin,
+      old
+        .filter(
+          (file) =>
+            file.storageProvider === "SHOPIFY_FILES" &&
+            file.storageKey &&
+            file.storageKey !== created.id,
+        )
+        .map((file) => file.storageKey),
+      { context: "old audio preview cleanup" },
+    );
     return preview;
+  } catch (error) {
+    if (newShopifyFileId && !committed) {
+      await deleteShopifyFilesBestEffort(admin, newShopifyFileId, {
+        context: "failed audio preview rollback",
+      });
+    }
+    throw error;
   } finally {
     await rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }

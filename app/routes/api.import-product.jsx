@@ -1,5 +1,6 @@
 import { authenticate } from "../shopify.server";
 import { importShopifyProductAsRelease } from "../lib/import-product.server";
+import { apiErrorResponse } from "../lib/http-security.server";
 
 export const action = async ({ request }) => {
   try {
@@ -16,7 +17,6 @@ export const action = async ({ request }) => {
     });
     return Response.json({ ok: true, ...result });
   } catch (error) {
-    console.error("ReleaseCore import product error", error);
-    return Response.json({ ok: false, error: error.message || "Could not import Shopify product." }, { status: 400 });
+    return apiErrorResponse(request, error, { context: "Shopify product import", fallback: "Could not import Shopify product." });
   }
 };

@@ -7,7 +7,7 @@
 
     const rcReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
     const rcParseBackground = (value) => {
-      const match = String(value || '').match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,\/]\s*([\d.]+))?\s*\)/i);
+      const match = String(value || '').match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+))?\s*\)/i);
       if (!match) return null;
       return { r:Number(match[1]), g:Number(match[2]), b:Number(match[3]), a:match[4] == null ? 1 : Number(match[4]) };
     };
@@ -62,6 +62,12 @@
     const showAdd = root.dataset.showAdd !== 'false';
     const customerName = root.dataset.customerName || '';
     const state = { releases: [], access: null };
+    const previewReleases = [
+      { id:'preview-single', type:'SINGLE', title:'Midnight Drive', status:'DRAFT', distributionStatus:'NOT_QUEUED', releaseDate:null, updatedAt:new Date().toISOString(), artistNames:['Preview Artist'], coverUrl:null },
+      { id:'preview-ep', type:'EP', title:'After Hours', status:'CHANGES_REQUESTED', distributionStatus:'NOT_QUEUED', releaseDate:null, updatedAt:new Date().toISOString(), artistNames:['Preview Artist'], coverUrl:null },
+      { id:'preview-album', type:'ALBUM', title:'Signals', status:'APPROVED', distributionStatus:'QUEUED', releaseDate:null, updatedAt:new Date().toISOString(), artistNames:['Preview Artist'], coverUrl:null },
+    ];
+    let modalReturnFocus = null;
 
     // Width is now resolved entirely by CSS before JavaScript runs. This prevents
     // the visible left/right expansion that occurred when Recent Releases measured
@@ -88,14 +94,23 @@
     async function jsonFetch(url, options = {}) {
       const response = await fetch(url, { headers: { Accept:'application/json', ...(options.headers || {}) }, ...options });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok || data.ok === false) throw new Error(data.error || `Request failed (${response.status}).`);
+      if (!response.ok || data.ok === false) { const reference = data.requestId ? ` Reference: ${data.requestId}.` : ''; throw new Error(`${data.error || `Request failed (${response.status}).`}${reference}`); }
       return data;
     }
 
-    function closeModal() { modalHost.innerHTML = ''; }
+    function closeModal() {
+      const dialog = modalHost.querySelector('[data-rc-create-dialog]');
+      if (dialog?.open) dialog.close();
+      else {
+        modalHost.innerHTML = '';
+        modalReturnFocus?.focus?.({ preventScroll:true });
+        modalReturnFocus = null;
+      }
+    }
 
     function showCreateModal() {
       if (previewAll) return;
+      modalReturnFocus = document.activeElement;
       const accessOptions = state.access?.options || {};
       const types = [
         ['SINGLE','Single','One-track release'],
@@ -105,8 +120,8 @@
       const allowedTypes = types.map(([type]) => type).filter((type) => accessOptions[type]?.allowed !== false);
       const firstAllowed = allowedTypes[0] || '';
       const lockHelp = Object.entries(accessOptions).filter(([, access]) => !access.allowed).map(([type, access]) => `${typeLabel(type)}: ${access.reason}`).join(' · ');
-      modalHost.innerHTML = `<div class="rc-modal-wrap">
-        <div class="rc-modal" role="region" aria-labelledby="rc-recent-create-title">
+      modalHost.innerHTML = `<dialog class="rc-modal-dialog" data-rc-create-dialog aria-labelledby="rc-recent-create-title">
+        <div class="rc-modal">
           <div class="rc-create-head">
             <div><div class="rc-eyebrow">New distribution release</div><h2 class="rc-panel-title" id="rc-recent-create-title" style="font-size:22px;">Add release</h2><p class="rc-panel-copy">Choose a format, name the release and continue in your full music workspace.</p></div>
             <button type="button" class="rc-btn rc-create-close" data-recent-close aria-label="Close add release">×</button>
@@ -122,9 +137,15 @@
             <div class="rc-actions"><button type="button" class="rc-btn" data-recent-close>Cancel</button><button class="rc-btn rc-btn-primary" type="submit" ${firstAllowed ? '' : 'disabled'}>${firstAllowed ? 'Create release' : 'No release types available'}</button></div>
           </form>
         </div>
-      </div>`;
+      </dialog>`;
+      const dialog = modalHost.querySelector('[data-rc-create-dialog]');
+      dialog.addEventListener('close', () => {
+        modalHost.innerHTML = '';
+        modalReturnFocus?.focus?.({ preventScroll:true });
+        modalReturnFocus = null;
+      }, { once:true });
+      dialog.showModal();
       rcReveal(modalHost);
-      modalHost.scrollIntoView?.({ behavior:'smooth', block:'nearest' });
       modalHost.querySelector('input[name="title"]')?.focus({ preventScroll:true });
     }
 
@@ -134,7 +155,7 @@
         : `<div class="rc-dashboard-cover rc-cover-placeholder">No artwork</div>`;
       const artists = release.artistNames?.length ? release.artistNames.join(', ') : 'Artist not set';
       const [statusKey, statusText] = displayStatus(release);
-      const href = releaseHref(release);
+      const href = previewAll ? '#' : releaseHref(release);
       const tag = href === '#' ? 'article' : 'a';
       const hrefAttr = href === '#' ? '' : ` href="${esc(href)}"`;
       return `<${tag} class="rc-dashboard-release"${hrefAttr}>
@@ -168,8 +189,14 @@
     }
 
     async function load() {
+      if (previewAll) {
+        state.releases = previewReleases.slice(0, limit);
+        state.access = null;
+        render();
+        return;
+      }
       try {
-        const data = await jsonFetch(`${proxy}/portal/releases?limit=${limit}${previewAll ? '&preview=all' : ''}`);
+        const data = await jsonFetch(`${proxy}/portal/releases?limit=${limit}`);
         state.releases = data.releases || [];
         state.access = data.access || null;
         render();
@@ -185,7 +212,7 @@
     });
 
     modalHost.addEventListener('click', (event) => {
-      if (event.target.matches('[data-modal-backdrop]') || event.target.closest('[data-recent-close]')) closeModal();
+      if (event.target.matches('[data-rc-create-dialog]') || event.target.closest('[data-recent-close]')) closeModal();
     });
 
     modalHost.addEventListener('submit', async (event) => {

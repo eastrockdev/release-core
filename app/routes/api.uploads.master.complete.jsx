@@ -4,42 +4,21 @@ import { FILE_KINDS, validateUploadDescriptor } from "../lib/releasecore-files";
 import {
   abortR2MultipartMasterUpload,
   completeR2MultipartMasterUpload,
-  deleteLocalStorageKey,
-  deleteR2StorageKey,
+  deleteMasterStorageObject,
   verifyR2MasterObject,
 } from "../lib/storage.server";
 import { releaseIsEditable } from "../lib/workflow";
+import { apiErrorResponse, publicError } from "../lib/http-security.server";
+import { findShopRelease } from "../lib/tenant-db.server";
+import { deleteShopifyFilesBestEffort } from "../lib/shopify-files.server";
 
-async function bestEffortDeleteShopifyFile(admin, fileId) {
-  if (!fileId) return;
-  try {
-    const response = await admin.graphql(
-      `#graphql
-        mutation ReleaseCoreDeleteStalePreview($fileIds: [ID!]!) {
-          fileDelete(fileIds: $fileIds) {
-            deletedFileIds
-            userErrors { message }
-          }
-        }`,
-      { variables: { fileIds: [fileId] } },
-    );
-    const json = await response.json();
-    const errors = json?.data?.fileDelete?.userErrors || [];
-    if (errors.length) {
-      console.warn("ReleaseCore: stale preview cleanup reported errors", errors);
-    }
-  } catch (error) {
-    console.warn("ReleaseCore: stale preview cleanup skipped", error);
-  }
-}
-
-async function deleteStoredMaster(file) {
+async function deleteStoredMaster(file, scope) {
   if (!file?.storageKey) return;
-  if (file.storageProvider === "R2") {
-    await deleteR2StorageKey(file.storageKey);
-  } else if (file.storageProvider === "LOCAL_DEV") {
-    await deleteLocalStorageKey(file.storageKey);
-  }
+  await deleteMasterStorageObject({
+    storageProvider: file.storageProvider,
+    storageKey: file.storageKey,
+    ...scope,
+  });
 }
 
 export const action = async ({ request }) => {
@@ -69,10 +48,7 @@ export const action = async ({ request }) => {
     multipartUploadId = uploadId;
     uploadScope = { shop: session.shop, releaseId, trackId, storageKey };
 
-    const release = await db.release.findFirst({
-      where: { id: releaseId, shop: session.shop },
-      include: { tracks: true },
-    });
+    const release = await findShopRelease(session.shop, releaseId, { include: { tracks: true } });
 
     if (!release) {
       return Response.json({ ok: false, error: "Release not found." }, { status: 404 });
@@ -101,7 +77,7 @@ export const action = async ({ request }) => {
 
     if (!storageKey) {
       return Response.json(
-        { ok: false, error: "R2 storage key is missing." },
+        { ok: false, error: "The master upload session is incomplete. Please upload the file again." },
         { status: 400 },
       );
     }
@@ -124,12 +100,12 @@ export const action = async ({ request }) => {
     }
 
     if (uploadMode === "MULTIPART") {
-      if (!uploadId) throw new Error("The multipart upload ID is missing.");
+      if (!uploadId) throw publicError("The master upload session is incomplete. Please retry the upload.", { status: 400 });
       let parts;
       try {
         parts = JSON.parse(String(formData.get("parts") || "[]"));
       } catch {
-        throw new Error("The multipart completion payload is invalid.");
+        throw publicError("The master upload could not be finalized. Please retry the upload.", { status: 400 });
       }
       await completeR2MultipartMasterUpload({
         shop: session.shop,
@@ -153,11 +129,11 @@ export const action = async ({ request }) => {
     });
 
     const existing = await db.releaseFile.findMany({
-      where: { releaseId, trackId, kind: FILE_KINDS.MASTER_WAV },
+      where: { releaseId, trackId, kind: FILE_KINDS.MASTER_WAV, release: { shop: session.shop } },
     });
 
     const stalePreviews = await db.releaseFile.findMany({
-      where: { releaseId, trackId, kind: FILE_KINDS.PREVIEW_MP3 },
+      where: { releaseId, trackId, kind: FILE_KINDS.PREVIEW_MP3, release: { shop: session.shop } },
     });
 
     const file = await db.$transaction(async (tx) => {
@@ -186,8 +162,8 @@ export const action = async ({ request }) => {
         },
       });
 
-      await tx.release.update({
-        where: { id: releaseId },
+      await tx.release.updateMany({
+        where: { id: releaseId, shop: session.shop },
         data: { updatedAt: new Date() },
       });
 
@@ -198,17 +174,19 @@ export const action = async ({ request }) => {
 
     for (const old of existing) {
       try {
-        await deleteStoredMaster(old);
+        await deleteStoredMaster(old, { shop: session.shop, releaseId, trackId });
       } catch (error) {
         console.warn("ReleaseCore: replaced master cleanup skipped", error);
       }
     }
 
-    for (const preview of stalePreviews) {
-      if (preview.storageProvider === "SHOPIFY_FILES" && preview.storageKey) {
-        await bestEffortDeleteShopifyFile(admin, preview.storageKey);
-      }
-    }
+    await deleteShopifyFilesBestEffort(
+      admin,
+      stalePreviews
+        .filter((preview) => preview.storageProvider === "SHOPIFY_FILES")
+        .map((preview) => preview.storageKey),
+      { context: "stale preview cleanup" },
+    );
 
     return Response.json({
       ok: true,
@@ -226,19 +204,16 @@ export const action = async ({ request }) => {
     }
     if (newStorageKey && !committed && (!multipartUploadId || multipartCompleted)) {
       try {
-        await deleteR2StorageKey(newStorageKey);
+        await deleteMasterStorageObject({
+          storageProvider: "R2",
+          storageKey: newStorageKey,
+          shop: uploadScope.shop,
+          releaseId: uploadScope.releaseId,
+          trackId: uploadScope.trackId,
+        });
       } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
     }
 
-    console.error("ReleaseCore: master upload completion failed", error);
-    return Response.json(
-      {
-        ok: false,
-        error: error instanceof Error
-          ? error.message
-          : "ReleaseCore could not finalize this master upload.",
-      },
-      { status: 500 },
-    );
+    return apiErrorResponse(request, error, { context: "master upload completion", fallback: "ReleaseCore could not finalize this master upload." });
   }
 };

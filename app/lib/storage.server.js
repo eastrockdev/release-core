@@ -37,8 +37,13 @@ function safeFilename(value) {
 
 function configuredMasterProvider() {
   const value = String(process.env.RELEASECORE_MASTER_STORAGE || "").trim().toUpperCase();
+  const production = process.env.NODE_ENV === "production";
   if (value === "R2") return "R2";
-  return "LOCAL_DEV";
+  if (!production && (!value || value === "LOCAL_DEV")) return "LOCAL_DEV";
+  if (production) {
+    throw new Error("ReleaseCore production master storage must be configured as R2.");
+  }
+  throw new Error("RELEASECORE_MASTER_STORAGE must be R2 or LOCAL_DEV.");
 }
 
 export function masterStorageProvider() {
@@ -104,6 +109,18 @@ function assertR2MasterKeyScope(storageKey, scope) {
   const prefix = masterPrefix(scope);
   if (!key || !key.startsWith(prefix)) {
     throw new Error("The master storage key is outside this release/track scope.");
+  }
+}
+
+function localMasterPrefix({ shop, releaseId, trackId }) {
+  return [safeSegment(shop), safeSegment(releaseId), safeSegment(trackId)].join(path.sep) + path.sep;
+}
+
+function assertLocalMasterKeyScope(storageKey, scope) {
+  const key = path.normalize(String(storageKey || ""));
+  const prefix = localMasterPrefix(scope);
+  if (!key || key.startsWith(`..${path.sep}`) || !key.startsWith(prefix)) {
+    throw new Error("The local master storage key is outside this release/track scope.");
   }
 }
 
@@ -353,6 +370,28 @@ export async function deleteR2StorageKey(storageKey) {
   await client.send(
     new DeleteObjectCommand({ Bucket: bucket, Key: storageKey }),
   );
+}
+
+export async function deleteMasterStorageObject({
+  storageProvider,
+  storageKey,
+  shop,
+  releaseId,
+  trackId,
+}) {
+  if (!storageKey) return;
+  const scope = { shop, releaseId, trackId };
+  if (storageProvider === "R2") {
+    assertR2MasterKeyScope(storageKey, scope);
+    await deleteR2StorageKey(storageKey);
+    return;
+  }
+  if (storageProvider === "LOCAL_DEV") {
+    assertLocalMasterKeyScope(storageKey, scope);
+    await deleteLocalStorageKey(storageKey);
+    return;
+  }
+  throw new Error(`Unsupported master storage provider: ${storageProvider || "unknown"}.`);
 }
 
 export async function getR2SignedReadUrl(

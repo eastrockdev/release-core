@@ -106,7 +106,7 @@ export async function getReleaseCoreMetafieldStatus(admin) {
   const missing = [];
   const mismatched = [];
   const hidden = [];
-  for (const [name, key, type] of DEFINITIONS) {
+  for (const [, key, type] of DEFINITIONS) {
     const current = byKey.get(key);
     if (!current) { missing.push(key); continue; }
     if (current.type?.name !== type) mismatched.push({ key, expected: type, actual: current.type?.name || "unknown" });

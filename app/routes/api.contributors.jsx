@@ -1,5 +1,8 @@
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { contributorIdentityProtection } from "../lib/identity-protection.server";
+import { apiErrorResponse } from "../lib/http-security.server";
+import { findShopContributor } from "../lib/tenant-db.server";
 
 const clean = (value) => String(value || "").trim() || null;
 
@@ -26,14 +29,23 @@ export const action = async ({ request }) => {
     }
     if (intent === "update") {
       const contributorId = String(data.get("contributorId") || "");
-      const owned = await db.contributor.findFirst({ where:{id:contributorId, shop:session.shop} });
+      const owned = await findShopContributor(session.shop, contributorId);
       if (!owned) return Response.json({ ok:false, error:"Contributor not found." }, { status:404 });
-      const contributor = await db.contributor.update({ where:{id:owned.id}, data:payload });
+      const protection = await contributorIdentityProtection({ shop: session.shop, contributorId: owned.id });
+      const protectedFields = ["legalName", "stageName", "pro", "ipi", "publisherName"];
+      if (protection.identityLocked && protectedFields.some((field) => (payload[field] || null) !== (owned[field] || null))) {
+        return Response.json({ ok:false, error:"This contributor identity is locked because it appears on a submitted release. Disable contributor identity protection in Settings before making a verified correction." }, { status:409 });
+      }
+      const contributor = await db.contributor.update({
+        where:{id:owned.id},
+        data: protection.identityLocked
+          ? { email: payload.email, notes: payload.notes }
+          : payload,
+      });
       return Response.json({ ok:true, message:`${contributor.stageName || contributor.legalName} updated.` });
     }
     return Response.json({ ok:false, error:"Unknown contributor action." }, { status:400 });
   } catch (error) {
-    console.error("ReleaseCore: contributor mutation failed", error);
-    return Response.json({ ok:false, error:error instanceof Error ? `ReleaseCore could not save this contributor: ${error.message}` : "ReleaseCore could not save this contributor." }, { status:500 });
+    return apiErrorResponse(request, error, { context: "contributor mutation", fallback: "ReleaseCore could not save this contributor." });
   }
 };

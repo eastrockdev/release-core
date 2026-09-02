@@ -5,26 +5,29 @@ import { assignMissingIsrcsForRelease, maybeAutoAssignIsrc } from "../lib/isrc.s
 import { assignUpcToRelease } from "../lib/upc.server";
 import { calculateReleaseReadiness, releaseIsEditable, WORKFLOW_INTENTS } from "../lib/workflow";
 import { dispatchLatestEvent } from "../lib/automations.server";
+import { isrcAssignmentMode } from "../lib/isrc";
+import { apiErrorResponse, publicError } from "./http-security.server";
+import { findShopArtist, findShopContributor, findShopRelease } from "./tenant-db.server";
 
 async function getOwnedRelease(id, shop, include = {}) {
-  return db.release.findFirst({ where: { id, shop }, include });
+  return findShopRelease(shop, id, { include });
 }
 
-async function syncReleaseArtistName(releaseId) {
+async function syncReleaseArtistName(releaseId, shop) {
   const assignments = await db.releaseArtist.findMany({
-    where: { releaseId },
+    where: { releaseId, release: { shop } },
     include: { artist: true },
     orderBy: { position: "asc" },
   });
   const first = assignments.find((item) => item.role === "PRIMARY") || assignments[0];
-  await db.release.update({ where: { id: releaseId }, data: { artistName: first?.artist?.name || null } });
+  await db.release.updateMany({ where: { id: releaseId, shop }, data: { artistName: first?.artist?.name || null } });
 }
 
 function parseOwnership(value) {
   const raw = String(value ?? "").trim();
   if (!raw) return null;
   const number = Number(raw);
-  if (!Number.isFinite(number) || number < 0 || number > 100) throw new Error("Ownership must be between 0 and 100%.");
+  if (!Number.isFinite(number) || number < 0 || number > 100) throw publicError("Ownership must be between 0 and 100%.", { status: 400 });
   return Math.round(number * 100) / 100;
 }
 
@@ -33,13 +36,12 @@ async function assertPublishingTotal(trackId, nextPercent, excludeCreditId = nul
   const existing = credits
     .filter((credit) => credit.id !== excludeCreditId && isPublishingRole(credit.role))
     .reduce((sum, credit) => sum + (credit.ownershipPercent || 0), 0);
-  if (existing + (nextPercent || 0) > 100.00001) throw new Error(`Publishing ownership cannot exceed 100%. Current assigned total is ${existing}%.`);
+  if (existing + (nextPercent || 0) > 100.00001) throw publicError(`Publishing ownership cannot exceed 100%. Current assigned total is ${existing}%.`, { status: 400 });
 }
 
 
 async function getWorkflowRelease(id, shop) {
-  return db.release.findFirst({
-    where: { id, shop },
+  return findShopRelease(shop, id, {
     include: {
       artists: true,
       files: true,
@@ -49,12 +51,6 @@ async function getWorkflowRelease(id, shop) {
         include: { artists: true, credits: true, files: true },
       },
     },
-  });
-}
-
-async function recordEvent({ releaseId, type, message = null, fromStatus = null, toStatus = null, trackId = null }) {
-  return db.submissionEvent.create({
-    data: { releaseId, type, message, actorLabel: "Shopify admin", fromStatus, toStatus, trackId },
   });
 }
 
@@ -197,14 +193,14 @@ export const action = async ({ request, params }) => {
       const artistId = String(formData.get("artistId") || "");
       const role = String(formData.get("role") || "PRIMARY").toUpperCase();
       if (!ARTIST_ROLES.includes(role)) return Response.json({ok:false,error:"Invalid artist role."},{status:400});
-      const artist = await db.artist.findFirst({ where:{id:artistId, shop:session.shop} });
+      const artist = await findShopArtist(session.shop, artistId);
       if (!artist) return Response.json({ok:false,error:"Artist not found in this store."},{status:404});
       const exists = await db.releaseArtist.findFirst({where:{releaseId:release.id,artistId,role}});
       if (!exists) {
         const count = await db.releaseArtist.count({where:{releaseId:release.id}});
         await db.releaseArtist.create({data:{releaseId:release.id,artistId,role,position:count+1}});
       }
-      await syncReleaseArtistName(release.id);
+      await syncReleaseArtistName(release.id, session.shop);
       return Response.json({ok:true,message:`${artist.name} added to the release.`});
     }
 
@@ -215,7 +211,7 @@ export const action = async ({ request, params }) => {
       const assignment=await db.releaseArtist.findFirst({where:{id:assignmentId,releaseId:release.id}});
       if (!assignment) return Response.json({ok:false,error:"Release artist assignment not found."},{status:404});
       await db.releaseArtist.update({where:{id:assignment.id},data:{role}});
-      await syncReleaseArtistName(release.id);
+      await syncReleaseArtistName(release.id, session.shop);
       return Response.json({ok:true,message:"Release artist updated."});
     }
 
@@ -224,11 +220,24 @@ export const action = async ({ request, params }) => {
       const assignment=await db.releaseArtist.findFirst({where:{id:assignmentId,releaseId:release.id}});
       if (!assignment) return Response.json({ok:false,error:"Release artist assignment not found."},{status:404});
       await db.releaseArtist.delete({where:{id:assignment.id}});
-      await syncReleaseArtistName(release.id);
+      await syncReleaseArtistName(release.id, session.shop);
       return Response.json({ok:true,message:"Artist removed from the release."});
     }
 
     if (intent === "assign-missing-isrcs") {
+      const settings = await db.appSettings.findUnique({
+        where: { shop: session.shop },
+      });
+      if (isrcAssignmentMode(settings) !== "AUTO") {
+        return Response.json(
+          {
+            ok: false,
+            error:
+              "ISRCs are currently provided in the Distribution workspace.",
+          },
+          { status: 409 },
+        );
+      }
       const assigned = await assignMissingIsrcsForRelease({ releaseId: release.id, shop: session.shop });
       return Response.json({
         ok: true,
@@ -244,20 +253,26 @@ export const action = async ({ request, params }) => {
       }
       const maxPosition = release.tracks.reduce((max, track) => Math.max(max, track.position), 0);
       const settings = await db.appSettings.findUnique({ where: { shop: session.shop } });
-      const createdTrack = await db.track.create({
-        data: {
-          releaseId: release.id,
-          position: maxPosition + 1,
-          title: "Untitled Track",
-          language: settings?.defaultLanguage || null,
-        },
+      const createdTrack = await db.$transaction(async (tx) => {
+        const track = await tx.track.create({
+          data: {
+            releaseId: release.id,
+            position: maxPosition + 1,
+            title: "Untitled Track",
+            language: settings?.defaultLanguage || null,
+          },
+        });
+        await tx.release.update({
+          where: { id: release.id },
+          data: { updatedAt: new Date() },
+        });
+        return track;
       });
       try {
         await maybeAutoAssignIsrc({ trackId: createdTrack.id, shop: session.shop });
       } catch (isrcError) {
         console.error("ReleaseCore: automatic ISRC assignment skipped for new track", isrcError);
       }
-      await db.release.update({ where: { id: release.id }, data: { updatedAt: new Date() } });
       return Response.json({ ok: true, message: "Track added." });
     }
 
@@ -313,7 +328,7 @@ export const action = async ({ request, params }) => {
       const contributorId=String(formData.get("contributorId")||"");
       const role=String(formData.get("role")||"").toUpperCase();
       if (!CREDIT_ROLES.includes(role)) return Response.json({ok:false,error:"Choose a valid credit role."},{status:400});
-      const contributor=await db.contributor.findFirst({where:{id:contributorId,shop:session.shop}});
+      const contributor=await findShopContributor(session.shop, contributorId);
       if (!contributor) return Response.json({ok:false,error:"Contributor not found in this store."},{status:404});
       let ownershipPercent=parseOwnership(formData.get("ownershipPercent"));
       if (!isPublishingRole(role)) ownershipPercent=null;
@@ -369,7 +384,6 @@ export const action = async ({ request, params }) => {
 
     return Response.json({ ok: false, error: "Unknown release action." }, { status: 400 });
   } catch (error) {
-    console.error("ReleaseCore: release mutation failed", error);
-    return Response.json({ ok: false, error: error instanceof Error ? `ReleaseCore could not save this change: ${error.message}` : "ReleaseCore could not save this change." }, { status: 500 });
+    return apiErrorResponse(request, error, { context: "release mutation", fallback: "ReleaseCore could not save this change." });
   }
 };

@@ -1,10 +1,12 @@
 import db from "../db.server";
 import {
   buildIsrc,
+  isrcAssignmentMode,
   isIsrcConfigured,
   isrcReferenceYear,
   normalizeCountryCode,
   normalizeRegistrantCode,
+  validateIsrc,
 } from "./isrc";
 
 export async function getIsrcSettings(shop) {
@@ -77,6 +79,11 @@ async function reserveNextDesignation(tx, { shop, countryCode, registrantCode, y
 
 export async function assignIsrcToTrack({ trackId, shop }) {
   const settings = await getIsrcSettings(shop);
+  if (isrcAssignmentMode(settings) !== "AUTO") {
+    throw new Error(
+      "ISRCs are currently provided by the aggregator or Shopify admin in Distribution.",
+    );
+  }
   if (!isIsrcConfigured(settings)) {
     throw new Error("Configure the ISRC Country Code and Registrant Code in ReleaseCore Settings first.");
   }
@@ -135,8 +142,70 @@ export async function assignIsrcToTrack({ trackId, shop }) {
 
 export async function maybeAutoAssignIsrc({ trackId, shop }) {
   const settings = await getIsrcSettings(shop);
-  if (!settings?.autoAssignIsrc || !isIsrcConfigured(settings)) return null;
+  if (
+    isrcAssignmentMode(settings) !== "AUTO" ||
+    !isIsrcConfigured(settings)
+  )
+    return null;
   return assignIsrcToTrack({ trackId, shop });
+}
+
+export async function assignManualIsrcToTrack({
+  trackId,
+  shop,
+  value,
+  actorLabel = "Shopify admin",
+}) {
+  const code = validateIsrc(value);
+
+  return db.$transaction(async (tx) => {
+    const track = await tx.track.findUnique({
+      where: { id: trackId },
+      include: { release: true },
+    });
+    if (!track || track.release.shop !== shop) {
+      throw new Error("Track not found for this store.");
+    }
+    if (track.isrc === code) {
+      return { code, assigned: false, track };
+    }
+    if (track.isrc) {
+      throw new Error(
+        `This recording already has the permanent ISRC ${track.isrc}. Existing ISRCs cannot be replaced.`,
+      );
+    }
+
+    const duplicate = await tx.track.findUnique({ where: { isrc: code } });
+    if (duplicate) {
+      throw new Error("That ISRC is already assigned to another track.");
+    }
+
+    const updated = await tx.track.updateMany({
+      where: { id: track.id, isrc: null },
+      data: { isrc: code, isrcAssignedAt: new Date() },
+    });
+    if (updated.count !== 1) {
+      throw new Error(
+        "This track received an ISRC while the request was processing. Refresh before continuing.",
+      );
+    }
+
+    await tx.submissionEvent.create({
+      data: {
+        releaseId: track.releaseId,
+        trackId: track.id,
+        type: "ISRC_ASSIGNED",
+        message: `Track ${track.position} assigned ${code} manually by the distributor.`,
+        actorLabel,
+      },
+    });
+
+    return {
+      code,
+      assigned: true,
+      track: { ...track, isrc: code, isrcAssignedAt: new Date() },
+    };
+  });
 }
 
 export async function assignMissingIsrcsForRelease({ releaseId, shop }) {

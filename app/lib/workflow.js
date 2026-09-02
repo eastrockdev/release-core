@@ -1,5 +1,6 @@
 import { FILE_KINDS } from "./releasecore-files";
 import { isPublishingRole, trackNeedsTitle } from "./releasecore";
+import { isrcAssignmentMode } from "./isrc";
 
 export const RELEASE_STATUSES = [
   "DRAFT",
@@ -87,12 +88,14 @@ export function publishingTotal(track) {
 }
 
 export function requirementFlags(settings = {}) {
+  const isrcMode = isrcAssignmentMode(settings);
   return {
     requireLyrics: settings?.requireLyrics ?? true,
     requirePublishing: settings?.requirePublishing ?? true,
     requireSplitSheet: settings?.requireSplitSheet ?? false,
     requireCredits: settings?.requireCredits ?? false,
-    requireIsrc: settings?.requireIsrc ?? true,
+    isrcMode,
+    requireIsrc: isrcMode === "AUTO",
     requireTrackLanguage: settings?.requireTrackLanguage ?? true,
   };
 }

@@ -23,34 +23,33 @@ import {
 import { portalReleaseAccess } from "../lib/automations.server";
 import db from "../db.server";
 import {
+  completePortalArtistImage,
+  listPortalArtistProfiles,
+  stagePortalArtistImage,
+  updatePortalArtistProfile,
+} from "../lib/artist-profile.server";
+import {
   getR2SignedReadUrl,
   localStorageReadStream,
   localStorageStat,
 } from "../lib/storage.server";
+import { apiErrorResponse } from "../lib/http-security.server";
 
 function pathFromRequest(request) {
   const pathname = new URL(request.url).pathname;
   return pathname.replace(/^\/releasecore-proxy\/?/, "").replace(/^\/+|\/+$/g, "");
 }
 
-function errorResponse(error) {
-  if (error instanceof Response) return error;
-  console.error("ReleaseCore portal request failed", error);
-  return Response.json(
-    {
-      ok: false,
-      error: error instanceof Error ? error.message : "ReleaseCore could not complete this request.",
-      blockers: error?.blockers || undefined,
-    },
-    { status: 400 },
-  );
+function errorResponse(request, error) {
+  return apiErrorResponse(request, error, {
+    context: "artist portal request",
+    fallback: "ReleaseCore could not complete this request.",
+  });
 }
 
-async function masterAudioResponse({ request, identity, fileId, previewAll }) {
+async function masterAudioResponse({ request, identity, fileId }) {
   const file = await db.releaseFile.findFirst({
-    where: previewAll
-      ? { id: fileId, kind: "MASTER_WAV", release: { shop: identity.shop } }
-      : { id: fileId, kind: "MASTER_WAV", release: { shop: identity.shop, ownerCustomerId: identity.customerId } },
+    where: { id: fileId, kind: "MASTER_WAV", release: { shop: identity.shop, ownerCustomerId: identity.customerId } },
   });
   if (!file || !file.storageKey) return new Response("Audio not found.", { status: 404 });
 
@@ -95,23 +94,27 @@ export const loader = async ({ request }) => {
   try {
     const context = await authenticate.public.appProxy(request);
     const identity = portalIdentity(request, context.session);
-    const previewAll = process.env.NODE_ENV !== "production" && identity.url.searchParams.get("preview") === "all";
-    if (!previewAll) requirePortalCustomer(identity);
+    requirePortalCustomer(identity);
     const path = pathFromRequest(request);
 
     const audioMatch = path.match(/^portal\/audio\/([^/]+)$/);
-    if (audioMatch) return masterAudioResponse({ request, identity, fileId: audioMatch[1], previewAll });
+    if (audioMatch) return masterAudioResponse({ request, identity, fileId: audioMatch[1] });
+
+    if (path === "portal/profile") {
+      const profiles = await listPortalArtistProfiles(identity);
+      return Response.json({ ok: true, ...profiles });
+    }
 
     if (path === "portal/releases") {
       const limit = identity.url.searchParams.get("limit");
-      const releases = await listPortalReleases({ ...identity, admin: context.admin, limit, previewAll });
-      const access = await portalReleaseAccess({ admin: context.admin, shop: identity.shop, customerId: identity.customerId, previewAll });
+      const releases = await listPortalReleases({ ...identity, admin: context.admin, limit });
+      const access = await portalReleaseAccess({ admin: context.admin, shop: identity.shop, customerId: identity.customerId });
       return Response.json({ ok: true, releases, access });
     }
 
     const detailMatch = path.match(/^portal\/releases\/([^/]+)$/);
     if (detailMatch) {
-      const release = await portalReleaseDetail({ ...identity, admin: context.admin, releaseId: detailMatch[1], previewAll });
+      const release = await portalReleaseDetail({ ...identity, admin: context.admin, releaseId: detailMatch[1] });
       if (!release) return Response.json({ ok: false, error: "Release not found." }, { status: 404 });
       return Response.json({
         ok: true,
@@ -122,7 +125,7 @@ export const loader = async ({ request }) => {
 
     return Response.json({ ok: false, error: "Portal endpoint not found." }, { status: 404 });
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(request, error);
   }
 };
 
@@ -157,6 +160,21 @@ export const action = async ({ request }) => {
     }
 
     const formData = await request.formData();
+
+    if (path === "portal/profile") {
+      const artist = await updatePortalArtistProfile({ ...identity, formData });
+      return Response.json({ ok: true, artist });
+    }
+
+    if (path === "portal/profile/image/stage") {
+      const target = await stagePortalArtistImage({ admin: context.admin, ...identity, formData });
+      return Response.json({ ok: true, target });
+    }
+
+    if (path === "portal/profile/image/complete") {
+      const image = await completePortalArtistImage({ admin: context.admin, ...identity, formData });
+      return Response.json({ ok: true, ...image });
+    }
 
     if (path === "portal/uploads/stage") {
       const target = await stagePortalUpload({ admin: context.admin, ...identity, formData });
@@ -217,6 +235,6 @@ export const action = async ({ request }) => {
 
     return Response.json({ ok: false, error: "Unknown portal action." }, { status: 400 });
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(request, error);
   }
 };

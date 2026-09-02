@@ -1,5 +1,15 @@
 {
   "releasecore": {
-    "name": "ReleaseCore"
+    "name": "ReleaseCore",
+    "artist_profile": {
+      "name": "ReleaseCore artist profile",
+      "heading_label": "Heading",
+      "description_label": "Description",
+      "appearance_label": "Appearance",
+      "appearance_reactive": "Reactive to page background",
+      "appearance_dark": "Dark",
+      "appearance_light": "Light",
+      "accent_label": "Accent color"
+    }
   }
 }

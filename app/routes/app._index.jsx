@@ -3,7 +3,8 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { typeLabel, formatDate } from "../lib/releasecore";
-import { statusLabel } from "../lib/workflow";
+import { statusLabel, statusTone } from "../lib/workflow";
+import { EmptyState, MetricCard, MetricGrid, PageIntro, ReleaseListItem } from "../components/releasecore-ui";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -13,7 +14,10 @@ export const loader = async ({ request }) => {
       where: { shop: session.shop },
       orderBy: { updatedAt: "desc" },
       take: 6,
-      include: { _count: { select: { tracks: true } } },
+      include: {
+        _count: { select: { tracks: true } },
+        files: { where: { kind: "COVER_ART", trackId: null }, select: { kind: true, url: true }, orderBy: { createdAt: "desc" }, take: 1 },
+      },
     }),
     db.release.count({ where: { shop: session.shop } }),
     db.release.count({ where: { shop: session.shop, status: "DRAFT" } }),
@@ -35,39 +39,6 @@ export const loader = async ({ request }) => {
   return { releases, stats: { total, drafts, activeSubmissions, approved, distributionQueue, artists, contributors } };
 };
 
-function StatCard({ label, value, detail }) {
-  return (
-    <div style={styles.statCard}>
-      <div style={styles.statLabel}>{label}</div>
-      <div style={styles.statValue}>{value}</div>
-      <div style={styles.statDetail}>{detail}</div>
-    </div>
-  );
-}
-
-function ReleaseRow({ release }) {
-  return (
-    <Link to={`/app/release/${release.id}`} style={styles.releaseLink}>
-      <div style={styles.releaseRow}>
-        <div style={{ minWidth: 0 }}>
-          <div style={styles.releaseTitleLine}>
-            <strong style={styles.releaseTitle}>{release.title}</strong>
-            <span style={styles.badge}>{statusLabel(release.status)}</span>
-          </div>
-          <div style={styles.muted}>
-            {typeLabel(release.type)} · {release._count.tracks} {release._count.tracks === 1 ? "track" : "tracks"}
-            {release.artistName ? ` · ${release.artistName}` : ""}
-          </div>
-        </div>
-        <div style={styles.releaseRight}>
-          <span>{formatDate(release.releaseDate)}</span>
-          <span style={{ fontSize: 15 }}>→</span>
-        </div>
-      </div>
-    </Link>
-  );
-}
-
 export default function Index() {
   const { releases, stats } = useLoaderData();
   const navigate = useNavigate();
@@ -77,43 +48,71 @@ export default function Index() {
       <s-button slot="primary-action" variant="primary" onClick={() => navigate("/app/release/new")}>Create release</s-button>
 
       <s-section>
-        <div style={styles.hero}>
-          <div style={styles.eyebrow}>Music distribution operations</div>
-          <div style={styles.heroTitle}>One release workflow. Any format.</div>
-          <div style={styles.heroCopy}>
-            Build releases from persistent tracks, artist identities and reusable contributor credits. ReleaseCore now carries releases from draft through review, approval and downstream distribution processing.
-          </div>
-          <div style={styles.heroActions}>
+        <PageIntro
+          eyebrow="Music distribution operations"
+          title="Your catalog, review queue, and delivery work in one place."
+          actions={
+            <>
             <s-button variant="primary" onClick={() => navigate("/app/release/new")}>Create release</s-button>
             <s-button onClick={() => navigate("/app/submissions")}>Open submissions</s-button>
             <s-button onClick={() => navigate("/app/distribution")}>Distribution queue</s-button>
-            <s-button onClick={() => navigate("/app/artists")}>Manage artists</s-button>
-          </div>
+            </>
+          }
+        >
+          Track every release from draft through approval and delivery without losing the artists, credits, files, or identifiers attached to it.
+        </PageIntro>
+      </s-section>
+
+      <s-section heading="Getting started">
+        <div className="rc-card-grid rc-card-grid--3">
+          <article className="rc-card"><div className="rc-card__body">
+            <div className="rc-eyebrow">Step 1</div>
+            <h3 className="rc-card__title">Configure operations</h3>
+            <p className="rc-card__copy">Set your identifier modes, catalog behavior, preview settings, and Shopify publishing configuration.</p>
+            <div className="rc-card__actions"><s-button onClick={() => navigate("/app/settings")}>Open settings</s-button></div>
+          </div></article>
+          <article className="rc-card"><div className="rc-card__body">
+            <div className="rc-eyebrow">Step 2</div>
+            <h3 className="rc-card__title">Connect artist access</h3>
+            <p className="rc-card__copy">Link Shopify customer accounts to the artists who should use ReleaseCore on the storefront.</p>
+            <div className="rc-card__actions"><s-button onClick={() => navigate("/app/portal-access")}>Portal access</s-button></div>
+          </div></article>
+          <article className="rc-card"><div className="rc-card__body">
+            <div className="rc-eyebrow">Step 3</div>
+            <h3 className="rc-card__title">Add storefront blocks</h3>
+            <p className="rc-card__copy">Use ReleaseCore&apos;s Theme Editor deep links and test the Artist Portal while signed in as a linked customer.</p>
+            <div className="rc-card__actions"><s-button onClick={() => navigate("/app/storefront-setup")}>Storefront setup</s-button></div>
+          </div></article>
         </div>
       </s-section>
 
       <s-section heading="Overview">
-        <div style={styles.statsGrid}>
-          <StatCard label="All releases" value={stats.total} detail="Stored in ReleaseCore" />
-          <StatCard label="Drafts" value={stats.drafts} detail="Still being prepared" />
-          <StatCard label="Active submissions" value={stats.activeSubmissions} detail="Submitted, in review or changes requested" />
-          <StatCard label="Approved" value={stats.approved} detail="Passed release review" />
-          <StatCard label="Distribution queue" value={stats.distributionQueue} detail="Approved or in downstream processing" />
-          <StatCard label="Artists" value={stats.artists} detail="Reusable artist identities" />
-          <StatCard label="Contributors" value={stats.contributors} detail="Reusable credits directory" />
-        </div>
+        <MetricGrid>
+          <MetricCard label="All releases" value={stats.total} detail="Complete catalog" href="/app/releases" />
+          <MetricCard label="Drafts" value={stats.drafts} detail="Still being prepared" href="/app/releases" />
+          <MetricCard label="Active submissions" value={stats.activeSubmissions} detail="Waiting on review or changes" href="/app/submissions" />
+          <MetricCard label="Approved" value={stats.approved} detail="Ready for delivery" href="/app/submissions?status=APPROVED" />
+          <MetricCard label="Distribution" value={stats.distributionQueue} detail="In the delivery workflow" href="/app/distribution" />
+          <MetricCard label="Artists" value={stats.artists} detail="Saved identities" href="/app/artists" />
+          <MetricCard label="Contributors" value={stats.contributors} detail="Saved credit profiles" href="/app/contributors" />
+        </MetricGrid>
       </s-section>
 
       <s-section heading="Recent releases">
         {releases.length === 0 ? (
-          <div style={styles.empty}>
-            <div style={styles.emptyTitle}>No releases yet</div>
-            <div style={{ marginBottom: 14 }}>Create a release, choose Single, EP or Album, and start building its tracklist.</div>
-            <s-button variant="primary" onClick={() => navigate("/app/release/new")}>Create first release</s-button>
-          </div>
+          <EmptyState title="No releases yet" action={<s-button variant="primary" onClick={() => navigate("/app/release/new")}>Create first release</s-button>}>
+            Create a single, EP, or album and start building its tracklist.
+          </EmptyState>
         ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            {releases.map((release) => <ReleaseRow key={release.id} release={release} />)}
+          <div className="rc-release-list">
+            {releases.map((release) => <ReleaseListItem
+              key={release.id}
+              release={release}
+              href={`/app/release/${release.id}`}
+              badges={[{ label: typeLabel(release.type), tone: "info" }, { label: statusLabel(release.status), tone: statusTone(release.status) }]}
+              meta={`${release.artistName || "Artist not set"} · ${release._count.tracks} ${release._count.tracks === 1 ? "track" : "tracks"}`}
+              aside={`Release ${formatDate(release.releaseDate)}`}
+            />)}
             <div style={{ paddingTop: 4 }}><Link to="/app/releases">View all releases →</Link></div>
           </div>
         )}
@@ -121,27 +120,5 @@ export default function Index() {
     </s-page>
   );
 }
-
-const styles = {
-  hero: { padding: "4px 0 8px" },
-  eyebrow: { fontSize: 12, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "#6d7175", marginBottom: 8 },
-  heroTitle: { fontSize: 26, lineHeight: 1.15, fontWeight: 700, marginBottom: 8, color: "#202223" },
-  heroCopy: { color: "#6d7175", maxWidth: 760, lineHeight: 1.5 },
-  heroActions: { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18 },
-  statsGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 },
-  statCard: { border: "1px solid #e3e3e3", borderRadius: 12, padding: 18, background: "#fff", minHeight: 94 },
-  statLabel: { fontSize: 12, color: "#6d7175", marginBottom: 8 },
-  statValue: { fontSize: 28, fontWeight: 700, lineHeight: 1 },
-  statDetail: { fontSize: 12, color: "#8c9196", marginTop: 8 },
-  releaseLink: { color: "inherit", textDecoration: "none" },
-  releaseRow: { border: "1px solid #e3e3e3", borderRadius: 12, padding: 16, background: "#fff", display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 16, alignItems: "center" },
-  releaseTitleLine: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 6 },
-  releaseTitle: { fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  badge: { fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "3px 8px", background: "#f1f1f1", color: "#4a4a4a" },
-  muted: { color: "#6d7175", fontSize: 13 },
-  releaseRight: { color: "#8c9196", fontSize: 12, display: "flex", alignItems: "center", gap: 14, textAlign: "right" },
-  empty: { border: "1px dashed #c9cccf", borderRadius: 12, padding: "30px 20px", textAlign: "center", color: "#6d7175" },
-  emptyTitle: { fontWeight: 700, color: "#303030", marginBottom: 6, fontSize: 15 },
-};
 
 export const headers = (headersArgs) => boundary.headers(headersArgs);

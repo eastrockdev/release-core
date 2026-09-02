@@ -2,6 +2,7 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { isValidReleaseType, starterTitle, typeLabel } from "../lib/releasecore";
 import { maybeAutoAssignIsrc } from "../lib/isrc.server";
+import { apiErrorResponse } from "../lib/http-security.server";
 
 export const action = async ({ request }) => {
   if (request.method !== "POST") {
@@ -62,16 +63,6 @@ export const action = async ({ request }) => {
 
     return Response.json({ ok: true, releaseId: release.id });
   } catch (error) {
-    console.error("ReleaseCore: create release failed", error);
-    return Response.json(
-      {
-        ok: false,
-        error:
-          error instanceof Error
-            ? `ReleaseCore could not create the draft: ${error.message}`
-            : "ReleaseCore could not create the draft.",
-      },
-      { status: 500 },
-    );
+    return apiErrorResponse(request, error, { context: "create release", fallback: "ReleaseCore could not create the draft." });
   }
 };

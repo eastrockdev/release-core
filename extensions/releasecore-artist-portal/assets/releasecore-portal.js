@@ -7,7 +7,7 @@
 
     const rcReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
     const rcParseBackground = (value) => {
-      const match = String(value || '').match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,\/]\s*([\d.]+))?\s*\)/i);
+      const match = String(value || '').match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+))?\s*\)/i);
       if (!match) return null;
       return { r:Number(match[1]), g:Number(match[2]), b:Number(match[3]), a:match[4] == null ? 1 : Number(match[4]) };
     };
@@ -57,8 +57,8 @@
     const proxy = (root.dataset.proxyBase || '/apps/releasecore').replace(/\/$/, '');
     const customerName = root.dataset.customerName || '';
     const state = { releases: [], filter: 'ALL', detail: null, options: null, access: null };
+    let modalReturnFocus = null;
     const showAdd = root.dataset.showAdd !== 'false';
-    const previewUrl = (url) => previewAll ? `${url}${url.includes('?') ? '&' : '?'}preview=all` : url;
 
     const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
     const fmtDate = (value) => {
@@ -78,12 +78,18 @@
     const roleLabel = (value) => String(value || '').toLowerCase().split('_').map((part) => part ? part[0].toUpperCase()+part.slice(1) : '').join(' ');
     const typeLabel = (value) => value === 'ALBUM' ? 'Album' : value === 'EP' ? 'EP' : 'Single';
     const fileByKind = (files, kind) => (files || []).find((file) => file.kind === kind);
+    const previewReleases = [
+      { id:'preview-single', type:'SINGLE', title:'Midnight Drive', status:'DRAFT', distributionStatus:'NOT_QUEUED', releaseDate:null, updatedAt:new Date().toISOString(), trackCount:1, artistNames:['Preview Artist'], openReviewItems:0, coverUrl:null },
+      { id:'preview-ep', type:'EP', title:'After Hours', status:'CHANGES_REQUESTED', distributionStatus:'NOT_QUEUED', releaseDate:null, updatedAt:new Date().toISOString(), trackCount:5, artistNames:['Preview Artist'], openReviewItems:2, coverUrl:null },
+      { id:'preview-album', type:'ALBUM', title:'Signals', status:'APPROVED', distributionStatus:'QUEUED', releaseDate:null, updatedAt:new Date().toISOString(), trackCount:11, artistNames:['Preview Artist'], openReviewItems:0, coverUrl:null },
+    ];
 
     async function jsonFetch(url, options = {}) {
       const response = await fetch(url, { headers: { Accept:'application/json', ...(options.headers || {}) }, ...options });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data.ok === false) {
-        const error = new Error(data.error || `Request failed (${response.status}).`);
+        const reference = data.requestId ? ` Reference: ${data.requestId}.` : '';
+        const error = new Error(`${data.error || `Request failed (${response.status}).`}${reference}`);
         error.blockers = data.blockers || [];
         throw error;
       }
@@ -137,6 +143,15 @@
       const statusText = distributionActive ? distributionLabel(release.distributionStatus) : statusLabel(release.status);
       const date = release.releaseDate || release.updatedAt;
       const detailBits = [typeLabel(release.type), `${release.trackCount} track${release.trackCount === 1 ? '' : 's'}`, needs].filter(Boolean);
+      if (previewAll) {
+        return `<article class="rc-dashboard-release rc-library-release rc-library-release-preview">
+          ${cover}
+          <div class="rc-dashboard-date-row"><span>${esc(fmtDate(date))}</span><span class="rc-status" data-status="${esc(statusKey)}">${esc(statusText)}</span></div>
+          <div class="rc-dashboard-release-title">${esc(release.title)}</div>
+          <div class="rc-dashboard-artist">${esc(artists)}</div>
+          <div class="rc-library-card-foot"><span>${esc(detailBits.join(' · '))}</span><b>Sample</b></div>
+        </article>`;
+      }
       return `<button class="rc-dashboard-release rc-library-release" type="button" data-action="open-release" data-release-id="${esc(release.id)}">
         ${cover}
         <div class="rc-dashboard-date-row"><span>${esc(fmtDate(date))}</span><span class="rc-status" data-status="${esc(statusKey)}">${esc(statusText)}</span></div>
@@ -178,9 +193,15 @@
     }
 
     async function loadList() {
+      if (previewAll) {
+        state.releases = previewReleases;
+        state.access = null;
+        renderList();
+        return;
+      }
       if (!body.querySelector('.rc-library-grid-loading')) body.innerHTML = librarySkeleton();
       try {
-        const data = await jsonFetch(previewUrl(`${proxy}/portal/releases`));
+        const data = await jsonFetch(`${proxy}/portal/releases`);
         state.releases = data.releases || [];
         state.access = data.access || null;
         const hash = location.hash.match(/^#release-(.+)$/);
@@ -195,6 +216,7 @@
     }
 
     function showCreateModal() {
+      modalReturnFocus = document.activeElement;
       const accessOptions = state.access?.options || {};
       const types = [
         ['SINGLE','Single','One-track release'],
@@ -205,8 +227,8 @@
       const firstAllowed = allowedTypes[0] || '';
       const soloMisconfigured = state.access?.artistAccess?.mode === 'SOLO' && !state.access?.artistAccess?.soloArtist?.id;
       const lockHelp = Object.entries(accessOptions).filter(([,a]) => !a.allowed).map(([type,a]) => `${typeLabel(type)}: ${a.reason}`).join(' · ');
-      modalHost.innerHTML = `<div class="rc-modal-wrap">
-        <div class="rc-modal" role="region" aria-labelledby="rc-create-title">
+      modalHost.innerHTML = `<dialog class="rc-modal-dialog" data-rc-create-dialog aria-labelledby="rc-create-title">
+        <div class="rc-modal">
           <div class="rc-create-head">
             <div><div class="rc-eyebrow">New distribution release</div><h2 class="rc-panel-title" id="rc-create-title" style="font-size:22px;">Create release</h2><p class="rc-panel-copy">Choose a format, name the release and continue building it in your music workspace.</p></div>
             <button type="button" class="rc-btn rc-create-close" data-action="close-modal" aria-label="Close create release">×</button>
@@ -217,24 +239,38 @@
             ${soloMisconfigured ? `<div class="rc-message" data-tone="error" style="margin-top:10px;">Your account is set to solo-artist access, but the store administrator still needs to assign your artist profile.</div>` : ''}
             <div class="rc-form-grid rc-create-fields">
               <label class="rc-field rc-field-full"><span class="rc-label">Release title</span><input class="rc-input" name="title" placeholder="Release title"></label>
-              ${state.access?.artistAccess?.mode === 'SOLO' ? `<label class="rc-field rc-field-full"><span class="rc-label">Primary artist</span><input class="rc-input" name="artistName" readonly value="${esc(state.access?.artistAccess?.soloArtist?.name || '')}"><span class="rc-help">Your account is configured for solo-artist access. This identity is locked by the store administrator.</span></label>` : `<label class="rc-field rc-field-full"><span class="rc-label">Primary artist</span><input class="rc-input" name="artistName" required value="${esc(customerName)}" placeholder="Artist / stage name"><span class="rc-help">Your account can create releases for multiple artists. ReleaseCore will remember each artist profile you use.</span></label>`}
+              ${state.access?.artistAccess?.mode === 'SOLO' ? `<label class="rc-field rc-field-full"><span class="rc-label">Primary artist</span><input class="rc-input" name="artistName" readonly value="${esc(state.access?.artistAccess?.soloArtist?.name || '')}"><span class="rc-help">Your account is configured for solo-artist access. This identity is locked by the store administrator.</span></label>` : `<label class="rc-field rc-field-full"><span class="rc-label">Primary artist</span><input class="rc-input" name="artistName" required value="${esc(customerName)}" placeholder="Artist / stage name"><span class="rc-help">Your account can create releases for multiple artists. This portal will remember each artist profile you use.</span></label>`}
             </div>
             <div class="rc-message rc-hidden" data-form-message></div>
             <div class="rc-actions"><button type="button" class="rc-btn" data-action="close-modal">Cancel</button><button class="rc-btn rc-btn-primary" type="submit" ${firstAllowed && !soloMisconfigured ? '' : 'disabled'}>${soloMisconfigured ? 'Artist profile required' : firstAllowed ? 'Create release' : 'No release types available'}</button></div>
           </form>
         </div>
-      </div>`;
+      </dialog>`;
+      const dialog = modalHost.querySelector('[data-rc-create-dialog]');
+      dialog.addEventListener('close', () => {
+        modalHost.innerHTML = '';
+        modalReturnFocus?.focus?.({ preventScroll:true });
+        modalReturnFocus = null;
+      }, { once:true });
+      dialog.showModal();
       rcReveal(modalHost);
-      modalHost.scrollIntoView?.({ behavior:'smooth', block:'nearest' });
       modalHost.querySelector('input[name="title"]')?.focus({ preventScroll:true });
     }
 
-    function closeModal() { modalHost.innerHTML = ''; }
+    function closeModal() {
+      const dialog = modalHost.querySelector('[data-rc-create-dialog]');
+      if (dialog?.open) dialog.close();
+      else {
+        modalHost.innerHTML = '';
+        modalReturnFocus?.focus?.({ preventScroll:true });
+        modalReturnFocus = null;
+      }
+    }
 
     async function openRelease(id, updateHash = true) {
       body.innerHTML = workspaceSkeleton();
       try {
-        const data = await jsonFetch(previewUrl(`${proxy}/portal/releases/${encodeURIComponent(id)}`));
+        const data = await jsonFetch(`${proxy}/portal/releases/${encodeURIComponent(id)}`);
         state.detail = data.release;
         state.options = data.options;
         if (updateHash) history.replaceState(null, '', `${location.pathname}${location.search}#release-${encodeURIComponent(id)}`);
@@ -279,7 +315,7 @@
               <label class="rc-field"><span class="rc-label">Track title</span><input class="rc-input" name="title" required value="${esc(track.title)}" ${editable ? '' : 'disabled'}></label>
               <label class="rc-field"><span class="rc-label">Version / subtitle</span><input class="rc-input" name="version" value="${esc(track.version || '')}" placeholder="Remix, Acoustic, Radio Edit" ${editable ? '' : 'disabled'}></label>
               <label class="rc-field"><span class="rc-label">Language</span><select class="rc-select" name="language" ${editable ? '' : 'disabled'}><option value="">Choose language</option>${optionList(state.options?.languages, track.language)}</select></label>
-              <div class="rc-field"><span class="rc-label">ISRC</span><div class="rc-input" style="display:flex;align-items:center;">${esc(track.isrc || 'Assigned automatically when configured')}</div></div>
+              <div class="rc-field"><span class="rc-label">ISRC</span><div class="rc-input" style="display:flex;align-items:center;">${esc(track.isrc || (state.detail?.isrcMode === 'ADMIN' ? 'Provided during distribution' : 'Assigned automatically when configured'))}</div></div>
               <label class="rc-check rc-field-full"><input type="checkbox" name="explicit" ${track.explicit ? 'checked' : ''} ${editable ? '' : 'disabled'}><span><strong style="color:inherit;">Explicit content</strong><br>Mark this track explicit when required.</span></label>
               <label class="rc-field rc-field-full"><span class="rc-label">Lyrics</span><textarea class="rc-textarea" name="lyrics" placeholder="Enter lyrics, or choose the instrumental language option above." ${editable ? '' : 'disabled'}>${esc(track.lyrics || '')}</textarea></label>
             </div>
@@ -290,12 +326,12 @@
           <div class="rc-panel" style="margin-top:12px;padding:14px;">
             <div class="rc-panel-head"><div><h4 class="rc-panel-title" style="font-size:14px;">Master audio</h4><div class="rc-panel-copy">Final WAV master for this track. Listen here to confirm the correct recording was uploaded.</div></div></div>
             ${fileDisplay(master, 'No master uploaded.')}
-            ${master ? `<div class="rc-audio-confirm"><audio class="rc-audio-player" controls preload="metadata" src="${esc(previewUrl(`${proxy}/portal/audio/${encodeURIComponent(master.id)}`))}">Your browser cannot play this WAV file.</audio><span class="rc-help">Playback uses the exact uploaded WAV master.</span></div>` : ''}
+            ${master ? `<div class="rc-audio-confirm"><audio class="rc-audio-player" controls preload="metadata" src="${esc(`${proxy}/portal/audio/${encodeURIComponent(master.id)}`)}">Your browser cannot play this WAV file.</audio><span class="rc-help">Playback uses the exact uploaded WAV master.</span></div>` : ''}
             ${editable ? `<div class="rc-upload" style="margin-top:10px;"><input class="rc-input" type="file" accept="audio/wav,.wav" data-file-input="master" data-track-id="${esc(track.id)}"><div class="rc-progress rc-hidden" data-upload-progress><span></span></div><div class="rc-meta" data-upload-label></div></div>` : ''}
           </div>
 
           <div class="rc-panel" style="margin-top:12px;padding:14px;">
-            <div class="rc-panel-head"><div><h4 class="rc-panel-title" style="font-size:14px;">Credits & publishing</h4><div class="rc-panel-copy">Credits are reusable contributor records in ReleaseCore.</div></div></div>
+            <div class="rc-panel-head"><div><h4 class="rc-panel-title" style="font-size:14px;">Credits & publishing</h4><div class="rc-panel-copy">Credits are reusable contributor records for future releases.</div></div></div>
             ${creditsMarkup(track, editable)}
             ${editable ? `<form data-form="credit" data-track-id="${esc(track.id)}">
               <div class="rc-form-grid">
@@ -605,7 +641,7 @@
           : [];
         const expectedCount = Math.ceil(file.size / partSize);
         if (!partSize || !targets.length || targets.length !== expectedCount) {
-          throw new Error('ReleaseCore returned an invalid multipart upload target.');
+          throw new Error('The portal returned an invalid multipart upload target.');
         }
         const loadedByPart = new Map();
         const completed = new Array(targets.length);
@@ -672,7 +708,7 @@
                   setUploadProgress(input, Math.round((event.loaded/event.total)*100), 'Uploading master…');
                 }
               };
-              xhr.onerror = () => reject(new Error('The master upload could not reach ReleaseCore.'));
+              xhr.onerror = () => reject(new Error('The master upload could not reach private storage.'));
               xhr.onload = async () => {
                 let data = {};
                 try { data = JSON.parse(xhr.responseText || '{}'); } catch { /* Intentionally ignored: best-effort cleanup or fallback. */ }
@@ -695,7 +731,7 @@
               : target.uploadUrl
           );
           if (!validTarget) {
-            throw new Error('ReleaseCore did not return a valid private master upload target.');
+            throw new Error('The portal did not return a valid private master upload target.');
           }
 
           let completedParts = [];
@@ -775,7 +811,7 @@
     });
 
     modalHost.addEventListener('click', (event) => {
-      if (event.target.matches('[data-modal-backdrop]')) closeModal();
+      if (event.target.matches('[data-rc-create-dialog]')) closeModal();
       if (event.target.closest('[data-action="close-modal"]')) closeModal();
     });
 

@@ -6,6 +6,14 @@ export const FILE_KINDS = {
   SUPPORTING_DOCUMENT: "SUPPORTING_DOCUMENT",
 };
 
+function uploadValidationError(message) {
+  const error = new Error(message);
+  error.name = "ReleaseCoreUploadValidationError";
+  error.status = 400;
+  error.expose = true;
+  return error;
+}
+
 export const FILE_LIMITS = {
   COVER_ART: 20 * 1024 * 1024,
   MASTER_WAV: 500 * 1024 * 1024,
@@ -50,10 +58,10 @@ export function validateUploadDescriptor({ kind, filename, mimeType, sizeBytes, 
   const name = String(filename || "").trim();
   let mime = String(mimeType || "").toLowerCase();
   const size = Number(sizeBytes || 0);
-  if (!Object.values(FILE_KINDS).includes(kind)) throw new Error("Unknown file type.");
-  if (!name) throw new Error("A filename is required.");
-  if (!Number.isFinite(size) || size <= 0) throw new Error("The selected file is empty or its size could not be read.");
-  if (size > FILE_LIMITS[kind]) throw new Error(`${fileKindLabel(kind)} exceeds the ${formatBytes(FILE_LIMITS[kind])} upload limit.`);
+  if (!Object.values(FILE_KINDS).includes(kind)) throw uploadValidationError("Unknown file type.");
+  if (!name) throw uploadValidationError("A filename is required.");
+  if (!Number.isFinite(size) || size <= 0) throw uploadValidationError("The selected file is empty or its size could not be read.");
+  if (size > FILE_LIMITS[kind]) throw uploadValidationError(`${fileKindLabel(kind)} exceeds the ${formatBytes(FILE_LIMITS[kind])} upload limit.`);
 
   const lower = name.toLowerCase();
   if (!mime) {
@@ -65,22 +73,22 @@ export function validateUploadDescriptor({ kind, filename, mimeType, sizeBytes, 
   }
   if (kind === FILE_KINDS.COVER_ART) {
     if (!/\.(jpe?g|png)$/.test(lower) || (mime && !["image/jpeg", "image/png"].includes(mime))) {
-      throw new Error("Cover artwork must be a JPG or PNG image.");
+      throw uploadValidationError("Cover artwork must be a JPG or PNG image.");
     }
   }
   if (kind === FILE_KINDS.MASTER_WAV) {
-    if (!trackId) throw new Error("A master WAV must belong to a track.");
-    if (!lower.endsWith(".wav")) throw new Error("Track masters must be WAV files.");
+    if (!trackId) throw uploadValidationError("A master WAV must belong to a track.");
+    if (!lower.endsWith(".wav")) throw uploadValidationError("Track masters must be WAV files.");
   }
   if (kind === FILE_KINDS.PREVIEW_MP3) {
-    if (!trackId) throw new Error("An MP3 preview must belong to a track.");
-    if (!lower.endsWith(".mp3")) throw new Error("Audio previews must be MP3 files.");
+    if (!trackId) throw uploadValidationError("An MP3 preview must belong to a track.");
+    if (!lower.endsWith(".mp3")) throw uploadValidationError("Audio previews must be MP3 files.");
   }
   if (kind === FILE_KINDS.SPLIT_SHEET) {
-    if (!lower.endsWith(".pdf") || (mime && mime !== "application/pdf")) throw new Error("Split sheets must be uploaded as PDF files.");
+    if (!lower.endsWith(".pdf") || (mime && mime !== "application/pdf")) throw uploadValidationError("Split sheets must be uploaded as PDF files.");
   }
   if (kind === FILE_KINDS.SUPPORTING_DOCUMENT) {
-    if (!/\.(pdf|jpe?g|png)$/.test(lower)) throw new Error("Supporting documents must be PDF, JPG, or PNG files.");
+    if (!/\.(pdf|jpe?g|png)$/.test(lower)) throw uploadValidationError("Supporting documents must be PDF, JPG, or PNG files.");
   }
   return { name, mime: mime || "application/octet-stream", size };
 }

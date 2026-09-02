@@ -2,6 +2,7 @@ import db from "../db.server";
 
 import { AUTOMATION_CHANNELS, parseEventList, normalizeEventKey } from "./automations";
 import { sendSmtpEmail } from "./smtp.server";
+import { safeDiagnosticText } from "./http-security.server";
 
 import { customerNumericId } from "./automations";
 
@@ -57,20 +58,8 @@ export function releaseTypeEligibility({ settings = {}, customerTags = [], type 
   return { allowed, enabled: Boolean(config.enabled), requiredTags: required, matchMode, reason };
 }
 
-export async function portalReleaseAccess({ admin, shop, customerId, previewAll = false }) {
+export async function portalReleaseAccess({ admin, shop, customerId }) {
   const settings = (await db.appSettings.findUnique({ where: { shop } })) || {};
-  if (previewAll) {
-    return {
-      customerTags: [],
-      preview: true,
-      artistAccess: { mode: "MULTI", soloArtist: null },
-      options: {
-        SINGLE: { allowed: true, enabled: true, requiredTags: [], reason: null },
-        EP: { allowed: true, enabled: true, requiredTags: [], reason: null },
-        ALBUM: { allowed: true, enabled: true, requiredTags: [], reason: null },
-      },
-    };
-  }
   const [customer, policy] = await Promise.all([
     getShopifyCustomer(admin, customerId),
     db.portalCustomerPolicy.findUnique({
@@ -169,7 +158,7 @@ async function deliveryAttempt({ shop, releaseId, eventId, channel, recipient, f
     const providerId = await runner();
     return db.notificationDelivery.update({ where: { id: delivery.id }, data: { status: "SENT", providerId: providerId || null, lastError: null, sentAt: new Date() } });
   } catch (error) {
-    return db.notificationDelivery.update({ where: { id: delivery.id }, data: { status: "FAILED", lastError: error instanceof Error ? error.message : "Delivery failed." } });
+    return db.notificationDelivery.update({ where: { id: delivery.id }, data: { status: "FAILED", lastError: safeDiagnosticText(error instanceof Error ? error.message : "Delivery failed.", 600) } });
   }
 }
 
@@ -209,7 +198,7 @@ export async function dispatchReleaseEvent({ admin, shop, eventId, forceChannels
 
 export async function dispatchLatestEvent({ admin, shop, releaseId, type }) {
   try {
-    const event = await db.submissionEvent.findFirst({ where: { releaseId, type }, orderBy: { createdAt: "desc" } });
+    const event = await db.submissionEvent.findFirst({ where: { releaseId, type, release: { shop } }, orderBy: { createdAt: "desc" } });
     if (!event) return [];
     return await dispatchReleaseEvent({ admin, shop, eventId: event.id });
   } catch (error) {

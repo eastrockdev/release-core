@@ -1,54 +1,44 @@
-import { redirect, Form, useLoaderData } from "react-router";
-import { login } from "../../shopify.server";
-import styles from "./styles.module.css";
+import { redirect } from "react-router";
+import { PublicCard, PublicPage } from "../../components/releasecore-public";
+
+export const meta = () => [
+  { title: "ReleaseCore" },
+  { name: "description", content: "ReleaseCore helps Shopify merchants manage music releases, artist portals, review workflows, and distribution operations." },
+];
 
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
-
   if (url.searchParams.get("shop")) {
     throw redirect(`/app?${url.searchParams.toString()}`);
   }
-
-  return { showForm: Boolean(login) };
+  return null;
 };
 
-export default function App() {
-  const { showForm } = useLoaderData();
-
+export default function PublicHome() {
   return (
-    <div className={styles.index}>
-      <div className={styles.content}>
-        <h1 className={styles.heading}>A short heading about [your app]</h1>
-        <p className={styles.text}>
-          A tagline about [your app] that describes your value proposition.
-        </p>
-        {showForm && (
-          <Form className={styles.form} method="post" action="/auth/login">
-            <label className={styles.label}>
-              <span>Shop domain</span>
-              <input className={styles.input} type="text" name="shop" />
-              <span>e.g: my-shop-domain.myshopify.com</span>
-            </label>
-            <button className={styles.button} type="submit">
-              Log in
-            </button>
-          </Form>
-        )}
-        <ul className={styles.list}>
-          <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
-          </li>
-          <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
-          </li>
-          <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
-          </li>
-        </ul>
+    <PublicPage
+      eyebrow="Music distribution operations"
+      title="Release management built for Shopify."
+      intro="ReleaseCore gives music businesses one operational workspace for releases, artists, contributors, review, distribution, storefront artist portals, and Shopify catalog publishing."
+    >
+      <div className="rc-public__grid">
+        <PublicCard title="Release operations">
+          <p>Build singles, EPs, and albums with tracks, credits, files, identifiers, submission review, and distribution status in one place.</p>
+        </PublicCard>
+        <PublicCard title="Artist portal">
+          <p>Connect Shopify customer accounts to artist identities so artists can manage release information through theme app blocks without exposing other customers&apos; data.</p>
+        </PublicCard>
+        <PublicCard title="Shopify-native workflow">
+          <p>Keep merchant administration inside Shopify while publishing supported release data and storefront experiences through Shopify APIs and theme app extensions.</p>
+        </PublicCard>
       </div>
-    </div>
+      <PublicCard title="Already installed?">
+        <p>Open ReleaseCore from <strong>Apps</strong> in your Shopify admin. Installation and authentication are initiated by Shopify; ReleaseCore does not ask merchants to enter a shop domain on this website.</p>
+        <div className="rc-public__actions">
+          <a className="rc-public__button" href="/privacy-policy">Privacy policy</a>
+          <a className="rc-public__button" href="/support">Support</a>
+        </div>
+      </PublicCard>
+    </PublicPage>
   );
 }

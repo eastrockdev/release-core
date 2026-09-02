@@ -1,5 +1,30 @@
 export const COUNTRY_CODE_PATTERN = /^[A-Z]{2}$/;
 export const REGISTRANT_CODE_PATTERN = /^[A-Z0-9]{3}$/;
+export const ISRC_PATTERN = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/;
+export const ISRC_MODES = ["AUTO", "ADMIN"];
+
+export function isrcAssignmentMode(settings = {}) {
+  const mode = String(settings?.isrcMode || "").toUpperCase();
+  if (ISRC_MODES.includes(mode)) return mode;
+  return settings?.autoAssignIsrc === false ? "ADMIN" : "AUTO";
+}
+
+export function normalizeIsrc(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+export function validateIsrc(value) {
+  const code = normalizeIsrc(value);
+  if (!ISRC_PATTERN.test(code)) {
+    throw new Error(
+      "Enter a valid 12-character ISRC, such as USABC2600001.",
+    );
+  }
+  return code;
+}
 
 export function normalizeCountryCode(value) {
   return String(value || "").trim().toUpperCase();

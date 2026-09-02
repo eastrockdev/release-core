@@ -3,24 +3,9 @@ import db from "../db.server";
 import { fileContentTypeForKind, isReplaceableKind, validateUploadDescriptor } from "../lib/releasecore-files";
 
 import { releaseIsEditable } from "../lib/workflow";
-async function bestEffortDeleteShopifyFile(admin, fileId) {
-  if (!fileId) return;
-  try {
-    const response = await admin.graphql(
-      `#graphql
-        mutation ReleaseCoreDeleteReplacedFile($fileIds: [ID!]!) {
-          fileDelete(fileIds: $fileIds) { deletedFileIds userErrors { message } }
-        }`,
-      { variables: { fileIds: [fileId] } },
-    );
-    const json = await response.json();
-    const errors = json?.data?.fileDelete?.userErrors || [];
-    if (errors.length) console.warn("ReleaseCore: old Shopify file could not be removed", errors);
-  } catch (error) {
-    console.warn("ReleaseCore: old Shopify file cleanup failed", error);
-  }
-}
-
+import { apiErrorResponse, publicError } from "../lib/http-security.server";
+import { findShopRelease } from "../lib/tenant-db.server";
+import { deleteShopifyFilesBestEffort } from "../lib/shopify-files.server";
 export const action = async ({ request }) => {
   if (request.method !== "POST") return Response.json({ ok: false, error: "Method not allowed." }, { status: 405 });
   try {
@@ -34,7 +19,7 @@ export const action = async ({ request }) => {
     const sizeBytes = Number(formData.get("sizeBytes") || 0);
     const resourceUrl = String(formData.get("resourceUrl") || "");
 
-    const release = await db.release.findFirst({ where: { id: releaseId, shop: session.shop }, include: { tracks: true } });
+    const release = await findShopRelease(session.shop, releaseId, { include: { tracks: true } });
     if (!release) return Response.json({ ok: false, error: "Release not found." }, { status: 404 });
     if (!releaseIsEditable(release.status)) return Response.json({ ok: false, error: "This release is locked while it is under review or finalized." }, { status: 409 });
     if (trackId && !release.tracks.some((track) => track.id === trackId)) return Response.json({ ok: false, error: "Track does not belong to this release." }, { status: 404 });
@@ -64,34 +49,52 @@ export const action = async ({ request }) => {
     );
     const json = await response.json();
     const payload = json?.data?.fileCreate;
-    if (payload?.userErrors?.length) throw new Error(payload.userErrors.map((item) => item.message).join(" "));
+    if (payload?.userErrors?.length) throw publicError(payload.userErrors.map((item) => item.message).join(" "), { status: 400 });
     const shopifyFile = payload?.files?.[0];
     if (!shopifyFile?.id) throw new Error("Shopify did not create a file record.");
 
-    if (isReplaceableKind(kind)) {
-      const existing = await db.releaseFile.findMany({ where: { releaseId, trackId, kind } });
-      for (const item of existing) await bestEffortDeleteShopifyFile(admin, item.storageKey);
-      if (existing.length) await db.releaseFile.deleteMany({ where: { id: { in: existing.map((item) => item.id) } } });
-    }
+    const existing = isReplaceableKind(kind)
+      ? await db.releaseFile.findMany({
+          where: { releaseId, trackId, kind, release: { shop: session.shop } },
+        })
+      : [];
 
-    const file = await db.releaseFile.create({
-      data: {
-        releaseId,
-        trackId,
-        kind,
-        filename: descriptor.name,
-        storageProvider: "SHOPIFY_FILES",
-        storageKey: shopifyFile.id,
-        url: shopifyFile.url || shopifyFile.image?.url || null,
-        mimeType: descriptor.mime,
-        sizeBytes: descriptor.size,
-        status: shopifyFile.fileStatus || "UPLOADED",
-      },
+    const file = await db.$transaction(async (tx) => {
+      if (existing.length) {
+        await tx.releaseFile.deleteMany({
+          where: { id: { in: existing.map((item) => item.id) } },
+        });
+      }
+      const created = await tx.releaseFile.create({
+        data: {
+          releaseId,
+          trackId,
+          kind,
+          filename: descriptor.name,
+          storageProvider: "SHOPIFY_FILES",
+          storageKey: shopifyFile.id,
+          url: shopifyFile.url || shopifyFile.image?.url || null,
+          mimeType: descriptor.mime,
+          sizeBytes: descriptor.size,
+          status: shopifyFile.fileStatus || "UPLOADED",
+        },
+      });
+      await tx.release.updateMany({
+        where: { id: releaseId, shop: session.shop },
+        data: { updatedAt: new Date() },
+      });
+      return created;
     });
-    await db.release.update({ where: { id: releaseId }, data: { updatedAt: new Date() } });
+
+    await deleteShopifyFilesBestEffort(
+      admin,
+      existing
+        .filter((item) => item.storageProvider === "SHOPIFY_FILES")
+        .map((item) => item.storageKey),
+      { context: "replaced upload cleanup" },
+    );
     return Response.json({ ok: true, message: `${filename} uploaded.`, file });
   } catch (error) {
-    console.error("ReleaseCore: complete upload failed", error);
-    return Response.json({ ok: false, error: error instanceof Error ? error.message : "ReleaseCore could not finalize this upload." }, { status: 500 });
+    return apiErrorResponse(request, error, { context: "complete upload", fallback: "ReleaseCore could not finalize this upload." });
   }
 };

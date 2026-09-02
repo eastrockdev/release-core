@@ -96,10 +96,10 @@ export default function ImportProductPage() {
       </s-section>
 
       <s-section heading="2. Import options">
-        <div style={styles.grid}>
+        <div className="rc-import-grid" style={styles.grid}>
           <label style={styles.field}>
             <span style={styles.label}>Release type</span>
-            <select style={styles.input} value={type} onChange={(event) => setType(event.target.value)}>
+            <select className="rc-control" value={type} onChange={(event) => setType(event.target.value)}>
               <option value="AUTO">Auto-detect (default to Single)</option>
               <option value="SINGLE">Single</option>
               <option value="EP">EP</option>
@@ -109,7 +109,7 @@ export default function ImportProductPage() {
           </label>
           <label style={styles.field}>
             <span style={styles.label}>Imported release state</span>
-            <select style={styles.input} value={importState} onChange={(event) => setImportState(event.target.value)}>
+            <select className="rc-control" value={importState} onChange={(event) => setImportState(event.target.value)}>
               <option value="CATALOG">Existing / distributed catalog</option>
               <option value="DRAFT">Draft — continue preparing in ReleaseCore</option>
             </select>
@@ -117,11 +117,11 @@ export default function ImportProductPage() {
           </label>
           <label style={styles.field}>
             <span style={styles.label}>Release title override</span>
-            <input style={styles.input} value={titleOverride} onChange={(event) => setTitleOverride(event.target.value)} placeholder="Use Shopify product title" />
+            <input className="rc-control" value={titleOverride} onChange={(event) => setTitleOverride(event.target.value)} placeholder="Use Shopify product title" />
           </label>
           <label style={styles.field}>
             <span style={styles.label}>Primary artist override</span>
-            <input style={styles.input} value={artistOverride} onChange={(event) => setArtistOverride(event.target.value)} placeholder="Use ReleaseCore metafield or Shopify vendor" />
+            <input className="rc-control" value={artistOverride} onChange={(event) => setArtistOverride(event.target.value)} placeholder="Use ReleaseCore metafield or Shopify vendor" />
           </label>
         </div>
         <div style={styles.info}>
@@ -154,7 +154,7 @@ const styles = {
   grid: { display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 14 },
   field: { display: "grid", gap: 6 },
   label: { fontSize: 12, fontWeight: 700 },
-  input: { boxSizing: "border-box", width: "100%", minHeight: 42, padding: "9px 11px", border: "1px solid #c9cccf", borderRadius: 8, background: "#fff" },
+  input: { boxSizing: "border-box", width: "100%", height: 44, minHeight: 44, padding: "9px 11px", border: "1px solid #b7bdc4", borderRadius: 8, backgroundColor: "#fff", font: "inherit" },
   help: { color: "#6d7175", fontSize: 11, lineHeight: 1.4 },
   info: { display: "grid", gap: 4, marginTop: 16, padding: 13, borderRadius: 10, background: "#f6f6f7", color: "#4a4a4a", fontSize: 12 },
   actions: { display: "flex", gap: 9, flexWrap: "wrap", marginTop: 18 },
