@@ -208,6 +208,59 @@ export async function assignManualIsrcToTrack({
   });
 }
 
+export async function correctIsrcForTrack({
+  trackId,
+  shop,
+  value,
+  actorLabel = "Shopify admin",
+}) {
+  const code = validateIsrc(value);
+
+  return db.$transaction(async (tx) => {
+    const track = await tx.track.findUnique({
+      where: { id: trackId },
+      include: { release: true },
+    });
+    if (!track || track.release.shop !== shop) {
+      throw new Error("Track not found for this store.");
+    }
+    if (track.isrc === code) {
+      return { code, corrected: false, previousCode: track.isrc, track };
+    }
+
+    const duplicate = await tx.track.findUnique({ where: { isrc: code } });
+    if (duplicate && duplicate.id !== track.id) {
+      throw new Error("That ISRC is already assigned to another track.");
+    }
+
+    const previousCode = track.isrc || null;
+    const assignedAt = new Date();
+    const updated = await tx.track.update({
+      where: { id: track.id },
+      data: { isrc: code, isrcAssignedAt: assignedAt },
+    });
+
+    await tx.submissionEvent.create({
+      data: {
+        releaseId: track.releaseId,
+        trackId: track.id,
+        type: previousCode ? "ISRC_CORRECTED" : "ISRC_ASSIGNED",
+        message: previousCode
+          ? `Track ${track.position} ISRC corrected from ${previousCode} to ${code} by the distributor.`
+          : `Track ${track.position} assigned ${code} manually by the distributor.`,
+        actorLabel,
+      },
+    });
+
+    return {
+      code,
+      corrected: Boolean(previousCode),
+      previousCode,
+      track: updated,
+    };
+  });
+}
+
 export async function assignMissingIsrcsForRelease({ releaseId, shop }) {
   const release = await db.release.findFirst({
     where: { id: releaseId, shop },

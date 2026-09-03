@@ -1,6 +1,7 @@
 import { normalizeShopifyDigitalProduct } from "./shopify-products.server";
 import db from "../db.server";
 import { publicError } from "./http-security.server";
+import { deploymentProfileId } from "./deployment-profile.server";
 
 const VALID_TYPES = new Set(["SINGLE", "EP", "ALBUM"]);
 
@@ -189,11 +190,20 @@ export async function importShopifyProductAsRelease({ admin, shop, productId, re
     ...mfList(fields, "custom", "artist_featured"),
   ].filter((value, index, array) => value && array.indexOf(value) === index && value !== primaryArtistName);
 
+  const importedIsrc =
+    deploymentProfileId() === "east-rock"
+      ? mfText(fields, "custom", "single_isrc")
+        || mfText(fields, "releasecore", "isrc")
+        || mfText(fields, "custom", "isrc")
+      : mfText(fields, "releasecore", "isrc")
+        || mfText(fields, "custom", "isrc")
+        || mfText(fields, "custom", "single_isrc");
+
   const importedIds = await safeIdentifiers({
     shop,
     upc: mfText(fields, "releasecore", "upc") || mfText(fields, "custom", "upc") || variant.barcode,
     catalogNumber: mfText(fields, "releasecore", "catalog_number") || mfText(fields, "custom", "catalog_number") || variant.sku,
-    isrc: mfText(fields, "releasecore", "isrc") || mfText(fields, "custom", "isrc"),
+    isrc: importedIsrc,
   });
 
   const releaseDate = dateValue(
@@ -212,6 +222,11 @@ export async function importShopifyProductAsRelease({ admin, shop, productId, re
   const trackPosition = Number.isInteger(trackNumberRaw) && trackNumberRaw > 0 ? trackNumberRaw : 1;
 
   const isCatalog = importState !== "DRAFT";
+  if (type === "SINGLE" && isCatalog && !importedIds.isrc) {
+    importedIds.warnings.push(
+      "No existing ISRC was found on the Shopify product. ReleaseCore did not generate a replacement ISRC for this catalog import.",
+    );
+  }
   const now = new Date();
   const primaryArtist = await findOrCreateArtist(shop, primaryArtistName);
   const featuredRecords = [];

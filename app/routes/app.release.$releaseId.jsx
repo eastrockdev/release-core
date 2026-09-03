@@ -768,6 +768,7 @@ function TrackCard({
   count,
   mutate,
   busy,
+  adminBusy,
   artists,
   contributors,
   releaseArtists,
@@ -940,22 +941,49 @@ function TrackCard({
                 label="ISRC"
                 help={
                   track.isrc
-                    ? "This permanent recording identifier is locked and is not rewritten when settings change."
-                    : isrcMode === "ADMIN"
-                      ? "Your aggregator or Shopify admin will enter this code in the Distribution workspace. It does not block artist submission."
-                    : isrcConfigured
-                      ? "ReleaseCore will assign the next available ISRC automatically. You can also assign all missing codes from the tracklist header."
-                      : "Configure your Country Code and Registrant Code in Settings before ReleaseCore can assign an ISRC."
+                    ? "Admin correction field. Use the recording's original ISRC; changes are logged in status history."
+                    : "Enter an existing ISRC when this recording already has one. Artist Portal users cannot edit this field."
                 }
               >
-                <div style={styles.readonlyField}>
-                  {track.isrc
-                    ? track.isrc
-                    : isrcMode === "ADMIN"
-                      ? "Provided during distribution"
-                    : isrcConfigured
-                      ? "Automatic · Waiting for assignment"
-                      : "Automatic · Configure Settings"}
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    defaultValue={track.isrc || ""}
+                    placeholder="USABC2600001"
+                    className="rc-control"
+                    data-admin-isrc
+                    aria-label={`ISRC for Track ${index + 1}`}
+                  />
+                  <button
+                    type="button"
+                    disabled={adminBusy}
+                    className="rc-button"
+                    onClick={(event) => {
+                      const input = event.currentTarget.parentElement?.querySelector(
+                        "[data-admin-isrc]",
+                      );
+                      const value = String(input?.value || "").trim();
+                      if (!value) return;
+                      const normalized = value
+                        .toUpperCase()
+                        .replace(/[^A-Z0-9]/g, "");
+                      if (
+                        track.isrc &&
+                        normalized !== String(track.isrc).toUpperCase() &&
+                        !window.confirm(
+                          `Change this recording's ISRC from ${track.isrc} to ${normalized}? Use this only to correct an incorrect identifier.`,
+                        )
+                      ) {
+                        return;
+                      }
+                      const data = new FormData();
+                      data.set("intent", "update-isrc");
+                      data.set("trackId", track.id);
+                      data.set("isrc", value);
+                      mutate(data);
+                    }}
+                  >
+                    {adminBusy ? "Saving…" : "Save ISRC"}
+                  </button>
                 </div>
               </Field>
             </div>
@@ -1628,6 +1656,7 @@ function releasePendingMessage(formData) {
     "add-track": "Adding track…",
     "assign-missing-isrcs": "Assigning missing ISRCs…",
     "update-track": "Saving track details…",
+    "update-isrc": "Saving ISRC…",
     "update-lyrics": "Saving lyrics…",
     "add-track-artist": "Adding track artist…",
     "update-track-artist": "Saving track artist…",
@@ -1980,6 +2009,7 @@ export default function ReleaseWorkspace() {
               count={release.tracks.length}
               mutate={mutate}
               busy={busy || !editable}
+              adminBusy={busy}
               artists={artists}
               contributors={contributors}
               releaseArtists={release.artists}

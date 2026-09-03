@@ -1,7 +1,11 @@
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { ARTIST_ROLES, CREDIT_ROLES, isPublishingRole } from "../lib/releasecore";
-import { assignMissingIsrcsForRelease, maybeAutoAssignIsrc } from "../lib/isrc.server";
+import {
+  assignMissingIsrcsForRelease,
+  correctIsrcForTrack,
+  maybeAutoAssignIsrc,
+} from "../lib/isrc.server";
 import { assignUpcToRelease } from "../lib/upc.server";
 import { calculateReleaseReadiness, releaseIsEditable, WORKFLOW_INTENTS } from "../lib/workflow";
 import { dispatchLatestEvent } from "../lib/automations.server";
@@ -188,6 +192,36 @@ export const action = async ({ request, params }) => {
         db.submissionEvent.create({ data: { releaseId: release.id, type: "REOPENED", message: "Release returned to draft by an administrator.", actorLabel: "Shopify admin", fromStatus: release.status, toStatus: "DRAFT" } }),
       ]);
       return Response.json({ ok: true, message: "Release reopened as a draft." });
+    }
+
+    if (intent === "update-isrc") {
+      const trackId = String(formData.get("trackId") || "");
+      const track = release.tracks.find((item) => item.id === trackId);
+      if (!track) {
+        return Response.json(
+          { ok: false, error: "That track could not be found in this release." },
+          { status: 404 },
+        );
+      }
+      const value = String(formData.get("isrc") || "").trim();
+      if (!value) {
+        return Response.json(
+          { ok: false, error: "Enter the existing ISRC for this recording." },
+          { status: 400 },
+        );
+      }
+      const result = await correctIsrcForTrack({
+        trackId: track.id,
+        shop: session.shop,
+        value,
+        actorLabel: "Shopify admin",
+      });
+      return Response.json({
+        ok: true,
+        message: result.corrected
+          ? `ISRC corrected to ${result.code}.`
+          : `ISRC saved as ${result.code}.`,
+      });
     }
 
     if (!WORKFLOW_INTENTS.has(intent) && !releaseIsEditable(release.status)) {
