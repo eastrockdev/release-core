@@ -778,6 +778,7 @@ function TrackCard({
   feedbackFor,
   isrcConfigured,
   isrcMode,
+  creditSplitsEnabled,
 }) {
   const complete = !trackNeedsTitle(track);
   const writerCredits = track.credits.filter((credit) =>
@@ -860,9 +861,15 @@ function TrackCard({
           <StatusPill tone={track.artists.length ? "good" : "warn"}>
             {track.artists.length} artist{track.artists.length === 1 ? "" : "s"}
           </StatusPill>
-          <StatusPill tone={publishingTone}>
-            {publishingTotal}% publishing
-          </StatusPill>
+          {creditSplitsEnabled ? (
+            <StatusPill tone={publishingTone}>
+              {publishingTotal}% publishing
+            </StatusPill>
+          ) : (
+            <StatusPill tone="neutral">
+              {track.credits.length} credit{track.credits.length === 1 ? "" : "s"}
+            </StatusPill>
+          )}
           <span style={styles.expandHint}>Edit</span>
         </div>
       </summary>
@@ -1182,15 +1189,20 @@ function TrackCard({
         <div style={styles.subsection}>
           <div style={styles.creditHeading}>
             <div>
-              <div style={styles.subheading}>Credits & publishing</div>
+              <div style={styles.subheading}>
+                {creditSplitsEnabled ? "Credits & splits" : "Credits"}
+              </div>
               <div style={styles.subcopy}>
-                Credit reusable contributors, then assign publishing ownership
-                to songwriter/composer rows.
+                {creditSplitsEnabled
+                  ? "Credit reusable contributors, then assign writer/composer ownership splits."
+                  : "Credit reusable contributors without collecting publishing ownership percentages."}
               </div>
             </div>
-            <StatusPill tone={publishingTone}>
-              {publishingTotal}% songwriter ownership
-            </StatusPill>
+            {creditSplitsEnabled ? (
+              <StatusPill tone={publishingTone}>
+                {publishingTotal}% songwriter ownership
+              </StatusPill>
+            ) : null}
           </div>
           {track.credits.length ? (
             <div style={styles.assignmentList}>
@@ -1223,19 +1235,21 @@ function TrackCard({
                     </div>
                   </div>
                   <CreditRoleSelect defaultValue={credit.role} />
-                  <input
-                    name="ownershipPercent"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    defaultValue={credit.ownershipPercent ?? ""}
-                    placeholder="Split %"
-                    className="rc-control rc-control--compact"
-                  />
+                  {creditSplitsEnabled ? (
+                    <input
+                      name="ownershipPercent"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      defaultValue={credit.ownershipPercent ?? ""}
+                      placeholder="Split %"
+                      className="rc-control rc-control--compact"
+                    />
+                  ) : null}
                   <div style={styles.rowActions}>
-                    <button disabled={busy} className="rc-button rc-button--compact">
-                      Save
+                    <button disabled={adminBusy} className="rc-button rc-button--compact">
+                      {adminBusy ? "Saving…" : "Save"}
                     </button>
                     <button
                       type="button"
@@ -1307,15 +1321,17 @@ function TrackCard({
                 ) : null}
               </select>
               <CreditRoleSelect />
-              <input
-                name="ownershipPercent"
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                placeholder="Split %"
-                className="rc-control rc-control--compact"
-              />
+              {creditSplitsEnabled ? (
+                <input
+                  name="ownershipPercent"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  placeholder="Split %"
+                  className="rc-control rc-control--compact"
+                />
+              ) : null}
               <button disabled={busy} className="rc-button">
                 Add credit
               </button>
@@ -1327,8 +1343,9 @@ function TrackCard({
             </div>
           )}
           <div style={styles.splitHelp}>
-            Ownership is only stored for Songwriter and Composer credits.
-            ReleaseCore prevents the publishing total from exceeding 100%.
+            {creditSplitsEnabled
+              ? "Ownership is stored for Songwriter and Composer credits. Publishing ownership cannot exceed 100%."
+              : "This store is configured for credits only. Publishing ownership percentages are not collected."}
           </div>
         </div>
       </div>
@@ -2019,6 +2036,7 @@ export default function ReleaseWorkspace() {
               feedbackFor={feedbackFor}
               isrcConfigured={isrcSettings.configured}
               isrcMode={isrcSettings.mode}
+              creditSplitsEnabled={workflowSettings?.requirePublishing ?? true}
             />
           ))}
         </div>

@@ -154,6 +154,7 @@ export async function portalReleaseDetail({ shop, customerId, releaseId, admin }
     readiness,
     isrcMode: isrcAssignmentMode(settings),
     releaseDatePolicy: datePolicy,
+    creditSplitsEnabled: settings?.requirePublishing ?? true,
   };
 }
 
@@ -441,11 +442,21 @@ export async function addPortalCredit({ shop, customerId, releaseId, trackId, fo
   if (!CREDIT_ROLES.includes(role)) throw publicError("Choose a valid credit role.");
   const legalName = String(formData.get("legalName") || "").trim();
   if (!legalName) throw publicError("Contributor legal name is required.");
+  const settings = (await db.appSettings.findUnique({ where: { shop } })) || {};
+  const creditSplitsEnabled = settings.requirePublishing ?? true;
   const ownershipRaw = String(formData.get("ownershipPercent") || "").trim();
-  const ownershipPercent = ownershipRaw === "" ? null : Number(ownershipRaw);
-  if (isPublishingRole(role) && (!Number.isFinite(ownershipPercent) || ownershipPercent < 0 || ownershipPercent > 100)) {
+  let ownershipPercent =
+    creditSplitsEnabled && ownershipRaw !== "" ? Number(ownershipRaw) : null;
+  if (
+    creditSplitsEnabled &&
+    isPublishingRole(role) &&
+    (!Number.isFinite(ownershipPercent) ||
+      ownershipPercent < 0 ||
+      ownershipPercent > 100)
+  ) {
     throw publicError("Songwriter/composer ownership must be between 0 and 100%.");
   }
+  if (!creditSplitsEnabled || !isPublishingRole(role)) ownershipPercent = null;
 
   let contributor = await db.contributor.findFirst({ where: { shop, ownerCustomerId: customerId, legalName } });
   const contributorData = {
@@ -466,7 +477,7 @@ export async function addPortalCredit({ shop, customerId, releaseId, trackId, fo
     }
   } else contributor = await db.contributor.create({ data: { shop, ownerCustomerId: customerId, legalName, ...contributorData } });
 
-  if (isPublishingRole(role)) {
+  if (creditSplitsEnabled && isPublishingRole(role)) {
     const existingCredits = await db.trackCredit.findMany({ where: { trackId, role: { in: ["SONGWRITER", "COMPOSER"] }, NOT: { contributorId: contributor.id, role } } });
     const total = existingCredits.reduce((sum, item) => sum + (item.ownershipPercent || 0), 0) + (ownershipPercent || 0);
     if (total > 100.00001) throw publicError(`Publishing ownership cannot exceed 100%. Current result would be ${total}%.`);
@@ -476,6 +487,80 @@ export async function addPortalCredit({ shop, customerId, releaseId, trackId, fo
     where: { trackId_contributorId_role: { trackId, contributorId: contributor.id, role } },
     update: { ownershipPercent },
     create: { trackId, contributorId: contributor.id, role, ownershipPercent },
+  });
+}
+
+export async function updatePortalCredit({
+  shop,
+  customerId,
+  releaseId,
+  trackId,
+  creditId,
+  formData,
+}) {
+  const release = await getPortalRelease({
+    shop,
+    customerId,
+    releaseId,
+    include: { tracks: true },
+  });
+  if (!release) throw publicError("Release not found.");
+  if (!releaseIsEditable(release.status)) throw publicError("This release is locked.");
+  if (!release.tracks.some((track) => track.id === trackId)) {
+    throw publicError("Track not found.");
+  }
+
+  const credit = await db.trackCredit.findFirst({
+    where: { id: creditId, trackId },
+  });
+  if (!credit) throw publicError("Credit not found.");
+
+  const role = String(formData.get("role") || credit.role || "").toUpperCase();
+  if (!CREDIT_ROLES.includes(role)) throw publicError("Choose a valid credit role.");
+
+  const settings = (await db.appSettings.findUnique({ where: { shop } })) || {};
+  const creditSplitsEnabled = settings.requirePublishing ?? true;
+  const ownershipRaw = String(formData.get("ownershipPercent") || "").trim();
+  let ownershipPercent =
+    creditSplitsEnabled && ownershipRaw !== "" ? Number(ownershipRaw) : null;
+
+  if (
+    creditSplitsEnabled &&
+    isPublishingRole(role) &&
+    (!Number.isFinite(ownershipPercent) ||
+      ownershipPercent < 0 ||
+      ownershipPercent > 100)
+  ) {
+    throw publicError("Songwriter/composer ownership must be between 0 and 100%.");
+  }
+
+  if (!creditSplitsEnabled || !isPublishingRole(role)) {
+    ownershipPercent = null;
+  }
+
+  if (creditSplitsEnabled && isPublishingRole(role)) {
+    const existingCredits = await db.trackCredit.findMany({
+      where: {
+        trackId,
+        role: { in: ["SONGWRITER", "COMPOSER"] },
+        NOT: { id: credit.id },
+      },
+    });
+    const total =
+      existingCredits.reduce(
+        (sum, item) => sum + (item.ownershipPercent || 0),
+        0,
+      ) + (ownershipPercent || 0);
+    if (total > 100.00001) {
+      throw publicError(
+        `Publishing ownership cannot exceed 100%. Current result would be ${total}%.`,
+      );
+    }
+  }
+
+  return db.trackCredit.update({
+    where: { id: credit.id },
+    data: { role, ownershipPercent },
   });
 }
 

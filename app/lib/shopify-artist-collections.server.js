@@ -265,18 +265,22 @@ async function createArtistCollection(admin, artist, settings, productIds) {
   const collection = {
     ...metadataInput(artist, settings),
     sortOrder: "CREATED_DESC",
-    sources: [
-      {
-        source: {
-          title: RELEASECORE_COLLECTION_SOURCE_TITLE,
-          description: "Products synchronized from ReleaseCore artist assignments.",
-          targetType: "PRODUCTS",
-          inclusion: {
-            selections: productIds.map((productId) => ({ productId })),
-          },
-        },
-      },
-    ],
+    ...(productIds.length
+      ? {
+          sources: [
+            {
+              source: {
+                title: RELEASECORE_COLLECTION_SOURCE_TITLE,
+                description: "Products synchronized from ReleaseCore artist assignments.",
+                targetType: "PRODUCTS",
+                inclusion: {
+                  selections: productIds.map((productId) => ({ productId })),
+                },
+              },
+            },
+          ],
+        }
+      : {}),
   };
 
   const response = await admin.graphql(`#graphql
@@ -514,14 +518,14 @@ export async function syncShopifyArtistCollection({
   const previousManagedProductIds = managedProductIds(collection);
   let source = releaseCoreSource(collection, sourceId);
 
-  if (!source) {
+  if (!source && desiredProductIds.length) {
     collection = await createReleaseCoreSource(
       admin,
       collection.id,
       desiredProductIds,
     );
     source = releaseCoreSource(collection);
-  } else if (!created) {
+  } else if (source && !created) {
     await syncReleaseCoreSource(
       admin,
       collection.id,

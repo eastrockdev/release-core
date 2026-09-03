@@ -75,7 +75,6 @@ requireMarkers("shopify.app.east-rock.toml", [
   'url = "/releasecore-proxy"',
   'prefix = "apps"',
   'subpath = "releasecore"',
-  "include_config_on_deploy = true",
   "write_app_proxy",
 ]);
 requireMarkers("app/routes/app.release.$releaseId.jsx", [

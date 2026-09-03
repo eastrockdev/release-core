@@ -421,12 +421,23 @@ export default function SettingsPage() {
             title="Require lyrics or instrumental designation"
             help="Blocks submission when a lyrical track has no lyrics."
           />
-          <Toggle
-            checked={requirePublishing}
-            onChange={setRequirePublishing}
-            title="Require publishing splits to total 100%"
-            help="Useful when writer ownership must be captured before delivery."
-          />
+          <Field
+            label="Credit handling"
+            help="Choose whether your store collects contributor credits only, or contributor credits plus writer/composer ownership splits."
+          >
+            <select
+              className="rc-control"
+              value={requirePublishing ? "CREDITS_AND_SPLITS" : "CREDITS_ONLY"}
+              onChange={(event) =>
+                setRequirePublishing(
+                  event.target.value === "CREDITS_AND_SPLITS",
+                )
+              }
+            >
+              <option value="CREDITS_ONLY">Credits only</option>
+              <option value="CREDITS_AND_SPLITS">Credits &amp; splits</option>
+            </select>
+          </Field>
           <Toggle
             checked={requireSplitSheet}
             onChange={setRequireSplitSheet}

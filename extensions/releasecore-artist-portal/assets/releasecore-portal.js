@@ -317,10 +317,12 @@
 
     function creditsMarkup(track, editable) {
       const credits = track.credits || [];
+      const splits = state.detail?.creditSplitsEnabled !== false;
       return `<div class="rc-credit-list">${credits.length ? credits.map((credit) => {
         const person = credit.contributor?.stageName || credit.contributor?.legalName || 'Contributor';
-        const details = [roleLabel(credit.role), credit.contributor?.pro, credit.contributor?.ipi ? `IPI ${credit.contributor.ipi}` : '', credit.ownershipPercent != null ? `${credit.ownershipPercent}%` : ''].filter(Boolean).join(' · ');
-        return `<div class="rc-credit"><div><strong>${esc(person)}</strong><small>${esc(details)}</small></div>${editable ? `<button class="rc-btn rc-btn-danger" type="button" data-action="remove-credit" data-release-id="${esc(state.detail.id)}" data-track-id="${esc(track.id)}" data-credit-id="${esc(credit.id)}">Remove</button>` : ''}</div>`;
+        const details = [roleLabel(credit.role), credit.contributor?.pro, credit.contributor?.ipi ? `IPI ${credit.contributor.ipi}` : '', splits && credit.ownershipPercent != null ? `${credit.ownershipPercent}%` : ''].filter(Boolean).join(' · ');
+        if (!editable) return `<div class="rc-credit"><div><strong>${esc(person)}</strong><small>${esc(details)}</small></div></div>`;
+        return `<form class="rc-credit" data-form="credit-update" data-track-id="${esc(track.id)}" data-credit-id="${esc(credit.id)}"><div><strong>${esc(person)}</strong><small>${esc(details)}</small></div><select class="rc-select" name="role">${(state.options?.creditRoles || []).map((role) => `<option value="${esc(role)}"${role === credit.role ? ' selected' : ''}>${esc(roleLabel(role))}</option>`).join('')}</select>${splits ? `<input class="rc-input" name="ownershipPercent" type="number" min="0" max="100" step="0.01" value="${esc(credit.ownershipPercent ?? '')}" placeholder="Split %">` : ''}<div class="rc-actions"><button class="rc-btn" type="submit">Save</button><button class="rc-btn rc-btn-danger" type="button" data-action="remove-credit" data-release-id="${esc(state.detail.id)}" data-track-id="${esc(track.id)}" data-credit-id="${esc(credit.id)}">Remove</button></div><div class="rc-message rc-hidden" data-form-message></div></form>`;
       }).join('') : '<div class="rc-meta">No credits added yet.</div>'}</div>`;
     }
 
@@ -354,14 +356,14 @@
           </div>
 
           <div class="rc-panel" style="margin-top:12px;padding:14px;">
-            <div class="rc-panel-head"><div><h4 class="rc-panel-title" style="font-size:14px;">Credits & publishing</h4><div class="rc-panel-copy">Credits are reusable contributor records for future releases.</div></div></div>
+            <div class="rc-panel-head"><div><h4 class="rc-panel-title" style="font-size:14px;">${state.detail?.creditSplitsEnabled === false ? 'Credits' : 'Credits & splits'}</h4><div class="rc-panel-copy">${state.detail?.creditSplitsEnabled === false ? 'Add reusable contributor credits without publishing percentages.' : 'Add reusable contributor credits and writer/composer ownership splits.'}</div></div></div>
             ${creditsMarkup(track, editable)}
             ${editable ? `<form data-form="credit" data-track-id="${esc(track.id)}">
               <div class="rc-form-grid">
                 <label class="rc-field"><span class="rc-label">Legal name</span><input class="rc-input" name="legalName" required></label>
                 <label class="rc-field"><span class="rc-label">Display / stage name</span><input class="rc-input" name="stageName"></label>
                 <label class="rc-field"><span class="rc-label">Role</span><select class="rc-select" name="role">${(state.options?.creditRoles || []).map((role) => `<option value="${esc(role)}">${esc(roleLabel(role))}</option>`).join('')}</select></label>
-                <label class="rc-field"><span class="rc-label">Ownership %</span><input class="rc-input" name="ownershipPercent" type="number" min="0" max="100" step="0.01" placeholder="Writers / composers"></label>
+                ${state.detail?.creditSplitsEnabled === false ? '' : '<label class="rc-field"><span class="rc-label">Ownership %</span><input class="rc-input" name="ownershipPercent" type="number" min="0" max="100" step="0.01" placeholder="Writers / composers"></label>'}
                 <label class="rc-field"><span class="rc-label">PRO</span><select class="rc-select" name="pro"><option value="">Not set</option>${optionList(state.options?.proOptions, '')}</select></label>
                 <label class="rc-field"><span class="rc-label">IPI / CAE</span><input class="rc-input" name="ipi"></label>
               </div>
@@ -957,6 +959,7 @@
         if (form.dataset.form === 'release') { data.set('intent','update-release'); data.set('releaseId',state.detail.id); }
         if (form.dataset.form === 'track') { data.set('intent','update-track'); data.set('releaseId',state.detail.id); data.set('trackId',form.dataset.trackId); data.set('explicit',form.querySelector('[name="explicit"]')?.checked ? 'true' : 'false'); }
         if (form.dataset.form === 'credit') { data.set('intent','add-credit'); data.set('releaseId',state.detail.id); data.set('trackId',form.dataset.trackId); }
+        if (form.dataset.form === 'credit-update') { data.set('intent','update-credit'); data.set('releaseId',state.detail.id); data.set('trackId',form.dataset.trackId); data.set('creditId',form.dataset.creditId); }
         await post(data);
         await refreshDetail();
       } catch (error) {

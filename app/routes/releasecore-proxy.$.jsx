@@ -15,6 +15,7 @@ import {
   resolvePortalReviewItem,
   stagePortalUpload,
   submitPortalRelease,
+  updatePortalCredit,
   updatePortalRelease,
   updatePortalTrack,
   uploadPortalMaster,
@@ -317,6 +318,16 @@ export const action = async ({ request }) => {
     }
     if (intent === "add-credit") {
       await addPortalCredit({ ...identity, releaseId, trackId, formData });
+      return Response.json({ ok: true });
+    }
+    if (intent === "update-credit") {
+      await updatePortalCredit({
+        ...identity,
+        releaseId,
+        trackId,
+        creditId: String(formData.get("creditId") || ""),
+        formData,
+      });
       return Response.json({ ok: true });
     }
     if (intent === "remove-credit") {

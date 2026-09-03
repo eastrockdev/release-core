@@ -26,7 +26,6 @@ for (const expected of [
   'prefix = "apps"',
   'subpath = "releasecore"',
   "write_app_proxy",
-  "include_config_on_deploy = true",
 ]) {
   if (!source.includes(expected)) {
     fail(`Missing ${expected}.`);

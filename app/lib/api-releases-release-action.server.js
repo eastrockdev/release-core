@@ -224,7 +224,11 @@ export const action = async ({ request, params }) => {
       });
     }
 
-    if (!WORKFLOW_INTENTS.has(intent) && !releaseIsEditable(release.status)) {
+    if (
+      intent !== "update-credit" &&
+      !WORKFLOW_INTENTS.has(intent) &&
+      !releaseIsEditable(release.status)
+    ) {
       return Response.json({ ok: false, error: "This release is locked while it is submitted, under review, approved, or rejected. Reopen it or request changes before editing metadata." }, { status: 409 });
     }
 
@@ -393,9 +397,14 @@ export const action = async ({ request, params }) => {
       if (!CREDIT_ROLES.includes(role)) return Response.json({ok:false,error:"Choose a valid credit role."},{status:400});
       const contributor=await findShopContributor(session.shop, contributorId);
       if (!contributor) return Response.json({ok:false,error:"Contributor not found in this store."},{status:404});
-      let ownershipPercent=parseOwnership(formData.get("ownershipPercent"));
-      if (!isPublishingRole(role)) ownershipPercent=null;
-      if (isPublishingRole(role)) await assertPublishingTotal(track.id, ownershipPercent);
+      const creditSplitsEnabled = appSettings?.requirePublishing ?? true;
+      let ownershipPercent = creditSplitsEnabled
+        ? parseOwnership(formData.get("ownershipPercent"))
+        : null;
+      if (!creditSplitsEnabled || !isPublishingRole(role)) ownershipPercent = null;
+      if (creditSplitsEnabled && isPublishingRole(role)) {
+        await assertPublishingTotal(track.id, ownershipPercent);
+      }
       const exists=await db.trackCredit.findFirst({where:{trackId:track.id,contributorId,role}});
       if (exists) return Response.json({ok:false,error:"That contributor already has this role on the track."},{status:400});
       await db.trackCredit.create({data:{trackId:track.id,contributorId,role,ownershipPercent}});
@@ -408,10 +417,22 @@ export const action = async ({ request, params }) => {
       if (!CREDIT_ROLES.includes(role)) return Response.json({ok:false,error:"Choose a valid credit role."},{status:400});
       const credit=await db.trackCredit.findFirst({where:{id:creditId,trackId:track.id}});
       if (!credit) return Response.json({ok:false,error:"Track credit not found."},{status:404});
-      let ownershipPercent=parseOwnership(formData.get("ownershipPercent"));
-      if (!isPublishingRole(role)) ownershipPercent=null;
-      if (isPublishingRole(role)) await assertPublishingTotal(track.id, ownershipPercent, credit.id);
-      await db.trackCredit.update({where:{id:credit.id},data:{role,ownershipPercent}});
+      const creditSplitsEnabled = appSettings?.requirePublishing ?? true;
+      let ownershipPercent = creditSplitsEnabled
+        ? parseOwnership(formData.get("ownershipPercent"))
+        : null;
+      if (!creditSplitsEnabled || !isPublishingRole(role)) ownershipPercent = null;
+      if (creditSplitsEnabled && isPublishingRole(role)) {
+        await assertPublishingTotal(
+          track.id,
+          ownershipPercent,
+          credit.id,
+        );
+      }
+      await db.trackCredit.update({
+        where: { id: credit.id },
+        data: { role, ownershipPercent },
+      });
       return Response.json({ok:true,message:"Credit updated."});
     }
 
