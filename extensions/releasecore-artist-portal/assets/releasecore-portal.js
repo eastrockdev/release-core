@@ -55,7 +55,6 @@
     const body = root.querySelector('[data-rc-portal-body]');
     const modalHost = root.querySelector('[data-rc-modal-host]');
     const proxy = (root.dataset.proxyBase || '/apps/releasecore').replace(/\/$/, '');
-    const customerName = root.dataset.customerName || '';
     const state = { releases: [], filter: 'ALL', detail: null, options: null, access: null };
     let modalReturnFocus = null;
     const showAdd = root.dataset.showAdd !== 'false';
@@ -105,6 +104,14 @@
       return `<div class="rc-message"${tone ? ` data-tone="${tone}"` : ''}>${esc(text)}</div>`;
     }
 
+
+    function setTimelineChildren(parentName, enabled) {
+      body
+        .querySelectorAll(`[data-timeline-parent="${parentName}"]`)
+        .forEach((element) => {
+          element.hidden = !enabled;
+        });
+    }
 
     function librarySkeleton() {
       const releaseCard = `<div class="rc-dashboard-release rc-loader-release-card" aria-hidden="true"><div class="rc-skeleton rc-dashboard-cover"></div><div class="rc-dashboard-date-row"><span class="rc-skeleton rc-loader-date"></span><span class="rc-skeleton rc-loader-status"></span></div><div class="rc-skeleton rc-loader-title"></div><div class="rc-skeleton rc-loader-artist"></div><div class="rc-library-card-foot"><span class="rc-skeleton rc-loader-foot"></span><span class="rc-skeleton rc-loader-foot rc-loader-foot-short"></span></div></div>`;
@@ -163,6 +170,9 @@
 
     function addReleaseCard() {
       if (!showAdd) return '';
+      if (!previewAll && state.access?.artistAccess?.needsArtistSetup) {
+        return `<div class="rc-dashboard-add rc-library-add rc-library-add-disabled"><span class="rc-dashboard-plus">+</span><strong>Create your artist first</strong><span>Your account needs an artist identity before you can start a release.</span><b>Artist profile required</b></div>`;
+      }
       if (previewAll) return `<div class="rc-dashboard-add rc-library-add rc-library-add-disabled"><span class="rc-dashboard-plus">+</span><strong>Add release</strong><span>Sign in as a customer to create a release.</span><b>Preview mode</b></div>`;
       return `<button class="rc-dashboard-add rc-library-add" type="button" data-action="create-modal"><span class="rc-dashboard-plus">+</span><strong>Add another release</strong><span>Choose Single, EP or Album and start a new draft.</span><b>New release&nbsp;&nbsp;→</b></button>`;
     }
@@ -179,7 +189,20 @@
       const releases = filteredReleases();
       const cards = releases.map(releaseCard).join('');
       const addCard = addReleaseCard();
+      const artistSetup = !previewAll && state.access?.artistAccess?.needsArtistSetup
+        ? `<div class="rc-panel rc-artist-setup">
+            <div class="rc-eyebrow">Artist profile required</div>
+            <h2 class="rc-panel-title">Create your artist to begin.</h2>
+            <p class="rc-panel-copy">Your signed-in customer account is ready, but it is not associated with an artist yet. Create the artist identity you distribute for and it will be available for future releases.</p>
+            <form data-form="artist-setup" class="rc-form-grid">
+              <label class="rc-field rc-field-full"><span class="rc-label">Artist / stage name</span><input class="rc-input" name="artistName" required placeholder="Artist name"></label>
+              <div class="rc-message rc-hidden rc-field-full" data-form-message></div>
+              <div class="rc-actions rc-field-full"><button class="rc-btn rc-btn-primary" type="submit">Create artist</button></div>
+            </form>
+          </div>`
+        : '';
       body.innerHTML = `
+        ${artistSetup}
         <div class="rc-library-toolbar">
           <div class="rc-tabs" role="tablist" aria-label="Release filters">
             ${[['ALL','All'],['ACTIVE','Active'],['CHANGES_REQUESTED','Needs changes'],['APPROVED','Approved'],['DISTRIBUTION','Distribution']].map(([value,label]) => `<button type="button" class="rc-tab" role="tab" aria-selected="${state.filter === value}" data-action="filter" data-filter="${value}">${label}</button>`).join('')}
@@ -239,7 +262,7 @@
             ${soloMisconfigured ? `<div class="rc-message" data-tone="error" style="margin-top:10px;">Your account is set to solo-artist access, but the store administrator still needs to assign your artist profile.</div>` : ''}
             <div class="rc-form-grid rc-create-fields">
               <label class="rc-field rc-field-full"><span class="rc-label">Release title</span><input class="rc-input" name="title" placeholder="Release title"></label>
-              ${state.access?.artistAccess?.mode === 'SOLO' ? `<label class="rc-field rc-field-full"><span class="rc-label">Primary artist</span><input class="rc-input" name="artistName" readonly value="${esc(state.access?.artistAccess?.soloArtist?.name || '')}"><span class="rc-help">Your account is configured for solo-artist access. This identity is locked by the store administrator.</span></label>` : `<label class="rc-field rc-field-full"><span class="rc-label">Primary artist</span><input class="rc-input" name="artistName" required value="${esc(customerName)}" placeholder="Artist / stage name"><span class="rc-help">Your account can create releases for multiple artists. This portal will remember each artist profile you use.</span></label>`}
+              ${state.access?.artistAccess?.mode === 'SOLO' ? `<label class="rc-field rc-field-full"><span class="rc-label">Primary artist</span><input class="rc-input" name="artistName" readonly value="${esc(state.access?.artistAccess?.soloArtist?.name || '')}"><span class="rc-help">Your account is configured for solo-artist access. This identity is locked by the store administrator.</span></label>` : `<label class="rc-field rc-field-full"><span class="rc-label">Primary artist</span><input class="rc-input" name="artistName" required value="${esc(state.access?.artistAccess?.artists?.[0]?.name || '')}" placeholder="Artist / stage name"><span class="rc-help">Your account can create releases for multiple artists. This portal will remember each artist profile you use.</span></label>`}
             </div>
             <div class="rc-message rc-hidden" data-form-message></div>
             <div class="rc-actions"><button type="button" class="rc-btn" data-action="close-modal">Cancel</button><button class="rc-btn rc-btn-primary" type="submit" ${firstAllowed && !soloMisconfigured ? '' : 'disabled'}>${soloMisconfigured ? 'Artist profile required' : firstAllowed ? 'Create release' : 'No release types available'}</button></div>
@@ -387,25 +410,25 @@
 
         <div class="rc-field rc-field-full"><span class="rc-label">Release timeline</span><span class="rc-help">Availability, pre-order, release-time and partner exclusivity options.</span></div>
 
-        <label class="rc-field"><span class="rc-label">Availability</span><select class="rc-select" name="availability"${disabled}><option value="ALL_CURRENT_FUTURE"${selected('ALL_CURRENT_FUTURE', release.availability || 'ALL_CURRENT_FUTURE')}>All Current & Future Platforms</option><option value="CURRENT_ONLY"${selected('CURRENT_ONLY', release.availability)}>Current Platforms Only</option></select></label>
+        <label class="rc-field"><span class="rc-label">Availability</span><select class="rc-select" name="availability"${disabled}><option value="ALL_CURRENT_FUTURE"${selected('ALL_CURRENT_FUTURE', release.availability || 'ALL_CURRENT_FUTURE')}>All Current & Future Platforms</option><option value="SOCIAL_ONLY"${selected('SOCIAL_ONLY', release.availability)}>Social Media Only</option></select></label>
 
         <label class="rc-check"><input type="checkbox" name="preOrderEnabled" value="true"${checked(release.preOrderEnabled)}${disabled}><span><strong>Enable Pre-Order Window?</strong><br>Allow pre-purchase before general release.</span></label>
 
-        <label class="rc-field"><span class="rc-label">Pre-Order Date</span><input class="rc-input rc-date-input" type="date" name="preOrderDate" value="${esc(dateInput(release.preOrderDate))}"${disabled}><span class="rc-help">Must be before the public release date.</span></label>
+        <label class="rc-field" data-timeline-parent="preOrderEnabled"${release.preOrderEnabled ? '' : ' hidden'}><span class="rc-label">Pre-Order Date</span><input class="rc-input rc-date-input" type="date" name="preOrderDate" value="${esc(dateInput(release.preOrderDate))}"${disabled}><span class="rc-help">Must be before the public release date.</span></label>
 
-        <label class="rc-check"><input type="checkbox" name="preOrderAudioPreviews" value="true"${checked(release.preOrderAudioPreviews)}${disabled}><span><strong>Pre-Order Audio Previews</strong><br>Allow preview audio during the pre-order window.</span></label>
+        <label class="rc-check" data-timeline-parent="preOrderEnabled"${release.preOrderEnabled ? '' : ' hidden'}><input type="checkbox" name="preOrderAudioPreviews" value="true"${checked(release.preOrderAudioPreviews)}${disabled}><span><strong>Pre-Order Audio Previews</strong><br>Allow preview audio during the pre-order window.</span></label>
 
         <label class="rc-check"><input type="checkbox" name="releaseTimeEnabled" value="true"${checked(release.releaseTimeEnabled)}${disabled}><span><strong>Enable Release Time?</strong><br>Choose a specific launch time.</span></label>
 
-        <div class="rc-field"><span class="rc-label">Release Time</span><div class="rc-inline-row"><select class="rc-select" name="releaseTimeHour"${disabled}>${Array.from({length:12},(_,i)=>String(i+1)).map((value)=>`<option value="${value}"${selected(value,time.hour)}>${value}</option>`).join('')}</select><select class="rc-select" name="releaseTimeMinute"${disabled}>${['00','05','10','15','20','25','30','35','40','45','50','55'].map((value)=>`<option value="${value}"${selected(value,time.minute)}>${value}</option>`).join('')}</select><select class="rc-select" name="releaseTimeMeridiem"${disabled}><option value="AM"${selected('AM',time.meridiem)}>AM</option><option value="PM"${selected('PM',time.meridiem)}>PM</option></select></div></div>
+        <div class="rc-field" data-timeline-parent="releaseTimeEnabled"${release.releaseTimeEnabled ? '' : ' hidden'}><span class="rc-label">Release Time</span><div class="rc-inline-row"><select class="rc-select" name="releaseTimeHour"${disabled}>${Array.from({length:12},(_,i)=>String(i+1)).map((value)=>`<option value="${value}"${selected(value,time.hour)}>${value}</option>`).join('')}</select><select class="rc-select" name="releaseTimeMinute"${disabled}>${['00','05','10','15','20','25','30','35','40','45','50','55'].map((value)=>`<option value="${value}"${selected(value,time.minute)}>${value}</option>`).join('')}</select><select class="rc-select" name="releaseTimeMeridiem"${disabled}><option value="AM"${selected('AM',time.meridiem)}>AM</option><option value="PM"${selected('PM',time.meridiem)}>PM</option></select></div></div>
 
-        <label class="rc-check"><input type="checkbox" name="synchronousReleaseUnlocking" value="true"${checked(release.synchronousReleaseUnlocking)}${disabled}><span><strong>Synchronous Release Unlocking</strong><br>Unlock globally at the selected time instead of territory-local midnight.</span></label>
+        <label class="rc-check" data-timeline-parent="releaseTimeEnabled"${release.releaseTimeEnabled ? '' : ' hidden'}><input type="checkbox" name="synchronousReleaseUnlocking" value="true"${checked(release.synchronousReleaseUnlocking)}${disabled}><span><strong>Synchronous Release Unlocking</strong><br>Unlock globally at the selected time instead of territory-local midnight.</span></label>
 
         <label class="rc-check"><input type="checkbox" name="exclusiveEnabled" value="true"${checked(release.exclusiveEnabled)}${disabled}><span><strong>Enable Exclusive Window?</strong><br>Give one partner early availability.</span></label>
 
-        <label class="rc-field"><span class="rc-label">Exclusive Partner</span><select class="rc-select" name="exclusivePartner"${disabled}><option value="">Select exclusive partner</option>${partners.map((value)=>`<option value="${esc(value)}"${selected(value,release.exclusivePartner)}>${esc(value)}</option>`).join('')}</select></label>
+        <label class="rc-field" data-timeline-parent="exclusiveEnabled"${release.exclusiveEnabled ? '' : ' hidden'}><span class="rc-label">Exclusive Partner</span><select class="rc-select" name="exclusivePartner"${disabled}><option value="">Select exclusive partner</option>${partners.map((value)=>`<option value="${esc(value)}"${selected(value,release.exclusivePartner)}>${esc(value)}</option>`).join('')}</select></label>
 
-        <label class="rc-field"><span class="rc-label">Exclusivity Period</span><select class="rc-select" name="exclusivePeriodWeeks"${disabled}><option value="">Select period</option>${[2,4,6,8].map((weeks)=>`<option value="${weeks}"${String(weeks)===String(release.exclusivePeriodWeeks||'')?' selected':''}>${weeks} Weeks</option>`).join('')}</select></label>
+        <label class="rc-field" data-timeline-parent="exclusiveEnabled"${release.exclusiveEnabled ? '' : ' hidden'}><span class="rc-label">Exclusivity Period</span><select class="rc-select" name="exclusivePeriodWeeks"${disabled}><option value="">Select period</option>${[2,4,6,8].map((weeks)=>`<option value="${weeks}"${String(weeks)===String(release.exclusivePeriodWeeks||'')?' selected':''}>${weeks} Weeks</option>`).join('')}</select></label>
 
       `;
 
@@ -910,6 +933,12 @@
       }
     });
 
+    body.addEventListener('change', (event) => {
+      const name = event.target?.name;
+      if (!['preOrderEnabled','releaseTimeEnabled','exclusiveEnabled'].includes(name)) return;
+      setTimelineChildren(name, Boolean(event.target.checked));
+    });
+
     body.addEventListener('submit', async (event) => {
       const form = event.target.closest('[data-form]');
       if (!form) return;
@@ -919,6 +948,12 @@
       setFormMessage(form, '');
       try {
         const data = new FormData(form);
+        if (form.dataset.form === 'artist-setup') {
+          data.set('intent','create-artist');
+          await post(data);
+          await loadList();
+          return;
+        }
         if (form.dataset.form === 'release') { data.set('intent','update-release'); data.set('releaseId',state.detail.id); }
         if (form.dataset.form === 'track') { data.set('intent','update-track'); data.set('releaseId',state.detail.id); data.set('trackId',form.dataset.trackId); data.set('explicit',form.querySelector('[name="explicit"]')?.checked ? 'true' : 'false'); }
         if (form.dataset.form === 'credit') { data.set('intent','add-credit'); data.set('releaseId',state.detail.id); data.set('trackId',form.dataset.trackId); }

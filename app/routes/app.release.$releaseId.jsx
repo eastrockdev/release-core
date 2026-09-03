@@ -222,7 +222,7 @@ function UploadControl({
 
 const RELEASE_AVAILABILITY_OPTIONS = [
   ["ALL_CURRENT_FUTURE", "All Current & Future Platforms"],
-  ["CURRENT_ONLY", "Current Platforms Only"],
+  ["SOCIAL_ONLY", "Social Media Only"],
 ];
 
 const RELEASE_EXCLUSIVE_PARTNERS = [
@@ -252,84 +252,261 @@ function releaseTimeParts(value) {
 function ReleaseTimelineFields({ release, editable }) {
   const time = releaseTimeParts(release.releaseTime);
   const disabled = !editable;
+  const [preOrderEnabled, setPreOrderEnabled] = useState(
+    Boolean(release.preOrderEnabled),
+  );
+  const [releaseTimeEnabled, setReleaseTimeEnabled] = useState(
+    Boolean(release.releaseTimeEnabled),
+  );
+  const [exclusiveEnabled, setExclusiveEnabled] = useState(
+    Boolean(release.exclusiveEnabled),
+  );
+  const availabilityValue =
+    release.availability === "SOCIAL_ONLY"
+      ? "SOCIAL_ONLY"
+      : "ALL_CURRENT_FUTURE";
 
   return (
     <>
-      <Field label="Availability" help="Controls the release's intended partner availability.">
-        <select className="rc-control" name="availability" defaultValue={release.availability || "ALL_CURRENT_FUTURE"} disabled={disabled}>
+      <Field
+        label="Availability"
+        help="Controls the release's intended partner availability."
+      >
+        <select
+          className="rc-control"
+          name="availability"
+          defaultValue={availabilityValue}
+          disabled={disabled}
+        >
           {RELEASE_AVAILABILITY_OPTIONS.map(([value, label]) => (
-            <option key={value} value={value}>{label}</option>
+            <option key={value} value={value}>
+              {label}
+            </option>
           ))}
         </select>
       </Field>
 
       <Field label="Enable pre-order window?">
-        <label style={{ display: "flex", gap: 8, alignItems: "center", minHeight: 42 }}>
-          <input type="checkbox" name="preOrderEnabled" value="true" defaultChecked={Boolean(release.preOrderEnabled)} disabled={disabled} />
+        <label
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            minHeight: 42,
+          }}
+        >
+          <input
+            type="checkbox"
+            name="preOrderEnabled"
+            value="true"
+            checked={preOrderEnabled}
+            onChange={(event) => setPreOrderEnabled(event.target.checked)}
+            disabled={disabled}
+          />
           <span>Allow pre-purchase before general release</span>
         </label>
       </Field>
 
-      <Field label="Pre-order date" help="Must be before the release date when pre-order is enabled.">
-        <input className="rc-control rc-admin-date-control" name="preOrderDate" type="date" defaultValue={dateInputValue(release.preOrderDate)} disabled={disabled} />
-      </Field>
+      {preOrderEnabled ? (
+        <>
+          <Field
+            label="Pre-order date"
+            help="Must be before the release date when pre-order is enabled."
+          >
+            <input
+              className="rc-control rc-admin-date-control"
+              name="preOrderDate"
+              type="date"
+              defaultValue={dateInputValue(release.preOrderDate)}
+              disabled={disabled}
+            />
+          </Field>
 
-      <Field label="Pre-order audio previews">
-        <label style={{ display: "flex", gap: 8, alignItems: "center", minHeight: 42 }}>
-          <input type="checkbox" name="preOrderAudioPreviews" value="true" defaultChecked={Boolean(release.preOrderAudioPreviews)} disabled={disabled} />
-          <span>Enable preview audio during the pre-order window</span>
-        </label>
-      </Field>
+          <Field label="Pre-order audio previews">
+            <label
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                minHeight: 42,
+              }}
+            >
+              <input
+                type="checkbox"
+                name="preOrderAudioPreviews"
+                value="true"
+                defaultChecked={Boolean(release.preOrderAudioPreviews)}
+                disabled={disabled}
+              />
+              <span>Enable preview audio during the pre-order window</span>
+            </label>
+          </Field>
+        </>
+      ) : null}
 
       <Field label="Enable release time?">
-        <label style={{ display: "flex", gap: 8, alignItems: "center", minHeight: 42 }}>
-          <input type="checkbox" name="releaseTimeEnabled" value="true" defaultChecked={Boolean(release.releaseTimeEnabled)} disabled={disabled} />
+        <label
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            minHeight: 42,
+          }}
+        >
+          <input
+            type="checkbox"
+            name="releaseTimeEnabled"
+            value="true"
+            checked={releaseTimeEnabled}
+            onChange={(event) => setReleaseTimeEnabled(event.target.checked)}
+            disabled={disabled}
+          />
           <span>Choose a specific launch time</span>
         </label>
       </Field>
 
-      <Field label="Release time">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-          <select className="rc-control" name="releaseTimeHour" defaultValue={time.hour} disabled={disabled}>
-            {Array.from({ length: 12 }, (_, index) => String(index + 1)).map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
-          <select className="rc-control" name="releaseTimeMinute" defaultValue={time.minute} disabled={disabled}>
-            {["00","05","10","15","20","25","30","35","40","45","50","55"].map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
-          <select className="rc-control" name="releaseTimeMeridiem" defaultValue={time.meridiem} disabled={disabled}>
-            <option value="AM">AM</option>
-            <option value="PM">PM</option>
-          </select>
-        </div>
-      </Field>
+      {releaseTimeEnabled ? (
+        <>
+          <Field label="Release time">
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr",
+                gap: 8,
+              }}
+            >
+              <select
+                className="rc-control"
+                name="releaseTimeHour"
+                defaultValue={time.hour}
+                disabled={disabled}
+              >
+                {Array.from({ length: 12 }, (_, index) =>
+                  String(index + 1),
+                ).map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="rc-control"
+                name="releaseTimeMinute"
+                defaultValue={time.minute}
+                disabled={disabled}
+              >
+                {[
+                  "00",
+                  "05",
+                  "10",
+                  "15",
+                  "20",
+                  "25",
+                  "30",
+                  "35",
+                  "40",
+                  "45",
+                  "50",
+                  "55",
+                ].map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="rc-control"
+                name="releaseTimeMeridiem"
+                defaultValue={time.meridiem}
+                disabled={disabled}
+              >
+                <option value="AM">AM</option>
+                <option value="PM">PM</option>
+              </select>
+            </div>
+          </Field>
 
-      <Field label="Synchronous release unlocking" help="Unlock globally at the selected release time instead of territory-local midnight.">
-        <label style={{ display: "flex", gap: 8, alignItems: "center", minHeight: 42 }}>
-          <input type="checkbox" name="synchronousReleaseUnlocking" value="true" defaultChecked={Boolean(release.synchronousReleaseUnlocking)} disabled={disabled} />
-          <span>Use one synchronized global unlock time</span>
-        </label>
-      </Field>
+          <Field
+            label="Synchronous release unlocking"
+            help="Unlock globally at the selected release time instead of territory-local midnight."
+          >
+            <label
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                minHeight: 42,
+              }}
+            >
+              <input
+                type="checkbox"
+                name="synchronousReleaseUnlocking"
+                value="true"
+                defaultChecked={Boolean(release.synchronousReleaseUnlocking)}
+                disabled={disabled}
+              />
+              <span>Use one synchronized global unlock time</span>
+            </label>
+          </Field>
+        </>
+      ) : null}
 
       <Field label="Enable exclusive window?">
-        <label style={{ display: "flex", gap: 8, alignItems: "center", minHeight: 42 }}>
-          <input type="checkbox" name="exclusiveEnabled" value="true" defaultChecked={Boolean(release.exclusiveEnabled)} disabled={disabled} />
+        <label
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            minHeight: 42,
+          }}
+        >
+          <input
+            type="checkbox"
+            name="exclusiveEnabled"
+            value="true"
+            checked={exclusiveEnabled}
+            onChange={(event) => setExclusiveEnabled(event.target.checked)}
+            disabled={disabled}
+          />
           <span>Give one partner early availability</span>
         </label>
       </Field>
 
-      <Field label="Exclusive partner">
-        <select className="rc-control" name="exclusivePartner" defaultValue={release.exclusivePartner || ""} disabled={disabled}>
-          <option value="">Select exclusive partner</option>
-          {RELEASE_EXCLUSIVE_PARTNERS.map((value) => <option key={value} value={value}>{value}</option>)}
-        </select>
-      </Field>
+      {exclusiveEnabled ? (
+        <>
+          <Field label="Exclusive partner">
+            <select
+              className="rc-control"
+              name="exclusivePartner"
+              defaultValue={release.exclusivePartner || ""}
+              disabled={disabled}
+            >
+              <option value="">Select exclusive partner</option>
+              {RELEASE_EXCLUSIVE_PARTNERS.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </Field>
 
-      <Field label="Exclusivity period">
-        <select className="rc-control" name="exclusivePeriodWeeks" defaultValue={release.exclusivePeriodWeeks || ""} disabled={disabled}>
-          <option value="">Select period</option>
-          {[2,4,6,8].map((weeks) => <option key={weeks} value={weeks}>{weeks} Weeks</option>)}
-        </select>
-      </Field>
+          <Field label="Exclusivity period">
+            <select
+              className="rc-control"
+              name="exclusivePeriodWeeks"
+              defaultValue={release.exclusivePeriodWeeks || ""}
+              disabled={disabled}
+            >
+              <option value="">Select period</option>
+              {[2, 4, 6, 8].map((weeks) => (
+                <option key={weeks} value={weeks}>
+                  {weeks} Weeks
+                </option>
+              ))}
+            </select>
+          </Field>
+        </>
+      ) : null}
     </>
   );
 }

@@ -2,7 +2,7 @@ import { publicError } from "./http-security.server";
 
 export const RELEASE_AVAILABILITY_OPTIONS = [
   "ALL_CURRENT_FUTURE",
-  "CURRENT_ONLY",
+  "SOCIAL_ONLY",
 ];
 
 export const EXCLUSIVE_PERIOD_OPTIONS = [2, 4, 6, 8];
@@ -84,8 +84,11 @@ export function parseReleaseTimelineFormData(
   formData,
   { releaseDate = null } = {},
 ) {
-  const availability =
+  let availability =
     clean(formData.get("availability")) || "ALL_CURRENT_FUTURE";
+
+  // M14.4.2 legacy compatibility: CURRENT_ONLY was removed from the UI.
+  if (availability === "CURRENT_ONLY") availability = "ALL_CURRENT_FUTURE";
 
   if (!RELEASE_AVAILABILITY_OPTIONS.includes(availability)) {
     throw publicError("Choose a valid release availability option.", {

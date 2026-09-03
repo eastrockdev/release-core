@@ -5,6 +5,7 @@ import {
   addPortalCredit,
   addPortalTrack,
   completePortalUpload,
+  createPortalArtistProfile,
   createPortalRelease,
   listPortalReleases,
   portalIdentity,
@@ -284,6 +285,14 @@ export const action = async ({ request }) => {
     const releaseId = String(formData.get("releaseId") || "");
     const trackId = String(formData.get("trackId") || "");
 
+    if (intent === "create-artist") {
+      const artist = await createPortalArtistProfile({
+        admin: context.admin,
+        ...identity,
+        name: formData.get("artistName"),
+      });
+      return Response.json({ ok: true, artist });
+    }
     if (intent === "create-release") {
       const release = await createPortalRelease({
         admin: context.admin,

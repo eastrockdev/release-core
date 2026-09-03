@@ -55,12 +55,21 @@ export default function ImportProductPage() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
 
+  const importedProductFilter = Object.keys(importedProducts)
+    .map((id) => String(id).match(/Product\/(\d+)$/)?.[1])
+    .filter(Boolean)
+    .map((id) => `-id:${id}`)
+    .join(" ");
+
   const selectProduct = async () => {
     const selected = await shopify.resourcePicker({
       type: "product",
       action: "select",
       multiple: false,
-      filter: { variants: false },
+      filter: {
+        variants: false,
+        ...(importedProductFilter ? { query: importedProductFilter } : {}),
+      },
     });
     if (!selected?.length) return;
     const next = selected[0];

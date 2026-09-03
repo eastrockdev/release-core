@@ -176,23 +176,127 @@ export async function findOrCreatePortalArtist({ shop, customerId, name }) {
   });
 }
 
-export async function createPortalRelease({ admin, shop, customerId, type, title, artistName }) {
+export async function createPortalArtistProfile({
+  admin,
+  shop,
+  customerId,
+  name,
+}) {
+  const access = await portalReleaseAccess({
+    admin,
+    shop,
+    customerId,
+  });
+  const assignedArtists = access.artistAccess?.artists || [];
+
+  if (
+    assignedArtists.length &&
+    !access.artistAccess?.canManageMultipleArtists
+  ) {
+    throw publicError(
+      `This account already has access to ${assignedArtists[0].name}. Add the ${access.artistAccess?.multiArtistTag || "multi-artist"} Shopify customer tag before creating another artist profile.`,
+      { status: 409 },
+    );
+  }
+
+  return findOrCreatePortalArtist({
+    shop,
+    customerId,
+    name,
+  });
+}
+
+export async function createPortalRelease({
+  admin,
+  shop,
+  customerId,
+  type,
+  title,
+  artistName,
+}) {
   const normalizedType = String(type || "").toUpperCase();
-  if (!isValidReleaseType(normalizedType)) throw publicError("Choose Single, EP or Album.");
-  const access = await portalReleaseAccess({ admin, shop, customerId });
+  if (!isValidReleaseType(normalizedType)) {
+    throw publicError("Choose Single, EP or Album.");
+  }
+
+  const access = await portalReleaseAccess({
+    admin,
+    shop,
+    customerId,
+  });
   const eligibility = access.options?.[normalizedType];
-  if (!eligibility?.allowed) throw publicError(eligibility?.reason || "Your account does not have access to this release type.");
+
+  if (!eligibility?.allowed) {
+    throw publicError(
+      eligibility?.reason ||
+        "Your account does not have access to this release type.",
+    );
+  }
+
+  const assignedArtists = access.artistAccess?.artists || [];
+  if (!assignedArtists.length) {
+    throw publicError(
+      "Create your artist profile before starting a release.",
+      { status: 409 },
+    );
+  }
+
   const cleanTitle = String(title || "").trim();
   const releaseTitle = cleanTitle || starterTitle(normalizedType);
   let artist;
+
   if (access.artistAccess?.mode === "SOLO") {
-    if (!access.artistAccess?.soloArtist?.id) throw publicError("Your account is configured for solo-artist access, but an artist profile has not been assigned yet. Contact the store administrator.");
-    artist = await db.artist.findFirst({ where: { id: access.artistAccess.soloArtist.id, shop } });
-    if (!artist) throw publicError("Your assigned solo artist profile could not be found.");
+    const assignedArtistId =
+      access.artistAccess?.soloArtist?.id || assignedArtists[0]?.id;
+    artist = assignedArtistId
+      ? await db.artist.findFirst({
+          where: {
+            id: assignedArtistId,
+            shop,
+          },
+        })
+      : null;
+
+    if (!artist) {
+      throw publicError(
+        "Your assigned artist profile could not be found.",
+        { status: 409 },
+      );
+    }
   } else {
-    artist = await findOrCreatePortalArtist({ shop, customerId, name: artistName });
+    const requestedArtistName = String(artistName || "").trim();
+
+    if (requestedArtistName) {
+      artist = await findOrCreatePortalArtist({
+        shop,
+        customerId,
+        name: requestedArtistName,
+      });
+    } else if (assignedArtists.length === 1) {
+      artist = await db.artist.findFirst({
+        where: {
+          id: assignedArtists[0].id,
+          shop,
+        },
+      });
+    } else {
+      throw publicError(
+        "Choose the primary artist for this release.",
+        { status: 400 },
+      );
+    }
   }
-  const settings = await db.appSettings.findUnique({ where: { shop } });
+
+  if (!artist) {
+    throw publicError(
+      "The selected artist profile could not be found.",
+      { status: 404 },
+    );
+  }
+
+  const settings = await db.appSettings.findUnique({
+    where: { shop },
+  });
 
   const release = await db.release.create({
     data: {
@@ -203,24 +307,55 @@ export async function createPortalRelease({ admin, shop, customerId, type, title
       status: "DRAFT",
       primaryGenre: settings?.defaultGenre || null,
       artistName: artist.name,
-      artists: { create: { artistId: artist.id, role: "PRIMARY", position: 1 } },
+      artists: {
+        create: {
+          artistId: artist.id,
+          role: "PRIMARY",
+          position: 1,
+        },
+      },
       tracks: {
         create: {
           position: 1,
-          title: normalizedType === "SINGLE" && cleanTitle ? cleanTitle : "Untitled Track",
+          title:
+            normalizedType === "SINGLE" && cleanTitle
+              ? cleanTitle
+              : "Untitled Track",
           language: settings?.defaultLanguage || null,
-          artists: { create: { artistId: artist.id, role: "PRIMARY", position: 1 } },
+          artists: {
+            create: {
+              artistId: artist.id,
+              role: "PRIMARY",
+              position: 1,
+            },
+          },
         },
       },
-      events: { create: { type: "DRAFT_CREATED", actorLabel: "Artist portal", message: `${typeLabel(normalizedType)} draft created from the storefront.` } },
+      events: {
+        create: {
+          type: "DRAFT_CREATED",
+          actorLabel: "Artist portal",
+          message: `${typeLabel(normalizedType)} draft created from the storefront.`,
+        },
+      },
     },
     include: { tracks: true },
   });
 
   if (release.tracks[0]) {
-    try { await maybeAutoAssignIsrc({ trackId: release.tracks[0].id, shop }); }
-    catch (error) { console.warn("ReleaseCore portal: automatic ISRC assignment skipped", error); }
+    try {
+      await maybeAutoAssignIsrc({
+        trackId: release.tracks[0].id,
+        shop,
+      });
+    } catch (error) {
+      console.warn(
+        "ReleaseCore portal: automatic ISRC assignment skipped",
+        error,
+      );
+    }
   }
+
   return release;
 }
 

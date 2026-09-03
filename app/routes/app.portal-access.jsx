@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLoaderData, useNavigate, useRevalidator } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -8,31 +8,65 @@ import { authenticatedPost } from "../lib/authenticated-post";
 import { customerNumericId } from "../lib/automations";
 import { typeLabel } from "../lib/releasecore";
 import {
+  customerCanManageMultipleArtists,
+  customerIsPortalMember,
+  portalMultiArtistTag,
+} from "../lib/portal-access-rules.server";
+import {
   CollapsibleSection,
   PageIntro,
   ReleaseArtwork,
 } from "../components/releasecore-ui";
 
-async function searchCustomers(admin, q) {
-  if (!q) return [];
-  const response = await admin.graphql(
-    `#graphql
-query ReleaseCoreCustomerSearch($query:String!){customers(first:20,query:$query){nodes{id displayName email tags}}}`,
-    { variables: { query: q } },
-  );
-  const json = await response.json();
-  return json?.data?.customers?.nodes || [];
+async function listShopifyCustomers(admin) {
+  const customers = [];
+  let after = null;
+
+  for (let page = 0; page < 20; page += 1) {
+    const response = await admin.graphql(
+      `#graphql
+        query ReleaseCorePortalCustomers($after: String) {
+          customers(first: 100, after: $after, sortKey: UPDATED_AT, reverse: true) {
+            nodes { id displayName email tags }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+      `,
+      { variables: { after } },
+    );
+    const json = await response.json();
+    const connection = json?.data?.customers;
+    customers.push(...(connection?.nodes || []));
+
+    if (!connection?.pageInfo?.hasNextPage || !connection.pageInfo.endCursor) break;
+    after = connection.pageInfo.endCursor;
+  }
+
+  return customers;
+}
+
+function matchesQuery(customer, q) {
+  if (!q) return true;
+  const needle = q.toLowerCase();
+  return [
+    customer.displayName,
+    customer.email,
+    ...(customer.tags || []),
+  ]
+    .filter(Boolean)
+    .some((value) => String(value).toLowerCase().includes(needle));
 }
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const url = new URL(request.url);
   const q = String(url.searchParams.get("q") || "").trim();
-  const [releases, customers, artists] = await Promise.all([
+
+  const [releases, artists, shopifyCustomers] = await Promise.all([
     db.release.findMany({
       where: { shop: session.shop },
       orderBy: { updatedAt: "desc" },
-      take: 100,
+      take: 250,
       include: {
         artists: { include: { artist: true }, orderBy: { position: "asc" } },
         files: {
@@ -44,23 +78,42 @@ export const loader = async ({ request }) => {
         _count: { select: { tracks: true } },
       },
     }),
-    searchCustomers(admin, q),
     db.artist.findMany({
       where: { shop: session.shop },
       orderBy: { name: "asc" },
-      take: 250,
+      take: 500,
     }),
+    listShopifyCustomers(admin),
   ]);
+
+  const customers = shopifyCustomers
+    .filter((customer) => customerIsPortalMember(customer.tags))
+    .filter((customer) => matchesQuery(customer, q))
+    .map((customer) => ({
+      ...customer,
+      canManageMultipleArtists: customerCanManageMultipleArtists(customer.tags),
+    }));
+
   const numericIds = customers
     .map((customer) => customerNumericId(customer.id))
     .filter(Boolean);
-  const policies = numericIds.length
-    ? await db.portalCustomerPolicy.findMany({
+
+  const accesses = numericIds.length
+    ? await db.portalArtistAccess.findMany({
         where: { shop: session.shop, customerId: { in: numericIds } },
-        include: { soloArtist: true },
+        include: { artist: true },
+        orderBy: { createdAt: "asc" },
       })
     : [];
-  return { releases, customers, artists, policies, q };
+
+  return {
+    releases,
+    customers,
+    artists,
+    accesses,
+    q,
+    multiArtistTag: portalMultiArtistTag(),
+  };
 };
 
 export default function PortalAccess() {
@@ -71,13 +124,37 @@ export default function PortalAccess() {
   const [q, setQ] = useState(data.q || "");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
-  const policyMap = useMemo(
+
+  const accessMap = useMemo(() => {
+    const map = new Map();
+    for (const access of data.accesses || []) {
+      const list = map.get(access.customerId) || [];
+      list.push(access);
+      map.set(access.customerId, list);
+    }
+    return map;
+  }, [data.accesses]);
+
+  const customerMap = useMemo(
     () =>
       new Map(
-        (data.policies || []).map((policy) => [policy.customerId, policy]),
+        (data.customers || [])
+          .map((customer) => [customerNumericId(customer.id), customer])
+          .filter(([id]) => id),
       ),
-    [data.policies],
+    [data.customers],
   );
+
+  const releasesByCustomer = useMemo(() => {
+    const map = new Map();
+    for (const release of data.releases || []) {
+      if (!release.ownerCustomerId) continue;
+      const list = map.get(release.ownerCustomerId) || [];
+      list.push(release);
+      map.set(release.ownerCustomerId, list);
+    }
+    return map;
+  }, [data.releases]);
 
   const search = (event) => {
     event.preventDefault();
@@ -85,6 +162,7 @@ export default function PortalAccess() {
       `/app/portal-access${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`,
     );
   };
+
   const post = async (form) => {
     if (busy) return;
     setBusy(true);
@@ -110,19 +188,20 @@ export default function PortalAccess() {
       setBusy(false);
     }
   };
-  const assign = (releaseId, customerId) => {
+
+  const assignReleaseOwner = (releaseId, customerId) => {
     const form = new FormData();
     form.set("intent", "assign-owner");
     form.set("releaseId", releaseId);
-    form.set("customerId", customerId);
+    form.set("customerId", customerId || "");
     return post(form);
   };
-  const savePolicy = (customerId, artistMode, soloArtistId) => {
+
+  const saveArtistAccess = (customerId, artistIds) => {
     const form = new FormData();
-    form.set("intent", "save-customer-policy");
+    form.set("intent", "save-artist-access");
     form.set("customerId", customerId);
-    form.set("artistMode", artistMode);
-    form.set("soloArtistId", soloArtistId || "");
+    for (const artistId of artistIds) form.append("artistId", artistId);
     return post(form);
   };
 
@@ -131,245 +210,374 @@ export default function PortalAccess() {
       <s-section>
         <PageIntro
           eyebrow="Artist Portal permissions"
-          title="Control who can submit for whom."
+          title="Every portal member and the artists they can distribute for."
         >
-          Find a customer, set their artist access, and assign the releases they
-          can manage from the Artist Portal.
+          Eligible customers appear here automatically. Release ownership is
+          automatic when a signed-in customer creates a release, while artist
+          access persists independently.
         </PageIntro>
       </s-section>
+
       {notice ? (
         <s-section>
-          <div className={`rc-notice ${notice.tone === "bad" ? "rc-notice--bad" : "rc-notice--good"}`}>
+          <div
+            className={`rc-notice ${
+              notice.tone === "bad" ? "rc-notice--bad" : "rc-notice--good"
+            }`}
+          >
             {notice.message}
           </div>
         </s-section>
       ) : null}
-      <s-section heading="Find customer">
-        <form className="rc-admin-search" onSubmit={search} style={styles.search}>
+
+      <s-section heading="Portal members">
+        <form
+          className="rc-admin-search"
+          onSubmit={search}
+          style={styles.search}
+        >
           <input
             className="rc-control"
             value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search by customer name or email"
+            onChange={(event) => setQ(event.target.value)}
+            placeholder="Filter by customer name, email or tag"
           />
-          <button className="rc-button rc-button--primary">Search</button>
+          <button className="rc-button rc-button--primary">Filter</button>
+          {data.q ? (
+            <button
+              type="button"
+              className="rc-button rc-button--tertiary"
+              onClick={() => {
+                setQ("");
+                nav("/app/portal-access");
+              }}
+            >
+              Clear
+            </button>
+          ) : null}
         </form>
+
+        <div style={styles.permissionHelp}>
+          <strong>Artist permission tags</strong>
+          <span>
+            One artist is the default. Add <code>{data.multiArtistTag}</code> to
+            a Shopify customer to allow access to multiple artist identities.
+          </span>
+        </div>
+
         {data.customers.length ? (
           <div style={styles.customerGrid}>
             {data.customers.map((customer) => {
               const numericId = customerNumericId(customer.id);
-              const policy = policyMap.get(numericId);
-              const mode = policy?.artistMode === "SOLO" ? "SOLO" : "MULTI";
               return (
                 <CustomerAccessCard
                   key={customer.id}
                   customer={customer}
                   artists={data.artists}
-                  policy={policy}
-                  mode={mode}
+                  accesses={accessMap.get(numericId) || []}
+                  ownedReleases={releasesByCustomer.get(numericId) || []}
+                  multiArtistTag={data.multiArtistTag}
                   busy={busy}
-                  onSave={(nextMode, artistId) =>
-                    savePolicy(customer.id, nextMode, artistId)
+                  onSave={(artistIds) =>
+                    saveArtistAccess(customer.id, artistIds)
                   }
                 />
               );
             })}
           </div>
-        ) : q ? (
-          <div style={styles.empty}>No matching customers.</div>
-        ) : null}
+        ) : (
+          <div style={styles.empty}>
+            {data.q
+              ? "No portal members match this filter."
+              : "No portal members were found."}
+          </div>
+        )}
       </s-section>
+
       <CollapsibleSection
         icon="artist"
         title="Release ownership"
-        description="Assign releases to the customer who manages them in the Artist Portal."
+        description="Customer-created releases are assigned automatically. Use this only to repair or transfer ownership."
         summary={`${data.releases.length} releases`}
-        defaultOpen
       >
         <div style={styles.list}>
-          {data.releases.map((release) => (
-            <div
-              key={release.id}
-              className="rc-portal-release-row"
-              style={styles.row}
-            >
-              <div style={styles.releaseIdentity}>
-                <ReleaseArtwork release={release} />
-                <div style={{ minWidth: 0 }}>
-                  <strong>{release.title}</strong>
-                  <div style={styles.meta}>
-                    {typeLabel(release.type)} · {release._count.tracks} track
-                    {release._count.tracks === 1 ? "" : "s"} ·{" "}
-                    {(release.artists || [])
-                      .filter((item) => item.role === "PRIMARY")
-                      .map((item) => item.artist?.name)
-                      .filter(Boolean)
-                      .join(", ") || "Artist not set"}
-                  </div>
-                  <div style={styles.meta}>
-                    Portal owner: {release.ownerCustomerId || "Not assigned"}
+          {data.releases.map((release) => {
+            const owner = release.ownerCustomerId
+              ? customerMap.get(release.ownerCustomerId)
+              : null;
+            return (
+              <div
+                key={release.id}
+                className="rc-portal-release-row"
+                style={styles.row}
+              >
+                <div style={styles.releaseIdentity}>
+                  <ReleaseArtwork release={release} />
+                  <div style={{ minWidth: 0 }}>
+                    <strong>{release.title}</strong>
+                    <div style={styles.meta}>
+                      {typeLabel(release.type)} · {release._count.tracks} track
+                      {release._count.tracks === 1 ? "" : "s"} ·{" "}
+                      {(release.artists || [])
+                        .filter((item) => item.role === "PRIMARY")
+                        .map((item) => item.artist?.name)
+                        .filter(Boolean)
+                        .join(", ") || "Artist not set"}
+                    </div>
+                    <div style={styles.meta}>
+                      Portal owner:{" "}
+                      {owner?.displayName ||
+                        owner?.email ||
+                        release.ownerCustomerId ||
+                        "Not assigned"}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="rc-portal-release-actions" style={styles.assign}>
-                <select className="rc-control" defaultValue="">
-                  <option value="">Choose searched customer</option>
-                  {data.customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.displayName || customer.email} —{" "}
-                      {customer.email || "no email"}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  disabled={busy || !data.customers.length}
-                  className="rc-button rc-button--primary"
-                  onClick={(event) => {
-                    const select = event.currentTarget.previousElementSibling;
-                    if (select?.value) assign(release.id, select.value);
-                  }}
+
+                <div
+                  className="rc-portal-release-actions"
+                  style={styles.assign}
                 >
-                  Assign
-                </button>
-                {release.ownerCustomerId ? (
+                  <select
+                    className="rc-control"
+                    defaultValue={release.ownerCustomerId || ""}
+                    key={`${release.id}:${release.ownerCustomerId || ""}`}
+                  >
+                    <option value="">Not assigned</option>
+                    {data.customers.map((customer) => {
+                      const numericId = customerNumericId(customer.id);
+                      return (
+                        <option key={customer.id} value={numericId}>
+                          {customer.displayName || customer.email} —{" "}
+                          {customer.email || "no email"}
+                        </option>
+                      );
+                    })}
+                  </select>
                   <button
                     type="button"
                     disabled={busy}
-                    className="rc-button rc-button--tertiary"
-                    onClick={() => assign(release.id, "")}
+                    className="rc-button rc-button--primary"
+                    onClick={(event) => {
+                      const select =
+                        event.currentTarget.previousElementSibling;
+                      assignReleaseOwner(release.id, select?.value || "");
+                    }}
                   >
-                    Clear
+                    Save owner
                   </button>
-                ) : null}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </CollapsibleSection>
     </s-page>
   );
 }
 
-function CustomerAccessCard({ customer, artists, policy, mode, busy, onSave }) {
-  const [artistMode, setArtistMode] = useState(mode);
-  const [soloArtistId, setSoloArtistId] = useState(policy?.soloArtistId || "");
+function CustomerAccessCard({
+  customer,
+  artists,
+  accesses,
+  ownedReleases,
+  multiArtistTag,
+  busy,
+  onSave,
+}) {
+  const canManageMultiple = Boolean(customer.canManageMultipleArtists);
+  const accessKey = (accesses || [])
+    .map((access) => access.artistId)
+    .sort()
+    .join("|");
+  const [selectedIds, setSelectedIds] = useState(
+    (accesses || []).map((access) => access.artistId),
+  );
+
+  useEffect(() => {
+    setSelectedIds(accessKey ? accessKey.split("|") : []);
+  }, [accessKey]);
+
+  const setSingleArtist = (artistId) => {
+    setSelectedIds(artistId ? [artistId] : []);
+  };
+
+  const toggleArtist = (artistId) => {
+    setSelectedIds((current) =>
+      current.includes(artistId)
+        ? current.filter((id) => id !== artistId)
+        : [...current, artistId],
+    );
+  };
+
   return (
     <div className="rc-portal-customer-card" style={styles.customer}>
-      <strong>{customer.displayName || customer.email || "Customer"}</strong>
-      <span>{customer.email || "No email"}</span>
-      <small>{(customer.tags || []).join(", ") || "No tags"}</small>
+      <div style={styles.customerHeading}>
+        <div>
+          <strong>{customer.displayName || customer.email || "Customer"}</strong>
+          <div style={styles.meta}>{customer.email || "No email"}</div>
+        </div>
+        <span style={styles.permissionBadge}>
+          {canManageMultiple ? "Multiple artists" : "One artist"}
+        </span>
+      </div>
+
+      <div style={styles.tags}>
+        {(customer.tags || []).length
+          ? (customer.tags || []).join(", ")
+          : "No Shopify customer tags"}
+      </div>
+
       <div style={styles.policyBox}>
-        <label style={styles.label}>
-          Artist submission access
+        <div style={styles.label}>Artist access</div>
+
+        {canManageMultiple ? (
+          <div style={styles.artistChecklist}>
+            {artists.map((artist) => (
+              <label key={artist.id} style={styles.artistCheck}>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(artist.id)}
+                  onChange={() => toggleArtist(artist.id)}
+                />
+                <span>{artist.name}</span>
+              </label>
+            ))}
+          </div>
+        ) : (
           <select
             className="rc-control"
-            value={artistMode}
-            onChange={(e) => setArtistMode(e.target.value)}
+            value={selectedIds[0] || ""}
+            onChange={(event) => setSingleArtist(event.target.value)}
           >
-            <option value="SOLO">Solo artist — locked identity</option>
-            <option value="MULTI">Multi-artist — can enter artists</option>
+            <option value="">No artist assigned yet</option>
+            {artists.map((artist) => (
+              <option key={artist.id} value={artist.id}>
+                {artist.name}
+              </option>
+            ))}
           </select>
-        </label>
-        {artistMode === "SOLO" ? (
-          <label style={styles.label}>
-            Locked artist
-            <select
-              className="rc-control"
-              value={soloArtistId}
-              onChange={(e) => setSoloArtistId(e.target.value)}
-            >
-              <option value="">Choose artist</option>
-              {artists.map((artist) => (
-                <option key={artist.id} value={artist.id}>
-                  {artist.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
+        )}
+
+        <div style={styles.meta}>
+          {canManageMultiple
+            ? `${multiArtistTag} allows this customer to distribute for multiple assigned artists.`
+            : `Add ${multiArtistTag} to this Shopify customer before assigning more than one artist.`}
+        </div>
+
         <button
           type="button"
-          disabled={busy || (artistMode === "SOLO" && !soloArtistId)}
+          disabled={busy}
           className="rc-button"
-          onClick={() => onSave(artistMode, soloArtistId)}
+          onClick={() => onSave(selectedIds)}
         >
           Save artist access
         </button>
+      </div>
+
+      <div style={styles.ownerSummary}>
+        <strong>
+          {ownedReleases.length} owned release
+          {ownedReleases.length === 1 ? "" : "s"}
+        </strong>
+        {ownedReleases.length ? (
+          <span>
+            {ownedReleases
+              .slice(0, 4)
+              .map((release) => release.title)
+              .join(" · ")}
+            {ownedReleases.length > 4
+              ? ` · +${ownedReleases.length - 4} more`
+              : ""}
+          </span>
+        ) : (
+          <span>No releases assigned yet.</span>
+        )}
       </div>
     </div>
   );
 }
 
 export const headers = (args) => boundary.headers(args);
+
 const styles = {
-  hero: { padding: "20px 2px" },
-  eyebrow: {
-    fontSize: 12,
-    fontWeight: 750,
-    letterSpacing: ".08em",
-    textTransform: "uppercase",
-    color: "#6d7175",
-  },
-  title: { fontSize: 28, fontWeight: 750, marginTop: 6 },
-  copy: { color: "#6d7175", maxWidth: 820, marginTop: 6 },
-  search: { display: "flex", gap: 8 },
-  input: {
-    boxSizing: "border-box",
-    width: "100%",
-    minHeight: 40,
-    padding: "8px 10px",
-    border: "1px solid #c9cccf",
-    borderRadius: 8,
-    background: "#fff",
-  },
-  button: {
-    border: 0,
-    borderRadius: 8,
-    background: "#202223",
-    color: "#fff",
-    padding: "10px 14px",
-    fontWeight: 650,
-  },
-  secondaryButton: {
-    border: "1px solid #8c9196",
-    borderRadius: 8,
-    background: "#fff",
-    padding: "9px 12px",
-    fontWeight: 650,
-  },
-  tertiary: {
-    border: "1px solid #c9cccf",
-    borderRadius: 8,
-    background: "#fff",
-    padding: "9px 12px",
-  },
+  search: { display: "flex", gap: 8, flexWrap: "wrap" },
   customerGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))",
+    gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))",
     gap: 12,
     marginTop: 14,
   },
   customer: {
     display: "grid",
-    gap: 5,
+    gap: 10,
     padding: 14,
     border: "1px solid #dedede",
     borderRadius: 12,
   },
+  customerHeading: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "flex-start",
+  },
+  permissionBadge: {
+    border: "1px solid #d6d6d6",
+    borderRadius: 999,
+    padding: "5px 9px",
+    fontSize: 11,
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+  },
+  permissionHelp: {
+    display: "grid",
+    gap: 4,
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 10,
+    background: "#f6f6f7",
+    fontSize: 12,
+    color: "#4a4a4a",
+  },
+  tags: {
+    color: "#6d7175",
+    fontSize: 11,
+    lineHeight: 1.45,
+  },
   policyBox: {
     display: "grid",
     gap: 9,
-    marginTop: 8,
     paddingTop: 10,
     borderTop: "1px solid #ededed",
   },
   label: {
-    display: "grid",
-    gap: 5,
     fontSize: 11,
     fontWeight: 700,
     color: "#5c5f62",
+  },
+  artistChecklist: {
+    display: "grid",
+    gap: 6,
+    maxHeight: 220,
+    overflowY: "auto",
+    padding: 10,
+    border: "1px solid #d8d8d8",
+    borderRadius: 9,
+    background: "#fff",
+  },
+  artistCheck: {
+    display: "flex",
+    gap: 8,
+    alignItems: "center",
+    fontSize: 12,
+  },
+  ownerSummary: {
+    display: "grid",
+    gap: 4,
+    paddingTop: 10,
+    borderTop: "1px solid #ededed",
+    fontSize: 11,
+    color: "#6d7175",
   },
   list: { display: "grid", gap: 10 },
   row: {
@@ -387,21 +595,18 @@ const styles = {
     gap: 12,
     minWidth: 0,
   },
-  assign: { display: "flex", gap: 8, alignItems: "center" },
-  meta: { fontSize: 12, color: "#6d7175", marginTop: 4 },
-  noticeGood: {
-    padding: 12,
-    border: "1px solid #b8dfc2",
-    background: "#eaf7ee",
-    borderRadius: 9,
-    color: "#176c37",
+  assign: {
+    display: "flex",
+    gap: 8,
+    alignItems: "center",
   },
-  noticeBad: {
-    padding: 12,
-    border: "1px solid #f3b5ad",
-    background: "#fff1f0",
-    borderRadius: 9,
-    color: "#8e1f0b",
+  meta: {
+    fontSize: 12,
+    color: "#6d7175",
+    marginTop: 4,
   },
-  empty: { padding: 14, color: "#6d7175" },
+  empty: {
+    padding: 14,
+    color: "#6d7175",
+  },
 };

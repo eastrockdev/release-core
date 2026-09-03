@@ -1,4 +1,8 @@
 import db from "../db.server";
+import {
+  customerCanManageMultipleArtists,
+  portalMultiArtistTag,
+} from "./portal-access-rules.server";
 
 import { AUTOMATION_CHANNELS, parseEventList, normalizeEventKey } from "./automations";
 import { sendSmtpEmail } from "./smtp.server";
@@ -60,26 +64,94 @@ export function releaseTypeEligibility({ settings = {}, customerTags = [], type 
 
 export async function portalReleaseAccess({ admin, shop, customerId }) {
   const settings = (await db.appSettings.findUnique({ where: { shop } })) || {};
-  const [customer, policy] = await Promise.all([
+  const numericCustomerId =
+    customerNumericId(customerId) || String(customerId || "");
+
+  const [customer, policy, artistAccessRows] = await Promise.all([
     getShopifyCustomer(admin, customerId),
     db.portalCustomerPolicy.findUnique({
-      where: { shop_customerId: { shop, customerId: customerNumericId(customerId) || String(customerId || "") } },
+      where: {
+        shop_customerId: {
+          shop,
+          customerId: numericCustomerId,
+        },
+      },
       include: { soloArtist: true },
     }).catch(() => null),
+    db.portalArtistAccess.findMany({
+      where: {
+        shop,
+        customerId: numericCustomerId,
+      },
+      include: { artist: true },
+      orderBy: { createdAt: "asc" },
+    }),
   ]);
+
   const customerTags = customer?.tags || [];
-  const mode = String(policy?.artistMode || "MULTI").toUpperCase() === "SOLO" ? "SOLO" : "MULTI";
+  const multiArtistTag = portalMultiArtistTag();
+  const canManageMultipleArtists =
+    customerCanManageMultipleArtists(customerTags);
+
+  const assignedArtists = [];
+  const seenArtistIds = new Set();
+
+  for (const row of artistAccessRows) {
+    if (!row?.artist?.id || seenArtistIds.has(row.artist.id)) continue;
+    seenArtistIds.add(row.artist.id);
+    assignedArtists.push({
+      id: row.artist.id,
+      name: row.artist.name,
+    });
+  }
+
+  if (
+    policy?.soloArtist?.id &&
+    !seenArtistIds.has(policy.soloArtist.id)
+  ) {
+    assignedArtists.push({
+      id: policy.soloArtist.id,
+      name: policy.soloArtist.name,
+    });
+  }
+
+  const mode = canManageMultipleArtists ? "MULTI" : "SOLO";
+  const soloArtist =
+    mode === "SOLO" ? assignedArtists[0] || null : null;
+
   return {
     customerTags,
-    customer: customer ? { id: customer.id, displayName: customer.displayName, email: customer.email } : null,
+    customer: customer
+      ? {
+          id: customer.id,
+          displayName: customer.displayName,
+          email: customer.email,
+        }
+      : null,
     artistAccess: {
       mode,
-      soloArtist: policy?.soloArtist ? { id: policy.soloArtist.id, name: policy.soloArtist.name } : null,
+      soloArtist,
+      artists: assignedArtists,
+      needsArtistSetup: assignedArtists.length === 0,
+      canManageMultipleArtists,
+      multiArtistTag,
     },
     options: {
-      SINGLE: releaseTypeEligibility({ settings, customerTags, type: "SINGLE" }),
-      EP: releaseTypeEligibility({ settings, customerTags, type: "EP" }),
-      ALBUM: releaseTypeEligibility({ settings, customerTags, type: "ALBUM" }),
+      SINGLE: releaseTypeEligibility({
+        settings,
+        customerTags,
+        type: "SINGLE",
+      }),
+      EP: releaseTypeEligibility({
+        settings,
+        customerTags,
+        type: "EP",
+      }),
+      ALBUM: releaseTypeEligibility({
+        settings,
+        customerTags,
+        type: "ALBUM",
+      }),
     },
   };
 }
