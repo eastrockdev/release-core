@@ -7,6 +7,7 @@ import {
   completePortalUpload,
   createPortalArtistProfile,
   createPortalRelease,
+  getPortalRelease,
   listPortalReleases,
   portalIdentity,
   portalReleaseDetail,
@@ -57,9 +58,16 @@ function errorResponse(request, error) {
 
 async function masterAudioResponse({ request, identity, fileId }) {
   const file = await db.releaseFile.findFirst({
-    where: { id: fileId, kind: "MASTER_WAV", release: { shop: identity.shop, ownerCustomerId: identity.customerId } },
+    where: { id: fileId, kind: "MASTER_WAV" },
   });
   if (!file || !file.storageKey) return new Response("Audio not found.", { status: 404 });
+
+  const release = await getPortalRelease({
+    shop: identity.shop,
+    customerId: identity.customerId,
+    releaseId: file.releaseId,
+  });
+  if (!release) return new Response("Audio not found.", { status: 404 });
 
   if (file.storageProvider === "R2") {
     const signedUrl = await getR2SignedReadUrl(file.storageKey, {

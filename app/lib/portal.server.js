@@ -34,9 +34,31 @@ export function requirePortalCustomer(identity) {
   }
 }
 
+export function portalReleaseCustomerWhere({ shop, customerId, releaseId = null }) {
+  return {
+    ...(releaseId ? { id: releaseId } : {}),
+    shop,
+    OR: [
+      { ownerCustomerId: customerId },
+      {
+        artists: {
+          some: {
+            role: "PRIMARY",
+            artist: {
+              portalAccess: {
+                some: { shop, customerId },
+              },
+            },
+          },
+        },
+      },
+    ],
+  };
+}
+
 export async function getPortalRelease({ shop, customerId, releaseId, include = {} }) {
   return db.release.findFirst({
-    where: { id: releaseId, shop, ownerCustomerId: customerId },
+    where: portalReleaseCustomerWhere({ shop, customerId, releaseId }),
     include,
   });
 }
@@ -99,7 +121,7 @@ function summary(release) {
 
 export async function listPortalReleases({ shop, customerId, admin, limit }) {
   const releases = await db.release.findMany({
-    where: { shop, ownerCustomerId: customerId },
+    where: portalReleaseCustomerWhere({ shop, customerId }),
     orderBy: { updatedAt: "desc" },
     ...(limit ? { take: Math.max(1, Math.min(Number(limit) || 4, 12)) } : {}),
     include: {
@@ -678,7 +700,7 @@ export async function completePortalUpload({ admin, shop, customerId, formData }
 
   const existing = isReplaceableKind(kind)
     ? await db.releaseFile.findMany({
-        where: { releaseId, trackId, kind, release: { shop, ownerCustomerId: customerId } },
+        where: { releaseId, trackId, kind },
       })
     : [];
   const file = await db.$transaction(async (tx) => {
@@ -691,7 +713,7 @@ export async function completePortalUpload({ admin, shop, customerId, formData }
       data: { releaseId, trackId, kind, filename: descriptor.name, storageProvider: "SHOPIFY_FILES", storageKey: shopifyFile.id, url: shopifyFile.url || shopifyFile.image?.url || null, mimeType: descriptor.mime, sizeBytes: descriptor.size, status: shopifyFile.fileStatus || "UPLOADED" },
     });
     await tx.release.updateMany({
-      where: { id: releaseId, shop, ownerCustomerId: customerId },
+      where: { id: releaseId, shop },
       data: { updatedAt: new Date() },
     });
     return created;

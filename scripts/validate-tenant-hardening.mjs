@@ -30,8 +30,13 @@ for (const relative of [
 
 const portal = read("app/lib/portal.server.js");
 for (const marker of [
-  "where: { id: releaseId, shop, ownerCustomerId: customerId }",
-  "where: { shop, ownerCustomerId: customerId }",
+  "export function portalReleaseCustomerWhere",
+  "where: portalReleaseCustomerWhere({ shop, customerId, releaseId })",
+  "where: portalReleaseCustomerWhere({ shop, customerId })",
+  '{ ownerCustomerId: customerId }',
+  'role: "PRIMARY"',
+  "portalAccess:",
+  "some: { shop, customerId }",
   'if (masterStorageProvider() !== "LOCAL_DEV")',
   "deleteMasterStorageObject",
 ]) {

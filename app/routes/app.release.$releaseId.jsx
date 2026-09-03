@@ -1210,7 +1210,12 @@ function TrackCard({
                 <form
                   key={credit.id}
                   className="rc-credit-row"
-                  style={styles.creditRow}
+                  style={{
+                    ...styles.creditRow,
+                    gridTemplateColumns: creditSplitsEnabled
+                      ? styles.creditRow.gridTemplateColumns
+                      : "minmax(180px,1fr) minmax(170px,230px) auto",
+                  }}
                   onSubmit={(event) => {
                     event.preventDefault();
                     const data = new FormData(event.currentTarget);
@@ -1281,7 +1286,12 @@ function TrackCard({
           ) : null}
           {contributors.length ? (
             <form
-              style={styles.creditAddRow}
+              style={{
+                ...styles.creditAddRow,
+                gridTemplateColumns: creditSplitsEnabled
+                  ? styles.creditAddRow.gridTemplateColumns
+                  : "minmax(220px,1fr) minmax(170px,230px) auto",
+              }}
               className="rc-credit-row"
               onSubmit={(event) => {
                 event.preventDefault();

@@ -827,3 +827,8 @@
   .rc-checkline::before { background: currentColor !important; }
   .rc-modal-dialog::backdrop { background: Canvas; opacity: .72; }
 }
+
+/* ReleaseCore M14.4.5: timeline child visibility must win over theme layout rules. */
+[data-timeline-parent][hidden] {
+  display: none !important;
+}

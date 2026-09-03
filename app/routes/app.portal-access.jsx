@@ -147,14 +147,34 @@ export default function PortalAccess() {
 
   const releasesByCustomer = useMemo(() => {
     const map = new Map();
-    for (const release of data.releases || []) {
-      if (!release.ownerCustomerId) continue;
-      const list = map.get(release.ownerCustomerId) || [];
-      list.push(release);
-      map.set(release.ownerCustomerId, list);
+    const customersByArtist = new Map();
+
+    for (const access of data.accesses || []) {
+      const customerIds = customersByArtist.get(access.artistId) || new Set();
+      customerIds.add(access.customerId);
+      customersByArtist.set(access.artistId, customerIds);
     }
+
+    for (const release of data.releases || []) {
+      const visibleCustomerIds = new Set();
+      if (release.ownerCustomerId) visibleCustomerIds.add(release.ownerCustomerId);
+
+      for (const assignment of release.artists || []) {
+        if (assignment.role !== "PRIMARY") continue;
+        for (const customerId of customersByArtist.get(assignment.artistId) || []) {
+          visibleCustomerIds.add(customerId);
+        }
+      }
+
+      for (const customerId of visibleCustomerIds) {
+        const list = map.get(customerId) || [];
+        list.push(release);
+        map.set(customerId, list);
+      }
+    }
+
     return map;
-  }, [data.releases]);
+  }, [data.accesses, data.releases]);
 
   const search = (event) => {
     event.preventDefault();
@@ -212,9 +232,10 @@ export default function PortalAccess() {
           eyebrow="Artist Portal permissions"
           title="Every portal member and the artists they can distribute for."
         >
-          Eligible customers appear here automatically. Release ownership is
-          automatic when a signed-in customer creates a release, while artist
-          access persists independently.
+          Eligible customers appear here automatically. Release visibility follows
+          assigned primary artists, so every customer with access to an artist sees
+          that artist&apos;s releases automatically. The creator remains the primary owner
+          for audit and repair purposes.
         </PageIntro>
       </s-section>
 
@@ -275,7 +296,7 @@ export default function PortalAccess() {
                   customer={customer}
                   artists={data.artists}
                   accesses={accessMap.get(numericId) || []}
-                  ownedReleases={releasesByCustomer.get(numericId) || []}
+                  visibleReleases={releasesByCustomer.get(numericId) || []}
                   multiArtistTag={data.multiArtistTag}
                   busy={busy}
                   onSave={(artistIds) =>
@@ -297,7 +318,7 @@ export default function PortalAccess() {
       <CollapsibleSection
         icon="artist"
         title="Release ownership"
-        description="Customer-created releases are assigned automatically. Use this only to repair or transfer ownership."
+        description="Artist access controls normal release visibility automatically. Use creator/owner assignment only to repair or transfer the primary portal owner."
         summary={`${data.releases.length} releases`}
       >
         <div style={styles.list}>
@@ -380,7 +401,7 @@ function CustomerAccessCard({
   customer,
   artists,
   accesses,
-  ownedReleases,
+  visibleReleases,
   multiArtistTag,
   busy,
   onSave,
@@ -477,21 +498,21 @@ function CustomerAccessCard({
 
       <div style={styles.ownerSummary}>
         <strong>
-          {ownedReleases.length} owned release
-          {ownedReleases.length === 1 ? "" : "s"}
+          {visibleReleases.length} visible release
+          {visibleReleases.length === 1 ? "" : "s"}
         </strong>
-        {ownedReleases.length ? (
+        {visibleReleases.length ? (
           <span>
-            {ownedReleases
+            {visibleReleases
               .slice(0, 4)
               .map((release) => release.title)
               .join(" · ")}
-            {ownedReleases.length > 4
-              ? ` · +${ownedReleases.length - 4} more`
+            {visibleReleases.length > 4
+              ? ` · +${visibleReleases.length - 4} more`
               : ""}
           </span>
         ) : (
-          <span>No releases assigned yet.</span>
+          <span>No releases visible through this customer&apos;s artist access yet.</span>
         )}
       </div>
     </div>
