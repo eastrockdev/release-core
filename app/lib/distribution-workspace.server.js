@@ -1,3 +1,4 @@
+import { getReleaseProductState, getTrackProductState } from "./shopify-catalog.server";
 import db from "../db.server";
 import { findShopRelease } from "./tenant-db.server";
 
@@ -22,11 +23,18 @@ const DISTRIBUTION_RELEASE_INCLUDE = {
   events: { orderBy: { createdAt: "desc" }, take: 30 },
 };
 
-export async function loadDistributionWorkspace({ shop, releaseId }) {
+export async function loadDistributionWorkspace({ admin, shop, releaseId }) {
   const [release, settings] = await Promise.all([
     findShopRelease(shop, releaseId, { include: DISTRIBUTION_RELEASE_INCLUDE }),
     db.appSettings.findUnique({ where: { shop } }),
   ]);
   if (!release) return null;
-  return { release, settings };
+  const [tracks, shopifyReleaseState] = await Promise.all([
+    Promise.all(release.tracks.map(async (track) => ({
+      ...track,
+      shopifyState: track.shopifyProductId ? await getTrackProductState(admin, track.shopifyProductId) : null,
+    }))),
+    release.shopifyReleaseProductId ? getReleaseProductState(admin, release.shopifyReleaseProductId) : null,
+  ]);
+  return { release: { ...release, tracks, shopifyReleaseState }, settings };
 }

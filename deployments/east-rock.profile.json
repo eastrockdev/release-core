@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "east-rock",
+  "label": "East Rock / RLIAB",
+  "shopifyConfig": "east-rock",
+  "shopifyConfigFile": "shopify.app.east-rock.toml",
+  "appName": "ReleaseCore — East Rock",
+  "appHandle": "releasecore-east-rock",
+  "distribution": "single_merchant",
+  "customerBrand": {
+    "companyName": "East Rock Entertainment",
+    "programName": "Record Label In-A-Box",
+    "programShortName": "RLIAB",
+    "downloadsTitle": "RLIAB Music Downloads",
+    "supportUrl": "https://eastrockent.com",
+    "storefrontBaseUrl": "https://eastrockent.com",
+    "poweredByReleaseCore": true
+  },
+  "launch": {
+    "targetDate": "2026-09-04",
+    "purpose": "East Rock Entertainment Record Label In-A-Box launch"
+  },
+  "compatibility": {
+    "productMetafields": "east-rock-custom-v1",
+    "strategy": "mirror_releasecore_to_existing_custom_metafields",
+    "preserveUnknownLegacyFields": true
+  }
+}

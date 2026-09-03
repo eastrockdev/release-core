@@ -1,3 +1,4 @@
+import { normalizeShopifyDigitalProduct } from "./shopify-products.server";
 import db from "../db.server";
 import { publicError } from "./http-security.server";
 
@@ -195,6 +196,8 @@ export async function importShopifyProductAsRelease({ admin, shop, productId, re
     mfText(fields, "custom", "release_date"),
     product.publishedAt,
   );
+  const preSaveUrl = mfText(fields, "releasecore", "pre_save_url") || mfText(fields, "custom", "pre_save_url") || null;
+  const streamingUrl = mfText(fields, "releasecore", "streaming_url") || mfText(fields, "custom", "streaming_url") || null;
   const primaryGenre = mfText(fields, "releasecore", "primary_genre") || mfText(fields, "custom", "primary_genre") || settings?.defaultGenre || null;
   const language = mfText(fields, "releasecore", "language") || mfText(fields, "custom", "primary_language") || settings?.defaultLanguage || null;
   const lyrics = mfText(fields, "releasecore", "lyrics") || mfText(fields, "custom", "lyrics") || null;
@@ -209,6 +212,11 @@ export async function importShopifyProductAsRelease({ admin, shop, productId, re
   const featuredRecords = [];
   for (const name of featuredArtists) featuredRecords.push(await findOrCreateArtist(shop, name));
 
+  // RELEASECORE_M134_CATALOG_INTEGRITY
+  // The import override is authoritative: keep ReleaseCore and Shopify aligned,
+  // and ensure the source product cannot introduce physical shipping behavior.
+  await normalizeShopifyDigitalProduct(admin, product.id, { title });
+
   const release = await db.release.create({
     data: {
       shop,
@@ -217,6 +225,8 @@ export async function importShopifyProductAsRelease({ admin, shop, productId, re
       artistName: primaryArtist.name,
       primaryGenre,
       releaseDate,
+      preSaveUrl,
+      streamingUrl,
       upc: importedIds.upc,
       upcAssignedAt: importedIds.upc ? now : null,
       catalogNumber: importedIds.catalogNumber,
@@ -255,7 +265,7 @@ export async function importShopifyProductAsRelease({ admin, shop, productId, re
       data: {
         releaseId: release.id,
         position: trackPosition,
-        title: clean(product.title) || title,
+        title,
         version: trackVersion,
         language,
         explicit,

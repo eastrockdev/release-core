@@ -3,6 +3,7 @@ import db from "../db.server";
 import { apiErrorResponse, publicError } from "../lib/http-security.server";
 import { findShopArtist, findShopContributor } from "../lib/tenant-db.server";
 import { deleteShopifyFilesBestEffort } from "../lib/shopify-files.server";
+import { getShopifyArtistCollection, syncShopifyArtistCollection } from "../lib/shopify-artist-collections.server";
 
 const clean = (value) => String(value || "").trim() || null;
 
@@ -13,6 +14,153 @@ export const action = async ({ request }) => {
     const data = await request.formData();
     const intent = String(data.get("intent") || "");
     const artistId = String(data.get("artistId") || "");
+
+    if (
+      intent === "sync-shopify-collection" ||
+      intent === "link-shopify-collection" ||
+      intent === "unlink-shopify-collection"
+    ) {
+      const artist = await findShopArtist(session.shop, artistId);
+
+      if (!artist) {
+        return Response.json(
+          { ok:false, error:"Artist not found." },
+          { status:404 },
+        );
+      }
+
+      if (intent === "unlink-shopify-collection") {
+        await db.artist.update({
+          where: { id: artist.id },
+          data: {
+            shopifyCollectionId: null,
+            shopifyCollectionHandle: null,
+            shopifyCollectionSourceId: null,
+            shopifyCollectionSyncedAt: null,
+          },
+        });
+
+        return Response.json({
+          ok:true,
+          message:"Shopify collection disconnected. The Shopify collection was left unchanged.",
+        });
+      }
+
+      let collectionId = artist.shopifyCollectionId || null;
+      let sourceId = artist.shopifyCollectionSourceId || null;
+
+      if (intent === "link-shopify-collection") {
+        collectionId = String(data.get("collectionId") || "").trim();
+        sourceId = null;
+
+        if (!collectionId) {
+          return Response.json(
+            { ok:false, error:"Choose a Shopify collection to link." },
+            { status:400 },
+          );
+        }
+
+        const duplicate = await db.artist.findFirst({
+          where: {
+            shop: session.shop,
+            shopifyCollectionId: collectionId,
+            id: { not: artist.id },
+          },
+          select: { id:true, name:true },
+        });
+
+        if (duplicate) {
+          return Response.json(
+            {
+              ok:false,
+              error:`That Shopify collection is already linked to ${duplicate.name}.`,
+            },
+            { status:409 },
+          );
+        }
+
+        const existing = await getShopifyArtistCollection(admin, collectionId);
+
+        if (!existing) {
+          return Response.json(
+            { ok:false, error:"That Shopify collection no longer exists." },
+            { status:404 },
+          );
+        }
+      }
+
+      const [settings, trackAssignments, releaseAssignments] =
+        await Promise.all([
+          db.appSettings.findUnique({
+            where: { shop: session.shop },
+          }),
+          db.trackArtist.findMany({
+            where: {
+              artistId: artist.id,
+              track: {
+                release: { shop: session.shop },
+              },
+            },
+            select: {
+              track: {
+                select: { shopifyProductId:true },
+              },
+            },
+          }),
+          db.releaseArtist.findMany({
+            where: {
+              artistId: artist.id,
+              release: { shop: session.shop },
+            },
+            select: {
+              release: {
+                select: { shopifyReleaseProductId:true },
+              },
+            },
+          }),
+        ]);
+
+      const productIds = [
+        ...new Set([
+          ...trackAssignments.map(
+            (item) => item.track.shopifyProductId,
+          ),
+          ...releaseAssignments.map(
+            (item) => item.release.shopifyReleaseProductId,
+          ),
+        ].filter(Boolean)),
+      ];
+
+      const result = await syncShopifyArtistCollection({
+        admin,
+        artist,
+        settings,
+        productIds,
+        collectionId,
+        sourceId,
+      });
+
+      await db.artist.update({
+        where: { id: artist.id },
+        data: {
+          shopifyCollectionId: result.collection.id,
+          shopifyCollectionHandle: result.collection.handle || null,
+          shopifyCollectionSourceId: result.sourceId || null,
+          shopifyCollectionSyncedAt: new Date(),
+        },
+      });
+
+      return Response.json({
+        ok:true,
+        collectionId:result.collection.id,
+        handle:result.collection.handle || null,
+        productCount:result.productCount,
+        message:result.created
+          ? `Shopify artist collection created with ${result.productCount} linked product${result.productCount === 1 ? "" : "s"}.`
+          : `Shopify artist collection synced with ${result.productCount} linked product${result.productCount === 1 ? "" : "s"}.`,
+      });
+    }
+
 
     if (intent === "stage-image") {
       const artist = await findShopArtist(session.shop, artistId);

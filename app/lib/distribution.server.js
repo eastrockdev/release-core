@@ -14,6 +14,8 @@ import {
 import { findShopRelease } from "./tenant-db.server";
 import { isValidUpc } from "./upc";
 import { assignUpcToRelease } from "./upc.server";
+import { publishProductToOnlineStore, unpublishProductFromOnlineStore } from "./shopify-catalog.server";
+import { SHOPIFY_FIXED_BUNDLE_COMPONENT_LIMIT, syncReleaseProduct } from "./shopify-bundles.server";
 import { DISTRIBUTION_STATUSES } from "./workflow";
 
 const DISTRIBUTION_ACTION_INCLUDE = {
@@ -98,6 +100,31 @@ async function recordMutationAndEvent({
   });
 }
 
+function linkedShopifyProductIds(release) {
+  return [
+    release?.shopifyReleaseProductId,
+    ...(release?.tracks || []).map((track) => track.shopifyProductId),
+  ].filter(Boolean);
+}
+
+async function persistReleaseBundleOperation(releaseId, operationId) {
+  await db.release.update({
+    where: { id: releaseId },
+    data: { shopifyReleaseBundleOperationId: operationId || null },
+  });
+}
+
+async function persistReleaseShopifyProduct(releaseId, product) {
+  await db.release.update({
+    where: { id: releaseId },
+    data: {
+      shopifyReleaseProductId: product?.id || null,
+      shopifyReleaseProductHandle: product?.handle || null,
+      shopifyReleaseBundleOperationId: null,
+    },
+  });
+}
+
 async function repairAndSyncExistingProducts({ admin, release, settings }) {
   let synced = 0;
   let stale = 0;
@@ -171,7 +198,7 @@ export async function performDistributionAction({
     await ensureReleaseCoreProductMetafields(admin);
     await syncProductMetafieldSafely(
       admin,
-      release.tracks.map((track) => track.shopifyProductId),
+      linkedShopifyProductIds(release),
       "upc",
       "single_line_text_field",
       upc,
@@ -208,7 +235,7 @@ export async function performDistributionAction({
     await ensureReleaseCoreProductMetafields(admin);
     await syncProductMetafieldSafely(
       admin,
-      release.tracks.map((track) => track.shopifyProductId),
+      linkedShopifyProductIds(release),
       "upc",
       "single_line_text_field",
       upc,
@@ -226,7 +253,7 @@ export async function performDistributionAction({
     await ensureReleaseCoreProductMetafields(admin);
     await syncProductMetafieldSafely(
       admin,
-      release.tracks.map((track) => track.shopifyProductId),
+      linkedShopifyProductIds(release),
       "catalog_number",
       "single_line_text_field",
       catalogNumber,
@@ -271,7 +298,7 @@ export async function performDistributionAction({
     await ensureReleaseCoreProductMetafields(admin);
     await syncProductMetafieldSafely(
       admin,
-      release.tracks.map((track) => track.shopifyProductId),
+      linkedShopifyProductIds(release),
       "catalog_number",
       "single_line_text_field",
       catalogNumber,
@@ -373,7 +400,7 @@ export async function performDistributionAction({
     await dispatchEventSafely({ admin, shop, eventId: event.id });
     await syncProductMetafieldSafely(
       admin,
-      release.tracks.map((track) => track.shopifyProductId),
+      linkedShopifyProductIds(release),
       "distribution_status",
       "single_line_text_field",
       nextStatus,
@@ -427,7 +454,7 @@ export async function performDistributionAction({
     });
     await syncProductMetafieldSafely(
       admin,
-      release.tracks.map((track) => track.shopifyProductId),
+      linkedShopifyProductIds(release),
       "distribution_status",
       "single_line_text_field",
       "RETURNED_FOR_CORRECTIONS",
@@ -466,6 +493,121 @@ export async function performDistributionAction({
     }
     return {
       message: `${result.generated} MP3 preview${result.generated === 1 ? "" : "s"} generated and synced to Shopify.${result.errors.length ? ` ${result.errors.join(" ")}` : ""}`,
+    };
+  }
+
+  if (["publish-shopify-release-product", "schedule-shopify-release-product", "unpublish-shopify-release-product"].includes(intent)) {
+    if (!["ALBUM", "EP"].includes(String(release.type || "").toUpperCase())) {
+      throw publicError("Only Album and EP releases have a release-level Shopify product.", { status: 409 });
+    }
+    if (!release.shopifyReleaseProductId) {
+      throw publicError("Create the Shopify Album/EP product first.", { status: 409 });
+    }
+    if (intent === "unpublish-shopify-release-product") {
+      await unpublishProductFromOnlineStore({ admin, productId: release.shopifyReleaseProductId });
+      return { message: `${release.title} was unpublished from the Online Store.` };
+    }
+    if (intent === "schedule-shopify-release-product" && !release.releaseDate) {
+      throw publicError("Set a release date before scheduling Online Store publication.", { status: 409 });
+    }
+    await publishProductToOnlineStore({
+      admin,
+      productId: release.shopifyReleaseProductId,
+      publishDate: intent === "schedule-shopify-release-product" ? release.releaseDate : null,
+    });
+    return {
+      message: intent === "schedule-shopify-release-product"
+        ? `${release.title} is scheduled for the release date.`
+        : `${release.title} is published to the Online Store.`,
+    };
+  }
+
+  if (intent === "sync-shopify-release-product") {
+    if (!["ALBUM", "EP"].includes(String(release.type || "").toUpperCase())) {
+      throw publicError("Only Album and EP releases use a separate Shopify release product.", { status: 409 });
+    }
+    const price = Number(formData.get("price") || settings?.defaultAlbumPrice || 9.99);
+    if (!Number.isFinite(price) || price < 0 || price > 9999) {
+      throw publicError("Enter a valid Album/EP price.", { status: 400 });
+    }
+    const missingTracks = release.tracks.filter((track) => !track.shopifyProductId);
+    if (missingTracks.length) {
+      throw publicError(
+        `Sync all ${release.tracks.length} track products before creating the Album/EP product. ${missingTracks.length} track product${missingTracks.length === 1 ? " is" : "s are"} still missing.`,
+        { status: 409 },
+      );
+    }
+    if (!release.catalogNumber) {
+      throw publicError("Assign a catalog number before creating the Album/EP product.", { status: 409 });
+    }
+
+    const definitionResult = await ensureReleaseCoreProductMetafields(admin);
+    if (definitionResult.mismatched.length) {
+      throw publicError(
+        `Shopify has ${definitionResult.mismatched.length} ReleaseCore metafield definition${definitionResult.mismatched.length === 1 ? "" : "s"} with an incompatible type. Open Settings → Shopify integration for details.`,
+        { status: 409 },
+      );
+    }
+
+    const currentRelease = await getDistributionRelease(shop, release.id);
+    try {
+      const result = await syncReleaseProduct({
+        admin,
+        release: currentRelease,
+        settings,
+        price,
+        onOperationStarted: (operationId) => persistReleaseBundleOperation(release.id, operationId),
+        onOperationFinished: () => persistReleaseBundleOperation(release.id, null),
+        onProductResolved: (product) => persistReleaseShopifyProduct(release.id, product),
+        onProductCreated: (product) => persistReleaseShopifyProduct(release.id, product),
+      });
+      if (result.pending) {
+        return { message: "Shopify is still building the fixed bundle. Run Sync Album/EP product again in a moment to finish the catalog sync." };
+      }
+      const product = result.product;
+      if (product?.id) await persistReleaseShopifyProduct(release.id, product);
+      await recordEvent({
+        releaseId: release.id,
+        type: "SHOPIFY_RELEASE_PRODUCT_SYNCED",
+        message: result.mode === "BUNDLE"
+          ? `Shopify ${release.type === "EP" ? "EP" : "album"} fixed bundle synced with ${currentRelease.tracks.length} component${currentRelease.tracks.length === 1 ? "" : "s"}.`
+          : `Shopify ${release.type === "EP" ? "EP" : "album"} product synced as a standard product because the release exceeds Shopify's ${SHOPIFY_FIXED_BUNDLE_COMPONENT_LIMIT}-component fixed bundle limit.`,
+        admin,
+        shop,
+      });
+      const base = result.mode === "BUNDLE"
+        ? `${release.type === "EP" ? "EP" : "Album"} fixed bundle synced with ${currentRelease.tracks.length} track${currentRelease.tracks.length === 1 ? "" : "s"}.`
+        : `${release.type === "EP" ? "EP" : "Album"} product synced as a standard product.`;
+      return { message: result.warning ? `${base} ${result.warning}` : base };
+    } catch (error) {
+      const message = String(error?.message || error);
+      if (/bundles feature|not.*bundle|bundle.*not.*available|access to bundles/i.test(message)) {
+        throw publicError("This Shopify store does not currently have access to fixed bundles. Confirm Bundles eligibility in Shopify, then retry.", { status: 409 });
+      }
+      throw error;
+    }
+  }
+
+  if (["publish-shopify-product", "schedule-shopify-product", "unpublish-shopify-product"].includes(intent)) {
+    const trackId = String(formData.get("trackId") || "").trim();
+    const track = release.tracks.find((item) => item.id === trackId);
+    if (!track?.shopifyProductId) throw publicError("Create the Shopify track product first.", { status: 409 });
+    if (intent === "unpublish-shopify-product") {
+      await unpublishProductFromOnlineStore({ admin, productId: track.shopifyProductId });
+      return { message: `${track.title} was unpublished from the Online Store.` };
+    }
+    if (intent === "schedule-shopify-product" && !release.releaseDate) {
+      throw publicError("Set a release date before scheduling Online Store publication.", { status: 409 });
+    }
+    await publishProductToOnlineStore({
+      admin,
+      productId: track.shopifyProductId,
+      publishDate: intent === "schedule-shopify-product" ? release.releaseDate : null,
+    });
+    return {
+      message: intent === "schedule-shopify-product"
+        ? `${track.title} is scheduled for the release date.`
+        : `${track.title} is published to the Online Store.`,
     };
   }
 
@@ -536,14 +678,22 @@ export async function performDistributionAction({
         track,
         settings,
         price,
-      });
-      await db.track.update({
-        where: { id: track.id },
-        data: {
-          shopifyProductId: product.id,
-          shopifyProductHandle: product.handle,
+        onCreated: async (createdProduct) => {
+          await db.track.update({
+            where: { id: track.id },
+            data: {
+              shopifyProductId: createdProduct.id,
+              shopifyProductHandle: createdProduct.handle,
+            },
+          });
         },
       });
+      if (product.handle) {
+        await db.track.update({
+          where: { id: track.id },
+          data: { shopifyProductHandle: product.handle },
+        });
+      }
       created += 1;
     }
     await recordEvent({

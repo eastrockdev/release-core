@@ -31,6 +31,7 @@ export default function App() {
         <s-link href="/app/import">Import</s-link>
         <s-link href="/app/submissions"><NavLabel count={navCounts.submissions}>Submissions</NavLabel></s-link>
         <s-link href="/app/distribution"><NavLabel count={navCounts.distribution}>Distribution</NavLabel></s-link>
+        <s-link href="/app/purchases">Purchases</s-link>
         <s-link href="/app/artists">Artists</s-link>
         <s-link href="/app/contributors">Contributors</s-link>
         <s-link href="/app/portal-access">Portal access</s-link>

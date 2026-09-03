@@ -9,7 +9,7 @@ ReleaseCore is a Shopify-embedded music distribution operations platform. It pro
 - **Master audio:** Private Cloudflare R2 storage. Large WAV files use multipart uploads; smaller masters use signed single PUT uploads.
 - **Merchant files:** Shopify Files stores cover artwork, documents, profile images, and generated browser-friendly audio previews.
 - **Storefront:** `extensions/releasecore-artist-portal` provides the Artist Portal/theme blocks. Private portal data is served through authenticated app-proxy routes.
-- **Shopify catalog:** ReleaseCore can synchronize release/track data and ReleaseCore-owned product metafields through the Admin GraphQL API.
+- **Shopify catalog:** ReleaseCore synchronizes track products, category-scoped music metafields, Shopify taxonomy genre data, theme-template defaults, and Online Store publication state through the Admin GraphQL API.
 
 ## Requirements
 
@@ -51,6 +51,7 @@ check:security      Tenant/error-boundary security assertions
 check:tenancy       Storefront ownership and master-storage scope assertions
 check:compliance    Shopify privacy-webhook and protected-data assertions
 check:app-store     Production config, public legal/support, install flow, and submission-readiness assertions
+check:catalog       Shopify music-product publication, metadata, taxonomy, and template assertions
 check:architecture  Route/domain-service boundary assertions
 check:cleanup       Repository and duplicate-helper cleanup assertions
 lint                ESLint and accessibility rules

@@ -31,9 +31,13 @@ for (const file of configFiles) {
     "read_customers",
     "read_products",
     "write_products",
+    "read_publications",
+    "write_publications",
     "read_files",
     "write_files",
+    "read_metaobject_definitions",
     "write_metaobject_definitions",
+    "read_metaobjects",
     "write_metaobjects",
     "write_app_proxy",
   ]) {

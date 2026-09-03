@@ -145,6 +145,24 @@ export default function SettingsPage() {
   const [defaultTrackPrice, setDefaultTrackPrice] = useState(
     String(s.defaultTrackPrice ?? 1.29),
   );
+  const [defaultAlbumPrice, setDefaultAlbumPrice] = useState(
+    String(s.defaultAlbumPrice ?? 9.99),
+  );
+  const [shopifyTrackProductDefaultState, setShopifyTrackProductDefaultState] = useState(
+    s.shopifyTrackProductDefaultState || "DRAFT",
+  );
+  const [shopifyAlbumProductDefaultState, setShopifyAlbumProductDefaultState] = useState(
+    s.shopifyAlbumProductDefaultState || "DRAFT",
+  );
+  const [shopifySingleTemplateSuffix, setShopifySingleTemplateSuffix] = useState(
+    s.shopifySingleTemplateSuffix || "",
+  );
+  const [shopifyAlbumTemplateSuffix, setShopifyAlbumTemplateSuffix] = useState(
+    s.shopifyAlbumTemplateSuffix || "",
+  );
+  const [shopifyArtistCollectionTemplateSuffix, setShopifyArtistCollectionTemplateSuffix] = useState(
+    s.shopifyArtistCollectionTemplateSuffix || "",
+  );
   const [generateShopifyAudioPreview, setGenerateShopifyAudioPreview] =
     useState(s.generateShopifyAudioPreview ?? false);
   const [audioPreviewDurationSeconds, setAudioPreviewDurationSeconds] =
@@ -152,6 +170,31 @@ export default function SettingsPage() {
   const [audioPreviewBitrateKbps, setAudioPreviewBitrateKbps] = useState(
     String(s.audioPreviewBitrateKbps ?? 192),
   );
+  const [customerDownloadsEnabled, setCustomerDownloadsEnabled] = useState(
+    s.customerDownloadsEnabled ?? true,
+  );
+  const [customerDownloadAutoGenerate, setCustomerDownloadAutoGenerate] =
+    useState(s.customerDownloadAutoGenerate ?? true);
+  const [customerDownloadMp3Enabled, setCustomerDownloadMp3Enabled] = useState(
+    s.customerDownloadMp3Enabled ?? true,
+  );
+  const [customerDownloadMp3BitrateKbps, setCustomerDownloadMp3BitrateKbps] =
+    useState(String(s.customerDownloadMp3BitrateKbps ?? 320));
+  const [customerDownloadFlacEnabled, setCustomerDownloadFlacEnabled] =
+    useState(s.customerDownloadFlacEnabled ?? true);
+  const [
+    customerDownloadFlacCompressionLevel,
+    setCustomerDownloadFlacCompressionLevel,
+  ] = useState(String(s.customerDownloadFlacCompressionLevel ?? 5));
+  const [customerDownloadEmbedArtwork, setCustomerDownloadEmbedArtwork] =
+    useState(s.customerDownloadEmbedArtwork ?? true);
+  const [customerDownloadEmbedLyrics, setCustomerDownloadEmbedLyrics] =
+    useState(s.customerDownloadEmbedLyrics ?? true);
+  const [customerDownloadEmbedCredits, setCustomerDownloadEmbedCredits] =
+    useState(s.customerDownloadEmbedCredits ?? true);
+  const [customerDownloadEmbedArtistLinks, setCustomerDownloadEmbedArtistLinks] =
+    useState(s.customerDownloadEmbedArtistLinks ?? true);
+
   const [lockArtistNameEditing, setLockArtistNameEditing] = useState(
     s.lockArtistNameEditing ?? true,
   );
@@ -264,9 +307,43 @@ export default function SettingsPage() {
     f.set("nextCatalogSequence", nextCatalogSequence);
     if (autoAssignCatalogNumber) f.set("autoAssignCatalogNumber", "on");
     f.set("defaultTrackPrice", defaultTrackPrice);
+    f.set("defaultAlbumPrice", defaultAlbumPrice);
+    f.set("shopifyTrackProductDefaultState", shopifyTrackProductDefaultState);
+    f.set("shopifyAlbumProductDefaultState", shopifyAlbumProductDefaultState);
+    f.set("shopifySingleTemplateSuffix", shopifySingleTemplateSuffix);
+    f.set("shopifyAlbumTemplateSuffix", shopifyAlbumTemplateSuffix);
+    f.set("shopifyArtistCollectionTemplateSuffix", shopifyArtistCollectionTemplateSuffix);
     if (generateShopifyAudioPreview) f.set("generateShopifyAudioPreview", "on");
     f.set("audioPreviewDurationSeconds", audioPreviewDurationSeconds);
     f.set("audioPreviewBitrateKbps", audioPreviewBitrateKbps);
+    if (customerDownloadsEnabled) f.set("customerDownloadsEnabled", "on");
+    if (customerDownloadAutoGenerate) {
+      f.set("customerDownloadAutoGenerate", "on");
+    }
+    if (customerDownloadMp3Enabled) f.set("customerDownloadMp3Enabled", "on");
+    f.set(
+      "customerDownloadMp3BitrateKbps",
+      customerDownloadMp3BitrateKbps,
+    );
+    if (customerDownloadFlacEnabled) {
+      f.set("customerDownloadFlacEnabled", "on");
+    }
+    f.set(
+      "customerDownloadFlacCompressionLevel",
+      customerDownloadFlacCompressionLevel,
+    );
+    if (customerDownloadEmbedArtwork) {
+      f.set("customerDownloadEmbedArtwork", "on");
+    }
+    if (customerDownloadEmbedLyrics) {
+      f.set("customerDownloadEmbedLyrics", "on");
+    }
+    if (customerDownloadEmbedCredits) {
+      f.set("customerDownloadEmbedCredits", "on");
+    }
+    if (customerDownloadEmbedArtistLinks) {
+      f.set("customerDownloadEmbedArtistLinks", "on");
+    }
     f.set("lockArtistNameEditing", lockArtistNameEditing ? "on" : "off");
     f.set(
       "lockContributorIdentityAfterSubmission",
@@ -279,7 +356,9 @@ export default function SettingsPage() {
       upc: "Saving UPC settings…",
       catalog: "Saving catalog settings…",
       previews: "Saving audio preview settings…",
+      downloads: "Saving customer download settings…",
       defaults: "Saving distribution defaults…",
+      products: "Saving Shopify product defaults…",
     })[scope] || "Saving settings…";
     const r = await post(f, "Settings saved.", scope, pending);
     if (r) shopify.toast.show("Settings saved");
@@ -306,7 +385,8 @@ export default function SettingsPage() {
   const metaReady =
     data.metafields.missing.length === 0 &&
     data.metafields.mismatched.length === 0 &&
-    data.metafields.hidden.length === 0;
+    data.metafields.hidden.length === 0 &&
+    (data.metafields.unconstrained?.length || 0) === 0;
 
   return (
     <s-page heading="Settings">
@@ -858,6 +938,9 @@ export default function SettingsPage() {
               {data.metafields.mismatched.length
                 ? ` · ${data.metafields.mismatched.length} type mismatch`
                 : ""}
+              {data.metafields.unconstrained?.length
+                ? ` · ${data.metafields.unconstrained.length} need Digital Music category scoping`
+                : ""}
             </div>
             {data.metafields.missing.length ? (
               <div style={styles.smallList}>
@@ -878,6 +961,94 @@ export default function SettingsPage() {
             className={`rc-button ${metaReady ? "" : "rc-button--primary"}`.trim()}
           >
             {metaReady ? "Check and repair" : "Complete setup"}
+          </button>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        icon="product"
+        title="Shopify product publishing"
+        description="Choose how track products enter the Online Store and which theme templates ReleaseCore assigns when products are first created."
+        summary={shopifyTrackProductDefaultState === "DRAFT" ? "Draft by default" : shopifyTrackProductDefaultState === "PUBLISH_NOW" ? "Publish immediately" : shopifyTrackProductDefaultState === "SCHEDULE_RELEASE_DATE" ? "Schedule for release date" : "Active / unpublished"}
+      >
+        <ActionFeedback feedback={feedbackFor("products")} />
+        <div className="rc-settings-grid" style={styles.grid}>
+          <Field
+            label="New track product default"
+            help="This only applies when ReleaseCore creates a new track product. Later syncs preserve the product's current publication state."
+          >
+            <select
+              value={shopifyTrackProductDefaultState}
+              onChange={(event) => setShopifyTrackProductDefaultState(event.target.value)}
+              className="rc-control"
+            >
+              <option value="DRAFT">Draft</option>
+              <option value="ACTIVE_UNPUBLISHED">Active, not published</option>
+              <option value="PUBLISH_NOW">Publish immediately to Online Store</option>
+              <option value="SCHEDULE_RELEASE_DATE">Schedule Online Store publication for release date</option>
+            </select>
+          </Field>
+          <Field
+            label="New Album / EP product default"
+            help="Applies only when ReleaseCore creates the release-level Album/EP product. Later syncs preserve its current publication state."
+          >
+            <select
+              value={shopifyAlbumProductDefaultState}
+              onChange={(event) => setShopifyAlbumProductDefaultState(event.target.value)}
+              className="rc-control"
+            >
+              <option value="DRAFT">Draft</option>
+              <option value="ACTIVE_UNPUBLISHED">Active, not published</option>
+              <option value="PUBLISH_NOW">Publish immediately to Online Store</option>
+              <option value="SCHEDULE_RELEASE_DATE">Schedule Online Store publication for release date</option>
+            </select>
+          </Field>
+          <Field
+            label="Single-track product template"
+            help="Enter the Shopify product template suffix, such as music. Leave blank to use the theme default."
+          >
+            <input
+              value={shopifySingleTemplateSuffix}
+              onChange={(event) => setShopifySingleTemplateSuffix(event.target.value)}
+              placeholder="music"
+              className="rc-control"
+            />
+          </Field>
+          <Field
+            label="Album / EP product template"
+            help="Used when ReleaseCore creates the release-level Album/EP product. Leave blank to use the theme default."
+          >
+            <input
+              value={shopifyAlbumTemplateSuffix}
+              onChange={(event) => setShopifyAlbumTemplateSuffix(event.target.value)}
+              placeholder="album"
+              className="rc-control"
+            />
+          </Field>
+          <Field
+            label="Artist collection template"
+            help="Used for Shopify artist collections created or synchronized by ReleaseCore. Leave blank to use the theme default."
+          >
+            <input
+              value={shopifyArtistCollectionTemplateSuffix}
+              onChange={(event) =>
+                setShopifyArtistCollectionTemplateSuffix(
+                  event.target.value,
+                )
+              }
+              placeholder="artist"
+              className="rc-control"
+            />
+          </Field>
+        </div>
+        <div className="rc-form-actions" style={styles.actionRow}>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => save("products")}
+            className="rc-button rc-button--primary"
+          >
+            Save Shopify product defaults
           </button>
         </div>
       </CollapsibleSection>
@@ -943,6 +1114,132 @@ export default function SettingsPage() {
       </CollapsibleSection>
 
       <CollapsibleSection
+        icon="audio"
+        title="Customer download files"
+        description="Generate private, tagged MP3 and FLAC purchase files from the WAV master. Buyers never receive the master WAV."
+        summary={customerDownloadsEnabled ? "Enabled" : "Disabled"}
+      >
+        <ActionFeedback feedback={feedbackFor("downloads")} />
+        <div style={styles.sectionIntro}>
+          ReleaseCore keeps the WAV master private and creates customer-ready
+          derivatives with artwork and available public release metadata.
+          Changing the master, artwork, metadata, credits, or encoding settings
+          makes the previous derivative stale so it is rebuilt before delivery.
+        </div>
+
+        <div className="rc-settings-toggle-grid" style={styles.toggleGrid}>
+          <Toggle
+            checked={customerDownloadsEnabled}
+            onChange={setCustomerDownloadsEnabled}
+            title="Enable customer music downloads"
+            help="Purchase entitlements can download generated formats only. The original WAV master is never a buyer download."
+          />
+          <Toggle
+            checked={customerDownloadAutoGenerate}
+            onChange={setCustomerDownloadAutoGenerate}
+            title="Prepare files automatically after purchase"
+            help="ReleaseCore starts generation after a paid order. Missing or stale files are also generated on demand for an entitled customer."
+          />
+          <Toggle
+            checked={customerDownloadMp3Enabled}
+            onChange={setCustomerDownloadMp3Enabled}
+            title="Offer MP3"
+            help="Creates an ID3v2.4 MP3 with ID3v1 compatibility."
+          />
+          <Toggle
+            checked={customerDownloadFlacEnabled}
+            onChange={setCustomerDownloadFlacEnabled}
+            title="Offer FLAC"
+            help="Creates a lossless FLAC with Vorbis comments and embedded front-cover artwork."
+          />
+          <Toggle
+            checked={customerDownloadEmbedArtwork}
+            onChange={setCustomerDownloadEmbedArtwork}
+            title="Embed cover artwork"
+            help="Adds the release artwork as the front cover when artwork is available."
+          />
+          <Toggle
+            checked={customerDownloadEmbedLyrics}
+            onChange={setCustomerDownloadEmbedLyrics}
+            title="Embed lyrics"
+            help="Adds the track lyrics when lyrics are available."
+          />
+          <Toggle
+            checked={customerDownloadEmbedCredits}
+            onChange={setCustomerDownloadEmbedCredits}
+            title="Embed public credits"
+            help="Includes names and public credit roles. IPI, PRO, ownership percentages, email and internal rights data are excluded."
+          />
+          <Toggle
+            checked={customerDownloadEmbedArtistLinks}
+            onChange={setCustomerDownloadEmbedArtistLinks}
+            title="Embed public artist links"
+            help="Adds available website, Spotify, Apple Music and social profile URLs as metadata."
+          />
+        </div>
+
+        {customerDownloadsEnabled ? (
+          <div
+            className="rc-settings-grid"
+            style={{ ...styles.grid, marginTop: 14 }}
+          >
+            {customerDownloadMp3Enabled ? (
+              <Field
+                label="MP3 download bitrate"
+                help="320 kbps is the default high-quality customer MP3."
+              >
+                <select
+                  value={customerDownloadMp3BitrateKbps}
+                  onChange={(event) =>
+                    setCustomerDownloadMp3BitrateKbps(event.target.value)
+                  }
+                  className="rc-control"
+                >
+                  {[128, 160, 192, 256, 320].map((value) => (
+                    <option key={value} value={value}>
+                      {value} kbps
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            ) : null}
+
+            {customerDownloadFlacEnabled ? (
+              <Field
+                label="FLAC compression level"
+                help="Compression affects file size and encoding time, not audio quality. Level 5 is the balanced default."
+              >
+                <select
+                  value={customerDownloadFlacCompressionLevel}
+                  onChange={(event) =>
+                    setCustomerDownloadFlacCompressionLevel(event.target.value)
+                  }
+                  className="rc-control"
+                >
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((value) => (
+                    <option key={value} value={value}>
+                      Level {value}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="rc-form-actions" style={styles.actionRow}>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => save("downloads")}
+            className="rc-button rc-button--primary"
+          >
+            Save customer download settings
+          </button>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
         icon="defaults"
         title="Distribution and product defaults"
         description="Pre-fill common organization, metadata, and pricing values."
@@ -982,7 +1279,7 @@ export default function SettingsPage() {
           </Field>
           <Field
             label="Default track price"
-            help="Used when creating or syncing digital music products from Distribution."
+            help="Used when creating or syncing individual digital track products from Distribution."
           >
             <input
               type="number"
@@ -990,6 +1287,19 @@ export default function SettingsPage() {
               step="0.01"
               value={defaultTrackPrice}
               onChange={(e) => setDefaultTrackPrice(e.target.value)}
+              className="rc-control"
+            />
+          </Field>
+          <Field
+            label="Default Album / EP price"
+            help="Used for the release-level Album/EP product. The Distribution workspace can override it per release."
+          >
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={defaultAlbumPrice}
+              onChange={(e) => setDefaultAlbumPrice(e.target.value)}
               className="rc-control"
             />
           </Field>

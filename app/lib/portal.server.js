@@ -1,4 +1,5 @@
 import db from "../db.server";
+import { parseReleaseTimelineFormData } from "./release-timeline.server";
 import { CREDIT_ROLES, isPublishingRole, isValidReleaseType, starterTitle, typeLabel } from "./releasecore";
 import { FILE_KINDS, fileContentTypeForKind, isReplaceableKind, stagedResourceForKind, validateUploadDescriptor } from "./releasecore-files";
 import { maybeAutoAssignIsrc } from "./isrc.server";
@@ -230,6 +231,9 @@ export async function updatePortalRelease({ shop, customerId, releaseId, formDat
   const title = String(formData.get("title") || "").trim();
   const primaryGenre = String(formData.get("primaryGenre") || "").trim() || null;
   const releaseDateRaw = String(formData.get("releaseDate") || "").trim();
+  const timeline = parseReleaseTimelineFormData(formData, {
+    releaseDate: releaseDateRaw,
+  });
   if (!title) throw publicError("Release title is required.");
   const settings = (await db.appSettings.findUnique({ where: { shop } })) || {};
   if (releaseDateRaw && !/^\d{4}-\d{2}-\d{2}$/.test(releaseDateRaw)) throw publicError("Choose a valid release date.");
@@ -237,7 +241,7 @@ export async function updatePortalRelease({ shop, customerId, releaseId, formDat
   if (!leadTime.ok) throw publicError(leadTime.message);
   return db.release.update({
     where: { id: release.id },
-    data: { title, primaryGenre, releaseDate: releaseDateRaw ? new Date(`${releaseDateRaw}T12:00:00.000Z`) : null },
+    data: { ...timeline, title, primaryGenre, releaseDate: releaseDateRaw ? new Date(`${releaseDateRaw}T12:00:00.000Z`) : null },
   });
 }
 

@@ -7,10 +7,11 @@ import db from "../db.server";
 import { authenticatedPost } from "../lib/authenticated-post";
 import { uploadMultipartTarget } from "../lib/upload-file";
 import { contributorDisplayName, PRO_OPTIONS } from "../lib/releasecore";
+import { getShopifyArtistCollection, listShopifyArtistCollections } from "../lib/shopify-artist-collections.server";
 import { ArtistAvatar, CollapsibleSection, PageIntro } from "../components/releasecore-ui";
 
 export const loader = async ({ request, params }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const [artist, contributors] = await Promise.all([
     db.artist.findFirst({
       where: { id: params.artistId, shop: session.shop },
@@ -19,13 +20,45 @@ export const loader = async ({ request, params }) => {
     db.contributor.findMany({ where: { shop: session.shop }, orderBy: { legalName: "asc" } }),
   ]);
   if (!artist) throw new Response("Artist not found.", { status: 404 });
-  return { artist, contributors };
+
+  const [shopifyCollection, collectionCandidates, linkedCollections] =
+    await Promise.all([
+      artist.shopifyCollectionId
+        ? getShopifyArtistCollection(admin, artist.shopifyCollectionId)
+        : Promise.resolve(null),
+      listShopifyArtistCollections(admin),
+      db.artist.findMany({
+        where: {
+          shop: session.shop,
+          shopifyCollectionId: { not: null },
+          id: { not: artist.id },
+        },
+        select: { shopifyCollectionId:true },
+      }),
+    ]);
+
+  const linkedCollectionIds = new Set(
+    linkedCollections
+      .map((item) => item.shopifyCollectionId)
+      .filter(Boolean),
+  );
+
+  return {
+    artist,
+    contributors,
+    shopifyCollection,
+    collectionCandidates: collectionCandidates.filter(
+      (collection) =>
+        collection.id === artist.shopifyCollectionId ||
+        !linkedCollectionIds.has(collection.id),
+    ),
+  };
 };
 
 const Field = ({ label, help, children }) => <label className="rc-field"><span className="rc-field__label">{label}</span>{children}{help ? <span className="rc-field__help">{help}</span> : null}</label>;
 
 export default function ArtistProfilePage() {
-  const { artist, contributors } = useLoaderData();
+  const { artist, contributors, shopifyCollection, collectionCandidates } = useLoaderData();
   const shopify = useAppBridge();
   const revalidator = useRevalidator();
   const [busy, setBusy] = useState(false);
@@ -44,6 +77,13 @@ export default function ArtistProfilePage() {
   };
   const save = (event) => { event.preventDefault(); const form = new FormData(event.currentTarget); form.set("intent", "update"); form.set("artistId", artist.id); return post(form); };
   const relationship = (intent, contributorId) => { const form = new FormData(); form.set("intent", intent); form.set("artistId", artist.id); form.set("contributorId", contributorId); return post(form); };
+  const collectionAction = (intent, collectionId = "") => {
+    const form = new FormData();
+    form.set("intent", intent);
+    form.set("artistId", artist.id);
+    if (collectionId) form.set("collectionId", collectionId);
+    return post(form);
+  };
   const uploadImage = async (event) => {
     const file = event.target.files?.[0]; if (!file || busy) return;
     setBusy(true); setNotice(null);
@@ -79,6 +119,119 @@ export default function ArtistProfilePage() {
         <div className="rc-form-actions"><button className="rc-button rc-button--primary" disabled={busy}>{busy ? "Saving…" : "Save profile"}</button></div>
       </form>
     </CollapsibleSection>
+
+    <CollapsibleSection
+      icon="shopify"
+      title="Shopify artist collection"
+      description="Create or connect this artist's storefront collection and keep ReleaseCore music products synchronized."
+      summary={artist.shopifyCollectionId ? (shopifyCollection ? "Linked" : "Needs repair") : "Not linked"}
+      defaultOpen
+    >
+      <div className="rc-form">
+        {artist.shopifyCollectionId ? (
+          <div className="rc-section-copy">
+            <strong>{shopifyCollection?.title || artist.name}</strong>
+            <div>
+              {shopifyCollection
+                ? `/collections/${shopifyCollection.handle}`
+                : "The linked Shopify collection is missing. Recreate it to repair the link."}
+            </div>
+
+            {artist.shopifyCollectionSyncedAt ? (
+              <div>
+                Last synced{" "}
+                {new Date(
+                  artist.shopifyCollectionSyncedAt,
+                ).toLocaleString()}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <p className="rc-section-copy">
+            Create a new Shopify collection for this artist, or connect an existing collection instead.
+          </p>
+        )}
+
+        <div className="rc-form-actions">
+          <button
+            type="button"
+            className="rc-button rc-button--primary"
+            disabled={busy}
+            onClick={() =>
+              collectionAction("sync-shopify-collection")
+            }
+          >
+            {busy
+              ? "Working…"
+              : artist.shopifyCollectionId
+                ? shopifyCollection
+                  ? "Sync artist collection"
+                  : "Recreate artist collection"
+                : "Create artist collection"}
+          </button>
+
+          {artist.shopifyCollectionId ? (
+            <button
+              type="button"
+              className="rc-button rc-button--tertiary"
+              disabled={busy}
+              onClick={() =>
+                collectionAction("unlink-shopify-collection")
+              }
+            >
+              Disconnect
+            </button>
+          ) : null}
+        </div>
+
+        {collectionCandidates.length ? (
+          <div className="rc-relationship-add">
+            <select
+              className="rc-control"
+              defaultValue=""
+              aria-label="Shopify collection to link"
+            >
+              <option value="">
+                Choose existing Shopify collection…
+              </option>
+
+              {collectionCandidates.map((collection) => (
+                <option
+                  key={collection.id}
+                  value={collection.id}
+                >
+                  {collection.title} — /collections/{collection.handle}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              className="rc-button rc-button--secondary"
+              disabled={busy}
+              onClick={(event) => {
+                const select =
+                  event.currentTarget.previousElementSibling;
+
+                if (select?.value) {
+                  collectionAction(
+                    "link-shopify-collection",
+                    select.value,
+                  );
+                }
+              }}
+            >
+              Link existing
+            </button>
+          </div>
+        ) : null}
+
+        <p className="rc-field__help">
+          ReleaseCore manages its own catalog membership. Products added manually in Shopify are preserved.
+        </p>
+      </div>
+    </CollapsibleSection>
+
     <CollapsibleSection icon="shopify" title="Music and social links" description="Keep artist destinations consistent across profiles and storefront experiences." summary={[artist.spotifyUrl, artist.appleMusicUrl, artist.instagramUrl, artist.facebookUrl, artist.tiktokUrl, artist.youtubeUrl, artist.xUrl].filter(Boolean).length + " connected"}>
       <form className="rc-form" onSubmit={save}>
         <input type="hidden" name="name" value={artist.name} />

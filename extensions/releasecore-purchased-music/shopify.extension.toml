@@ -1,0 +1,22 @@
+api_version = "2026-07"
+
+[[extensions]]
+type = "ui_extension"
+name = "ReleaseCore Music downloads"
+handle = "releasecore-purchased-music"
+uid = "65a46b1f-bdcd-c759-1d1c-6cd2f2e7058446984ffe"
+
+[[extensions.targeting]]
+target = "customer-account.page.render"
+module = "./src/MusicDownloads.jsx"
+
+[extensions.capabilities]
+network_access = true
+
+[extensions.settings]
+
+[[extensions.settings.fields]]
+key = "api_base_url"
+type = "single_line_text_field"
+name = "ReleaseCore backend URL"
+description = "Leave blank in production. During local development, enter the current Shopify CLI tunnel URL so the Customer Account page can reach your local ReleaseCore server."

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "releasecore",
+  "label": "ReleaseCore",
+  "shopifyConfig": "releasecore",
+  "shopifyConfigFile": "shopify.app.releasecore.toml",
+  "appName": "ReleaseCore",
+  "appHandle": "releasecore",
+  "distribution": "app_store",
+  "customerBrand": {
+    "companyName": "ReleaseCore",
+    "programName": "Music Distribution Platform",
+    "programShortName": "ReleaseCore",
+    "downloadsTitle": "Music downloads",
+    "supportUrl": null,
+    "storefrontBaseUrl": null,
+    "poweredByReleaseCore": false
+  }
+}

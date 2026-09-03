@@ -394,18 +394,136 @@ export async function deleteMasterStorageObject({
   throw new Error(`Unsupported master storage provider: ${storageProvider || "unknown"}.`);
 }
 
+function customerDerivativePrefix({ shop, releaseId, trackId }) {
+  return [
+    "customer-downloads",
+    safeSegment(shop),
+    safeSegment(releaseId),
+    safeSegment(trackId),
+  ].join("/") + "/";
+}
+
+function localCustomerDerivativePrefix({ shop, releaseId, trackId }) {
+  return (
+    path.join(
+      "customer-downloads",
+      safeSegment(shop),
+      safeSegment(releaseId),
+      safeSegment(trackId),
+    ) + path.sep
+  );
+}
+
+export async function saveCustomerDerivativeFile({
+  sourcePath,
+  shop,
+  releaseId,
+  trackId,
+  filename,
+  mimeType,
+}) {
+  if (!sourcePath) throw new Error("A derivative source path is required.");
+
+  if (masterStorageProvider() === "R2") {
+    const { client, bucket } = getR2Client();
+    const storageKey =
+      `${customerDerivativePrefix({ shop, releaseId, trackId })}` +
+      `${randomUUID()}-${safeFilename(filename)}`;
+
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: storageKey,
+        Body: createReadStream(sourcePath),
+        ContentType: mimeType || "application/octet-stream",
+        CacheControl: "private, no-store",
+      }),
+    );
+
+    return { storageProvider: "R2", storageKey };
+  }
+
+  const relativeDirectory = localCustomerDerivativePrefix({
+    shop,
+    releaseId,
+    trackId,
+  });
+  await mkdir(path.join(ROOT, relativeDirectory), { recursive: true });
+
+  const storageKey = path.join(
+    relativeDirectory,
+    `${randomUUID()}-${safeFilename(filename)}`,
+  );
+
+  await pipeline(
+    createReadStream(sourcePath),
+    createWriteStream(localStoragePath(storageKey), { flags: "wx" }),
+  );
+
+  return { storageProvider: "LOCAL_DEV", storageKey };
+}
+
+export async function deleteCustomerDerivativeFile({
+  storageProvider,
+  storageKey,
+  shop,
+  releaseId,
+  trackId,
+}) {
+  if (!storageKey) return;
+
+  if (storageProvider === "R2") {
+    const prefix = customerDerivativePrefix({ shop, releaseId, trackId });
+    if (!String(storageKey).startsWith(prefix)) {
+      throw new Error(
+        "The derivative storage key is outside this release/track scope.",
+      );
+    }
+    await deleteR2StorageKey(storageKey);
+    return;
+  }
+
+  if (storageProvider === "LOCAL_DEV") {
+    const normalized = path.normalize(String(storageKey));
+    const prefix = localCustomerDerivativePrefix({
+      shop,
+      releaseId,
+      trackId,
+    });
+
+    if (
+      normalized.startsWith(`..${path.sep}`) ||
+      !normalized.startsWith(prefix)
+    ) {
+      throw new Error(
+        "The local derivative storage key is outside this release/track scope.",
+      );
+    }
+
+    await deleteLocalStorageKey(storageKey);
+    return;
+  }
+
+  throw new Error(
+    `Unsupported customer derivative storage provider: ${
+      storageProvider || "unknown"
+    }.`,
+  );
+}
+
 export async function getR2SignedReadUrl(
   storageKey,
-  { filename = "master.wav", mimeType = "audio/wav", expiresIn = R2_READ_TTL_SECONDS } = {},
+  { filename = "master.wav", mimeType = "audio/wav", expiresIn = R2_READ_TTL_SECONDS, disposition = "inline" } = {},
 ) {
   if (!storageKey) throw new Error("An R2 storage key is required.");
   const { client, bucket } = getR2Client();
 
   const safeDownloadName = safeFilename(filename).replace(/["\r\n]/g, "_");
+  const safeDisposition = disposition === "attachment" ? "attachment" : "inline";
   const command = new GetObjectCommand({
     Bucket: bucket,
     Key: storageKey,
-    ResponseContentDisposition: `inline; filename="${safeDownloadName}"`,
+    ResponseContentDisposition: `${safeDisposition}; filename="${safeDownloadName}"`,
     ResponseContentType: mimeType || "audio/wav",
   });
 

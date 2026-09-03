@@ -7,11 +7,12 @@ import { buildUpc, maxItemReference, normalizeGs1CompanyPrefix, UPC_MODES, valid
 import { CATALOG_MODES, buildCatalogNumber, normalizeCatalogPrefix } from "../lib/catalog";
 import { minimumSafeCatalogSequence } from "../lib/catalog.server";
 import { ensureReleaseCoreProductMetafields } from "../lib/shopify-products.server";
+import { ALBUM_PRODUCT_DEFAULT_STATES, normalizeAlbumProductDefaultState, normalizeTemplateSuffix, normalizeTrackProductDefaultState, TRACK_PRODUCT_DEFAULT_STATES } from "../lib/shopify-catalog.server";
 import { apiErrorResponse, publicError } from "../lib/http-security.server";
 
 const optionalText=(value)=>{const text=String(value||"").trim();return text||null;};
 const parseNextDesignation=(value)=>{const n=Number(value);if(!Number.isInteger(n)||n<1||n>99999)throw publicError("Next Designation Code must be a whole number between 1 and 99999.", { status: 400 });return n;};
-const parsePrice=(value)=>{const n=Number(value);if(!Number.isFinite(n)||n<0||n>9999)throw publicError("Default track price must be between 0 and 9999.", { status: 400 });return Math.round(n*100)/100;};
+const parsePrice=(value,label="Price")=>{const n=Number(value);if(!Number.isFinite(n)||n<0||n>9999)throw publicError(`${label} must be between 0 and 9999.`, { status: 400 });return Math.round(n*100)/100;};
 const parseLeadTime=(value)=>{const n=Number(value);if(!Number.isInteger(n)||n<0||n>365)throw publicError("Release-date lead time must be a whole number between 0 and 365 days.", { status: 400 });return n;};
 const parsePreviewDuration=(value)=>{const n=Number(value);if(!Number.isInteger(n)||n<0||n>3600)throw publicError("Audio preview duration must be between 0 and 3600 seconds. Use 0 for the full track.", { status: 400 });return n;};
 const parsePreviewBitrate=(value)=>{const n=Number(value);if(![128,160,192,256,320].includes(n))throw publicError("Choose a supported MP3 preview bitrate.", { status: 400 });return n;};
@@ -57,10 +58,26 @@ export const action=async({request})=>{
       const catalogIncludeYear=formData.get("catalogIncludeYear")==="on";
       const catalogSequenceWidth=Number(formData.get("catalogSequenceWidth")||4);
       const autoAssignCatalogNumber=formData.get("autoAssignCatalogNumber")==="on";
-      const defaultTrackPrice=parsePrice(formData.get("defaultTrackPrice")||"1.29");
+      const defaultTrackPrice=parsePrice(formData.get("defaultTrackPrice")||"1.29","Default track price");
+      const defaultAlbumPrice=parsePrice(formData.get("defaultAlbumPrice")||"9.99","Default Album/EP price");
+      const shopifyTrackProductDefaultState=normalizeTrackProductDefaultState(formData.get("shopifyTrackProductDefaultState"));
+      const shopifyAlbumProductDefaultState=normalizeAlbumProductDefaultState(formData.get("shopifyAlbumProductDefaultState"));
+      const shopifySingleTemplateSuffix=normalizeTemplateSuffix(formData.get("shopifySingleTemplateSuffix"));
+      const shopifyAlbumTemplateSuffix=normalizeTemplateSuffix(formData.get("shopifyAlbumTemplateSuffix"));
+      const shopifyArtistCollectionTemplateSuffix=normalizeTemplateSuffix(formData.get("shopifyArtistCollectionTemplateSuffix"));
       const generateShopifyAudioPreview=formData.get("generateShopifyAudioPreview")==="on";
       const audioPreviewDurationSeconds=parsePreviewDuration(formData.get("audioPreviewDurationSeconds")||"60");
       const audioPreviewBitrateKbps=parsePreviewBitrate(formData.get("audioPreviewBitrateKbps")||"192");
+      const customerDownloadsEnabled=formData.get("customerDownloadsEnabled")==="on";
+      const customerDownloadAutoGenerate=formData.get("customerDownloadAutoGenerate")==="on";
+      const customerDownloadMp3Enabled=formData.get("customerDownloadMp3Enabled")==="on";
+      const customerDownloadMp3BitrateKbps=Number(formData.get("customerDownloadMp3BitrateKbps")||320);
+      const customerDownloadFlacEnabled=formData.get("customerDownloadFlacEnabled")==="on";
+      const customerDownloadFlacCompressionLevel=Number(formData.get("customerDownloadFlacCompressionLevel")||5);
+      const customerDownloadEmbedArtwork=formData.get("customerDownloadEmbedArtwork")==="on";
+      const customerDownloadEmbedLyrics=formData.get("customerDownloadEmbedLyrics")==="on";
+      const customerDownloadEmbedCredits=formData.get("customerDownloadEmbedCredits")==="on";
+      const customerDownloadEmbedArtistLinks=formData.get("customerDownloadEmbedArtistLinks")==="on";
       const lockArtistNameEditing=!formData.has("lockArtistNameEditing")||formData.get("lockArtistNameEditing")==="on";
       const lockContributorIdentityAfterSubmission=!formData.has("lockContributorIdentityAfterSubmission")||formData.get("lockContributorIdentityAfterSubmission")==="on";
 
@@ -71,8 +88,13 @@ export const action=async({request})=>{
       if(!ISRC_MODES.includes(isrcMode))return Response.json({ok:false,error:"Choose a valid ISRC assignment mode."},{status:400});
       if(defaultGenre&&!GENRES.includes(defaultGenre))return Response.json({ok:false,error:"Choose a valid default genre."},{status:400});
       if(defaultLanguage&&!LANGUAGES.includes(defaultLanguage))return Response.json({ok:false,error:"Choose a valid default language."},{status:400});
+      if(customerDownloadsEnabled&&!customerDownloadMp3Enabled&&!customerDownloadFlacEnabled)return Response.json({ok:false,error:"Enable MP3, FLAC, or disable customer music downloads."},{status:400});
+      if(![128,160,192,256,320].includes(customerDownloadMp3BitrateKbps))return Response.json({ok:false,error:"Choose a valid customer MP3 bitrate."},{status:400});
+      if(!Number.isInteger(customerDownloadFlacCompressionLevel)||customerDownloadFlacCompressionLevel<0||customerDownloadFlacCompressionLevel>8)return Response.json({ok:false,error:"FLAC compression level must be between 0 and 8."},{status:400});
       if(!UPC_MODES.includes(upcMode))return Response.json({ok:false,error:"Choose a valid UPC handling mode."},{status:400});
       if(!CATALOG_MODES.includes(catalogMode))return Response.json({ok:false,error:"Choose a valid catalog number mode."},{status:400});
+      if(!TRACK_PRODUCT_DEFAULT_STATES.includes(shopifyTrackProductDefaultState))return Response.json({ok:false,error:"Choose a valid Shopify track product default state."},{status:400});
+      if(!ALBUM_PRODUCT_DEFAULT_STATES.includes(shopifyAlbumProductDefaultState))return Response.json({ok:false,error:"Choose a valid Shopify Album/EP product default state."},{status:400});
       if(!Number.isInteger(catalogSequenceWidth)||catalogSequenceWidth<2||catalogSequenceWidth>8)return Response.json({ok:false,error:"Catalog sequence width must be between 2 and 8 digits."},{status:400});
       if(catalogMode==="AUTO"&&!catalogPrefix)return Response.json({ok:false,error:"Enter a catalog prefix when automatic catalog numbers are enabled."},{status:400});
 
@@ -86,7 +108,7 @@ export const action=async({request})=>{
       if(catalogMode==="AUTO"&&catalogPrefix){const year=new Date().getFullYear();const requestedNext=Number(formData.get("nextCatalogSequence")||"1");const max=(10**catalogSequenceWidth)-1;if(!Number.isInteger(requestedNext)||requestedNext<1||requestedNext>max)return Response.json({ok:false,error:`Next catalog sequence must be between 1 and ${max}.`},{status:400});const temp={catalogPrefix,catalogIncludeYear,catalogSequenceWidth};const safeMinimum=await minimumSafeCatalogSequence(session.shop,temp,year);if(requestedNext<safeMinimum)return Response.json({ok:false,error:`The next catalog sequence must be ${safeMinimum} or higher because lower numbers are already assigned.`},{status:400});catalogSequencePayload={yearKey:catalogIncludeYear?year:0,requestedNext};}
 
       await db.$transaction(async(tx)=>{
-        await tx.appSettings.upsert({where:{shop:session.shop},create:{shop:session.shop,countryCode:countryCode||null,registrantCode:registrantCode||null,isrcMode,autoAssignIsrc,defaultLabelName,defaultCopyrightHolder,defaultGenre,defaultLanguage,requireLyrics,requirePublishing,requireSplitSheet,requireCredits,requireIsrc,requireTrackLanguage,releaseLeadTimeEnabled,releaseLeadTimeDays,upcMode,gs1CompanyPrefix:normalizedPrefix,catalogMode,catalogPrefix:catalogPrefix||null,catalogIncludeYear,catalogSequenceWidth,autoAssignCatalogNumber,defaultTrackPrice,generateShopifyAudioPreview,audioPreviewDurationSeconds,audioPreviewBitrateKbps,lockArtistNameEditing,lockContributorIdentityAfterSubmission},update:{countryCode:countryCode||null,registrantCode:registrantCode||null,isrcMode,autoAssignIsrc,defaultLabelName,defaultCopyrightHolder,defaultGenre,defaultLanguage,requireLyrics,requirePublishing,requireSplitSheet,requireCredits,requireIsrc,requireTrackLanguage,releaseLeadTimeEnabled,releaseLeadTimeDays,upcMode,gs1CompanyPrefix:normalizedPrefix,catalogMode,catalogPrefix:catalogPrefix||null,catalogIncludeYear,catalogSequenceWidth,autoAssignCatalogNumber,defaultTrackPrice,generateShopifyAudioPreview,audioPreviewDurationSeconds,audioPreviewBitrateKbps,lockArtistNameEditing,lockContributorIdentityAfterSubmission}});
+        await tx.appSettings.upsert({where:{shop:session.shop},create:{shop:session.shop,countryCode:countryCode||null,registrantCode:registrantCode||null,isrcMode,autoAssignIsrc,defaultLabelName,defaultCopyrightHolder,defaultGenre,defaultLanguage,requireLyrics,requirePublishing,requireSplitSheet,requireCredits,requireIsrc,requireTrackLanguage,releaseLeadTimeEnabled,releaseLeadTimeDays,upcMode,gs1CompanyPrefix:normalizedPrefix,catalogMode,catalogPrefix:catalogPrefix||null,catalogIncludeYear,catalogSequenceWidth,autoAssignCatalogNumber,defaultTrackPrice,defaultAlbumPrice,shopifyTrackProductDefaultState,shopifyAlbumProductDefaultState,shopifySingleTemplateSuffix,shopifyAlbumTemplateSuffix,shopifyArtistCollectionTemplateSuffix,customerDownloadsEnabled,customerDownloadAutoGenerate,customerDownloadMp3Enabled,customerDownloadMp3BitrateKbps,customerDownloadFlacEnabled,customerDownloadFlacCompressionLevel,customerDownloadEmbedArtwork,customerDownloadEmbedLyrics,customerDownloadEmbedCredits,customerDownloadEmbedArtistLinks,generateShopifyAudioPreview,audioPreviewDurationSeconds,audioPreviewBitrateKbps,lockArtistNameEditing,lockContributorIdentityAfterSubmission},update:{countryCode:countryCode||null,registrantCode:registrantCode||null,isrcMode,autoAssignIsrc,defaultLabelName,defaultCopyrightHolder,defaultGenre,defaultLanguage,requireLyrics,requirePublishing,requireSplitSheet,requireCredits,requireIsrc,requireTrackLanguage,releaseLeadTimeEnabled,releaseLeadTimeDays,upcMode,gs1CompanyPrefix:normalizedPrefix,catalogMode,catalogPrefix:catalogPrefix||null,catalogIncludeYear,catalogSequenceWidth,autoAssignCatalogNumber,defaultTrackPrice,defaultAlbumPrice,shopifyTrackProductDefaultState,shopifyAlbumProductDefaultState,shopifySingleTemplateSuffix,shopifyAlbumTemplateSuffix,shopifyArtistCollectionTemplateSuffix,customerDownloadsEnabled,customerDownloadAutoGenerate,customerDownloadMp3Enabled,customerDownloadMp3BitrateKbps,customerDownloadFlacEnabled,customerDownloadFlacCompressionLevel,customerDownloadEmbedArtwork,customerDownloadEmbedLyrics,customerDownloadEmbedCredits,customerDownloadEmbedArtistLinks,generateShopifyAudioPreview,audioPreviewDurationSeconds,audioPreviewBitrateKbps,lockArtistNameEditing,lockContributorIdentityAfterSubmission}});
         if(isrcSequencePayload)await tx.isrcSequence.upsert({where:{shop_countryCode_registrantCode_year:{shop:session.shop,countryCode,registrantCode,year:isrcSequencePayload.year}},create:{shop:session.shop,countryCode,registrantCode,year:isrcSequencePayload.year,nextDesignation:isrcSequencePayload.requestedNext},update:{nextDesignation:isrcSequencePayload.requestedNext}});
         if(upcSequencePayload&&normalizedPrefix)await tx.upcSequence.upsert({where:{shop_companyPrefix:{shop:session.shop,companyPrefix:normalizedPrefix}},create:{shop:session.shop,companyPrefix:normalizedPrefix,nextItemReference:upcSequencePayload.requestedNext},update:{nextItemReference:upcSequencePayload.requestedNext}});
         if(catalogSequencePayload&&catalogPrefix)await tx.catalogSequence.upsert({where:{shop_prefix_yearKey:{shop:session.shop,prefix:catalogPrefix,yearKey:catalogSequencePayload.yearKey}},create:{shop:session.shop,prefix:catalogPrefix,yearKey:catalogSequencePayload.yearKey,nextSequence:catalogSequencePayload.requestedNext},update:{nextSequence:catalogSequencePayload.requestedNext}});

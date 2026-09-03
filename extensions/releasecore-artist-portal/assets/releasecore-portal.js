@@ -350,6 +350,68 @@
       </section>`;
     }
 
+    function portalReleaseTimeParts(value) {
+
+      const match = String(value || '').match(/^(\\d{2}):(\\d{2})$/);
+
+      if (!match) return { hour:'12', minute:'00', meridiem:'AM' };
+
+      const hour24 = Number(match[1]);
+
+      return {
+
+        hour:String(hour24 % 12 || 12),
+
+        minute:match[2],
+
+        meridiem:hour24 >= 12 ? 'PM' : 'AM',
+
+      };
+
+    }
+
+
+    function releaseTimelineMarkup(release, editable) {
+
+      const disabled = editable ? '' : ' disabled';
+
+      const checked = (value) => value ? ' checked' : '';
+
+      const selected = (value, current) => value === current ? ' selected' : '';
+
+      const time = portalReleaseTimeParts(release.releaseTime);
+
+      const partners = ['Apple Music','Spotify','Amazon Music','YouTube Music','TIDAL','Deezer','Beatport','Traxsource','Audiomack','Other / Coordinated partner'];
+
+      return `
+
+        <div class="rc-field rc-field-full"><span class="rc-label">Release timeline</span><span class="rc-help">Availability, pre-order, release-time and partner exclusivity options.</span></div>
+
+        <label class="rc-field"><span class="rc-label">Availability</span><select class="rc-select" name="availability"${disabled}><option value="ALL_CURRENT_FUTURE"${selected('ALL_CURRENT_FUTURE', release.availability || 'ALL_CURRENT_FUTURE')}>All Current & Future Platforms</option><option value="CURRENT_ONLY"${selected('CURRENT_ONLY', release.availability)}>Current Platforms Only</option></select></label>
+
+        <label class="rc-check"><input type="checkbox" name="preOrderEnabled" value="true"${checked(release.preOrderEnabled)}${disabled}><span><strong>Enable Pre-Order Window?</strong><br>Allow pre-purchase before general release.</span></label>
+
+        <label class="rc-field"><span class="rc-label">Pre-Order Date</span><input class="rc-input rc-date-input" type="date" name="preOrderDate" value="${esc(dateInput(release.preOrderDate))}"${disabled}><span class="rc-help">Must be before the public release date.</span></label>
+
+        <label class="rc-check"><input type="checkbox" name="preOrderAudioPreviews" value="true"${checked(release.preOrderAudioPreviews)}${disabled}><span><strong>Pre-Order Audio Previews</strong><br>Allow preview audio during the pre-order window.</span></label>
+
+        <label class="rc-check"><input type="checkbox" name="releaseTimeEnabled" value="true"${checked(release.releaseTimeEnabled)}${disabled}><span><strong>Enable Release Time?</strong><br>Choose a specific launch time.</span></label>
+
+        <div class="rc-field"><span class="rc-label">Release Time</span><div class="rc-inline-row"><select class="rc-select" name="releaseTimeHour"${disabled}>${Array.from({length:12},(_,i)=>String(i+1)).map((value)=>`<option value="${value}"${selected(value,time.hour)}>${value}</option>`).join('')}</select><select class="rc-select" name="releaseTimeMinute"${disabled}>${['00','05','10','15','20','25','30','35','40','45','50','55'].map((value)=>`<option value="${value}"${selected(value,time.minute)}>${value}</option>`).join('')}</select><select class="rc-select" name="releaseTimeMeridiem"${disabled}><option value="AM"${selected('AM',time.meridiem)}>AM</option><option value="PM"${selected('PM',time.meridiem)}>PM</option></select></div></div>
+
+        <label class="rc-check"><input type="checkbox" name="synchronousReleaseUnlocking" value="true"${checked(release.synchronousReleaseUnlocking)}${disabled}><span><strong>Synchronous Release Unlocking</strong><br>Unlock globally at the selected time instead of territory-local midnight.</span></label>
+
+        <label class="rc-check"><input type="checkbox" name="exclusiveEnabled" value="true"${checked(release.exclusiveEnabled)}${disabled}><span><strong>Enable Exclusive Window?</strong><br>Give one partner early availability.</span></label>
+
+        <label class="rc-field"><span class="rc-label">Exclusive Partner</span><select class="rc-select" name="exclusivePartner"${disabled}><option value="">Select exclusive partner</option>${partners.map((value)=>`<option value="${esc(value)}"${selected(value,release.exclusivePartner)}>${esc(value)}</option>`).join('')}</select></label>
+
+        <label class="rc-field"><span class="rc-label">Exclusivity Period</span><select class="rc-select" name="exclusivePeriodWeeks"${disabled}><option value="">Select period</option>${[2,4,6,8].map((weeks)=>`<option value="${weeks}"${String(weeks)===String(release.exclusivePeriodWeeks||'')?' selected':''}>${weeks} Weeks</option>`).join('')}</select></label>
+
+      `;
+
+    }
+
+
     function renderWorkspace() {
       const release = state.detail;
       const editable = Boolean(release.editable);
@@ -371,9 +433,11 @@
                 <div class="rc-form-grid">
                   <label class="rc-field rc-field-full"><span class="rc-label">Release title</span><input class="rc-input" name="title" required value="${esc(release.title)}" ${editable ? '' : 'disabled'}></label>
                   <label class="rc-field"><span class="rc-label">Primary genre</span><select class="rc-select" name="primaryGenre" ${editable ? '' : 'disabled'}><option value="">Choose genre</option>${optionList(state.options?.genres, release.primaryGenre)}</select></label>
-                  <label class="rc-field"><span class="rc-label">Release date</span><input class="rc-input rc-date-input" type="date" name="releaseDate" value="${esc(dateInput(release.releaseDate))}"${editable && release.releaseDatePolicy?.enabled && release.releaseDatePolicy?.minDate ? ` min="${esc(release.releaseDatePolicy.minDate)}"` : ''} ${editable ? '' : 'disabled'}>${release.releaseDatePolicy?.enabled ? `<span class="rc-help">Minimum ${esc(release.releaseDatePolicy.days)}-day lead time · earliest available ${esc(formatDateOnly(release.releaseDatePolicy.minDate))}</span>` : '<span class="rc-help">Choose the desired public release date.</span>'}</label>
+                  <label class="rc-field"><span class="rc-label">Release date</span><input class="rc-input rc-date-input" type="date" name="releaseDate" value="${esc(dateInput(release.releaseDate))}"${editable && release.releaseDatePolicy?.enabled && release.releaseDatePolicy?.minDate ? ` min="${esc(release.releaseDatePolicy.minDate)}"` : ''} ${editable ? '' : 'disabled'}>${release.releaseDatePolicy?.enabled ? `<span class="rc-help">Minimum ${esc(release.releaseDatePolicy.days)}-day lead time · earliest available ${esc(formatDateOnly(release.releaseDatePolicy.minDate))}</span>` : '<span class="rc-help">Choose the desired public release date.</span>'}</label>${releaseTimelineMarkup(release, editable)}
                   <div class="rc-field"><span class="rc-label">UPC</span><div class="rc-input" style="display:flex;align-items:center;">${esc(release.upc || 'Assigned during distribution')}</div></div>
                   <div class="rc-field"><span class="rc-label">Catalog number</span><div class="rc-input" style="display:flex;align-items:center;">${esc(release.catalogNumber || 'Assigned during distribution')}</div></div>
+                  ${release.preSaveUrl ? `<div class="rc-field"><span class="rc-label">Pre-save link</span><div class="rc-input" style="display:flex;align-items:center;"><a href="${esc(release.preSaveUrl)}" target="_blank" rel="noopener">Open pre-save link</a></div></div>` : ''}
+                  ${release.streamingUrl ? `<div class="rc-field"><span class="rc-label">Streaming link</span><div class="rc-input" style="display:flex;align-items:center;"><a href="${esc(release.streamingUrl)}" target="_blank" rel="noopener">Open streaming link</a></div></div>` : ''}
                 </div>
                 ${editable ? `<div class="rc-actions" style="justify-content:flex-end;margin-top:12px;"><button class="rc-btn" type="submit">Save release details</button></div>` : ''}
                 <div class="rc-message rc-hidden" data-form-message></div>

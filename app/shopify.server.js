@@ -7,6 +7,26 @@ import {
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
 
+function releaseCoreDistribution() {
+  const value = String(
+    process.env.RELEASECORE_APP_DISTRIBUTION || "app_store",
+  )
+    .trim()
+    .toLowerCase();
+
+  if (value === "single_merchant") {
+    return AppDistribution.SingleMerchant;
+  }
+
+  if (value === "app_store") {
+    return AppDistribution.AppStore;
+  }
+
+  throw new Error(
+    `Unsupported RELEASECORE_APP_DISTRIBUTION "${value}". Use app_store or single_merchant.`,
+  );
+}
+
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
@@ -15,7 +35,7 @@ const shopify = shopifyApp({
   appUrl: process.env.SHOPIFY_APP_URL || "",
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
-  distribution: AppDistribution.AppStore,
+  distribution: releaseCoreDistribution(),
   future: {
     expiringOfflineAccessTokens: true,
   },

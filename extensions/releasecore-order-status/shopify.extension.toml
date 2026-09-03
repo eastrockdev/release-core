@@ -1,0 +1,22 @@
+api_version = "2026-07"
+
+[[extensions]]
+type = "ui_extension"
+name = "ReleaseCore Digital music"
+handle = "releasecore-order-status"
+uid = "7bde0e4a-94c1-863b-6ebe-7fb73ab3681528993964"
+
+[[extensions.targeting]]
+target = "customer-account.order-status.block.render"
+module = "./src/OrderDownloads.jsx"
+
+[extensions.capabilities]
+network_access = true
+
+[extensions.settings]
+
+[[extensions.settings.fields]]
+key = "api_base_url"
+type = "single_line_text_field"
+name = "ReleaseCore backend URL"
+description = "Leave blank in production. During local development, enter the current Shopify CLI HTTPS tunnel URL so the Order Status block can reach your local ReleaseCore server."

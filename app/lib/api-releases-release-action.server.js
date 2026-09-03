@@ -8,6 +8,7 @@ import { dispatchLatestEvent } from "../lib/automations.server";
 import { isrcAssignmentMode } from "../lib/isrc";
 import { apiErrorResponse, publicError } from "./http-security.server";
 import { findShopArtist, findShopContributor, findShopRelease } from "./tenant-db.server";
+import { parseReleaseTimelineFormData } from "./release-timeline.server";
 
 async function getOwnedRelease(id, shop, include = {}) {
   return findShopRelease(shop, id, { include });
@@ -185,7 +186,22 @@ export const action = async ({ request, params }) => {
       const primaryGenre = String(formData.get("primaryGenre") || "").trim() || null;
       const dateValue = String(formData.get("releaseDate") || "").trim();
       const releaseDate = dateValue ? new Date(`${dateValue}T12:00:00.000Z`) : null;
-      await db.release.update({ where: { id: release.id }, data: { title, primaryGenre, releaseDate } });
+      const timeline = parseReleaseTimelineFormData(formData, {
+        releaseDate,
+      });
+      const preSaveUrl = String(formData.get("preSaveUrl") || "").trim() || null;
+      const streamingUrl = String(formData.get("streamingUrl") || "").trim() || null;
+      for (const [label, value] of [["Pre-save URL", preSaveUrl], ["Streaming URL", streamingUrl]]) {
+        if (value) {
+          try {
+            const parsed = new URL(value);
+            if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("unsupported protocol");
+          } catch {
+            return Response.json({ ok: false, error: `${label} must be a valid http or https URL.` }, { status: 400 });
+          }
+        }
+      }
+      await db.release.update({ where: { id: release.id }, data: { ...timeline, title, primaryGenre, releaseDate, preSaveUrl, streamingUrl } });
       return Response.json({ ok: true, message: "Release details saved." });
     }
 

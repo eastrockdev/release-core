@@ -1,0 +1,16 @@
+api_version = "2026-01"
+
+[[extensions]]
+name = "ReleaseCore bundle"
+handle = "releasecore-bundle-configuration"
+uid = "0c77dc76-25b0-646a-d93f-13dd1403690c27d0b086"
+type = "ui_extension"
+
+# Both Product Configuration targets are required for bundle apps.
+[[extensions.targeting]]
+module = "./src/ProductDetailsConfigurationExtension.jsx"
+target = "admin.product-details.configuration.render"
+
+[[extensions.targeting]]
+module = "./src/ProductVariantDetailsConfigurationExtension.jsx"
+target = "admin.product-variant-details.configuration.render"

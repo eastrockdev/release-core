@@ -1,5 +1,30 @@
 # ReleaseCore changelog
 
+## M12 — Shopify catalog publishing
+
+### M12.2 — Album/EP products and Shopify fixed bundles
+
+- Added release-level Album/EP Shopify products built from the already-linked track products using Shopify product fixed bundles.
+- Added asynchronous bundle create/update operation persistence and recovery so long-running Shopify bundle jobs can be safely resumed without creating duplicate parent products.
+- Added Album/EP price and default publication settings, Album/EP theme-template application on creation, release-product publication controls, and per-release bundle state in Distribution.
+- Added release-level music metadata, track list/count, identifiers, URLs, public credits, native Music genre, artwork, SKU, and UPC synchronization to the parent product.
+- Added a deterministic single-variant component guard and a standard Album/EP product fallback when a release exceeds Shopify's 30-component fixed-bundle limit.
+
+### M12.1.2 — Music genre + merchant credit preservation hotfix
+
+- Corrected Shopify Music genre synchronization to use the native `shopify.music-genre` `list.metaobject_reference` definition and taxonomy-backed Music genre metaobjects.
+- Added read scopes for Shopify metaobject definitions/entries used by native Music genre resolution.
+- Changed individualized credit synchronization to preserve merchant-added songwriter/composer/producer/engineer/designer values while ReleaseCore continues managing only the values sourced from its contributor credits.
+
+### M12.1 — Track product hardening and catalog foundations
+
+- Added explicit Shopify Online Store publication lifecycle controls and a merchant-configurable default for newly created track products.
+- Added release pre-save and streaming URLs for admin entry, Artist Portal visibility, Shopify sync, and Shopify-product import.
+- Reduced public credits to name/role and added separate storefront-readable songwriter, composer, producer, recording/mixing/mastering engineer, and cover-art designer metafields.
+- Constrained ReleaseCore product metafield definitions to Shopify's Digital Music Downloads category and added automatic repair for older global definitions.
+- Added Shopify Music genre taxonomy matching, additive tag synchronization, stale metafield deletion, HTML-safe descriptions, and earlier Shopify product-link persistence.
+- Added separate single-track and Album/EP theme-template defaults, publication scopes, per-track Shopify publication status/actions, and `check:catalog`.
+
 ## M11.6 — App Store compliance
 
 ### Phase 3 — Production verification and review closure

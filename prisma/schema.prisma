@@ -47,9 +47,22 @@ model Release {
   ownerCustomerId             String?
   shopifyReleaseProductId     String?                @unique
   shopifyReleaseProductHandle String?
+  shopifyReleaseBundleOperationId String?
   artistName                  String? // legacy/display cache; normalized artists live in ReleaseArtist
   primaryGenre                String?
   releaseDate                 DateTime?
+  availability                  String   @default("ALL_CURRENT_FUTURE")
+  preOrderEnabled               Boolean  @default(false)
+  preOrderDate                  DateTime?
+  preOrderAudioPreviews         Boolean  @default(false)
+  releaseTimeEnabled            Boolean  @default(false)
+  releaseTime                   String?
+  synchronousReleaseUnlocking   Boolean  @default(false)
+  exclusiveEnabled              Boolean  @default(false)
+  exclusivePartner              String?
+  exclusivePeriodWeeks          Int?
+  preSaveUrl                  String?
+  streamingUrl                String?
   submittedAt                 DateTime?
   lastSubmittedAt             DateTime?
   reviewStartedAt             DateTime?
@@ -106,6 +119,10 @@ model Artist {
   websiteUrl         String?
   imageUrl           String?
   imageFileId        String?
+  shopifyCollectionId        String?   @unique
+  shopifyCollectionHandle    String?
+  shopifyCollectionSourceId  String?
+  shopifyCollectionSyncedAt  DateTime?
   biography          String?
   pro                String?
   ipi                String?
@@ -248,6 +265,7 @@ model ReleaseFile {
   mimeType        String?
   sizeBytes       Int?
   status          String   @default("PENDING")
+  derivativeFingerprint String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   release         Release  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
@@ -255,6 +273,7 @@ model ReleaseFile {
 
   @@index([releaseId])
   @@index([trackId])
+  @@index([trackId, kind])
 }
 
 model SubmissionEvent {
@@ -338,6 +357,23 @@ model AppSettings {
   catalogSequenceWidth                   Int     @default(4)
   autoAssignCatalogNumber                Boolean @default(true)
   defaultTrackPrice                      Float   @default(1.29)
+  defaultAlbumPrice                      Float   @default(9.99)
+  shopifyTrackProductDefaultState        String  @default("DRAFT")
+  shopifyAlbumProductDefaultState        String  @default("DRAFT")
+  shopifySingleTemplateSuffix            String?
+  shopifyAlbumTemplateSuffix             String?
+  shopifyArtistCollectionTemplateSuffix  String?
+  customerDownloadsEnabled                 Boolean @default(true)
+  customerDownloadAutoGenerate             Boolean @default(true)
+  customerDownloadMp3Enabled               Boolean @default(true)
+  customerDownloadMp3BitrateKbps           Int     @default(320)
+  customerDownloadFlacEnabled              Boolean @default(true)
+  customerDownloadFlacCompressionLevel     Int     @default(5)
+  customerDownloadEmbedArtwork             Boolean @default(true)
+  customerDownloadEmbedLyrics              Boolean @default(true)
+  customerDownloadEmbedCredits             Boolean @default(true)
+  customerDownloadEmbedArtistLinks         Boolean @default(true)
+
   generateShopifyAudioPreview            Boolean @default(false)
   audioPreviewDurationSeconds            Int     @default(60)
   audioPreviewBitrateKbps                Int     @default(192)
@@ -435,4 +471,79 @@ model PrivacyRequest {
   @@unique([shop, topic, shopifyRequestId])
   @@index([shop, status, requestedAt])
   @@index([shop, customerId])
+}
+
+model CommerceOrder {
+  id              String   @id @default(cuid())
+  shop            String
+  shopifyOrderId  String
+  shopifyOrderGid String?
+  orderName       String?
+  customerId      String?
+  currency        String?
+  status          String   @default("PAID")
+  paidAt          DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  entitlements CommerceEntitlement[]
+
+  @@unique([shop, shopifyOrderId])
+  @@index([shop, customerId])
+  @@index([shop, createdAt])
+}
+
+model CommerceEntitlement {
+  id                   String   @id @default(cuid())
+  shop                 String
+  commerceOrderId      String
+  shopifyOrderId       String
+  shopifyLineItemId    String
+  salesLineItemGroupId String?
+  customerId           String?
+  trackId              String
+  releaseId            String
+  sourceProductId      String?
+  sourceKind           String   @default("TRACK")
+  quantity             Int      @default(1)
+  refundedQuantity     Int      @default(0)
+  status               String   @default("ACTIVE")
+  revokedAt            DateTime?
+  revokeReason         String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  order     CommerceOrder      @relation(fields: [commerceOrderId], references: [id], onDelete: Cascade)
+  downloads CommerceDownload[]
+
+  @@unique([shop, shopifyOrderId, shopifyLineItemId, trackId])
+  @@index([shop, customerId, status])
+  @@index([shop, shopifyOrderId, status])
+  @@index([shop, trackId])
+}
+
+model CommerceDownload {
+  id            String   @id @default(cuid())
+  shop          String
+  entitlementId String
+  customerId    String?
+  format        String?
+  releaseFileId String?
+  downloadedAt  DateTime @default(now())
+
+  entitlement CommerceEntitlement @relation(fields: [entitlementId], references: [id], onDelete: Cascade)
+
+  @@index([shop, entitlementId])
+  @@index([shop, customerId])
+}
+
+model CommerceWebhookEvent {
+  id          String   @id @default(cuid())
+  shop        String
+  topic       String
+  resourceId  String
+  processedAt DateTime @default(now())
+
+  @@unique([shop, topic, resourceId])
 }

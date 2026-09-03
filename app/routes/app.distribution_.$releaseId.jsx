@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLoaderData, useNavigate, useRevalidator } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -23,8 +23,9 @@ import { loadDistributionWorkspace } from "../lib/distribution-workspace.server"
 import { revalidateInPlace } from "../lib/revalidate-in-place";
 
 export const loader = async ({ request, params }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const data = await loadDistributionWorkspace({
+    admin,
     shop: session.shop,
     releaseId: params.releaseId,
   });
@@ -61,9 +62,38 @@ function distributionActionScope(formData) {
   if (["assign-catalog", "save-manual-catalog"].includes(intent)) return "catalog";
   if (intent === "save-manual-isrc") return `track:${String(formData.get("trackId") || "")}`;
   if (intent === "generate-audio-previews") return "previews";
-  if (intent === "create-shopify-products") return "products";
+  if (["create-shopify-products", "publish-shopify-product", "schedule-shopify-product", "unpublish-shopify-product"].includes(intent)) return "products";
+  if (["sync-shopify-release-product", "publish-shopify-release-product", "schedule-shopify-release-product", "unpublish-shopify-release-product"].includes(intent)) return "release-product";
   if (["update-distribution", "return-for-corrections"].includes(intent)) return "status";
   return "distribution";
+}
+
+function releaseProductPublicationLabel(release) {
+  if (!release.shopifyReleaseProductId) {
+    return release.shopifyReleaseBundleOperationId ? "Bundle operation processing" : "Not created";
+  }
+  const state = release.shopifyReleaseState;
+  if (!state) return "Shopify link needs repair";
+  if (state.status === "DRAFT") return "Draft";
+  if (state.onlineStore?.scheduled) {
+    const date = state.onlineStore.publishDate ? new Date(state.onlineStore.publishDate).toLocaleDateString() : "release date";
+    return `Scheduled ${date}`;
+  }
+  if (state.onlineStore?.isPublished) return "Published";
+  return state.status === "ACTIVE" ? "Active / unpublished" : state.status;
+}
+
+function shopifyPublicationLabel(track) {
+  const state = track.shopifyState;
+  if (!track.shopifyProductId) return "Not created";
+  if (!state) return "Shopify link needs repair";
+  if (state.status === "DRAFT") return "Draft";
+  if (state.onlineStore?.scheduled) {
+    const date = state.onlineStore.publishDate ? new Date(state.onlineStore.publishDate).toLocaleDateString() : "release date";
+    return `Scheduled ${date}`;
+  }
+  if (state.onlineStore?.isPublished) return "Published";
+  return state.status === "ACTIVE" ? "Active / unpublished" : state.status;
 }
 
 export default function DistributionWorkspace() {
@@ -74,10 +104,56 @@ export default function DistributionWorkspace() {
   const [busy, setBusy] = useState(false);
   const [busyAction, setBusyAction] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [bundleReadiness, setBundleReadiness] = useState(null);
   const [price, setPrice] = useState(
     String(settings?.defaultTrackPrice ?? 1.29),
   );
+  const [releasePrice, setReleasePrice] = useState(
+    String(settings?.defaultAlbumPrice ?? 9.99),
+  );
   const createdCount = release.tracks.filter((t) => t.shopifyProductId).length;
+  const isAlbumOrEp = ["ALBUM", "EP"].includes(String(release.type || "").toUpperCase());
+  useEffect(() => {
+    let active = true;
+
+    if (!isAlbumOrEp || release.tracks.length > 30) {
+      setBundleReadiness(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    const formData = new FormData();
+    authenticatedPost(shopify, "/api/bundle-readiness", formData)
+      .then((result) => {
+        if (active) {
+          setBundleReadiness(
+            result?.readiness || {
+              eligibleForBundles: false,
+              sellsBundles: false,
+              ineligibilityReason: "Shopify did not return bundle readiness.",
+            },
+          );
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setBundleReadiness({
+            eligibleForBundles: false,
+            sellsBundles: false,
+            ineligibilityReason:
+              error instanceof Error
+                ? error.message
+                : "ReleaseCore could not check Shopify bundle readiness.",
+          });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isAlbumOrEp, release.tracks.length, shopify]);
+
   const previewCount = release.tracks.filter((t) =>
     (t.files || []).some((f) => f.kind === "PREVIEW_MP3"),
   ).length;
@@ -99,6 +175,13 @@ export default function DistributionWorkspace() {
       "assign-upc": "Assigning UPC…",
       "assign-catalog": "Assigning catalog number…",
       "create-shopify-products": "Syncing Shopify products…",
+      "sync-shopify-release-product": "Syncing Album/EP storefront product and bundle components…",
+      "publish-shopify-release-product": "Publishing Album/EP product to the Online Store…",
+      "schedule-shopify-release-product": "Scheduling Album/EP product publication…",
+      "unpublish-shopify-release-product": "Removing Album/EP product from the Online Store…",
+      "publish-shopify-product": "Publishing track to the Online Store…",
+      "schedule-shopify-product": "Scheduling Online Store publication…",
+      "unpublish-shopify-product": "Removing track from the Online Store…",
       "save-manual-upc": "Saving UPC…",
       "save-manual-catalog": "Saving catalog number…",
       "save-manual-isrc": "Validating and assigning ISRC…",
@@ -563,8 +646,8 @@ export default function DistributionWorkspace() {
       <CollapsibleSection
         icon="product"
         title="Shopify products"
-        description="Create or synchronize the storefront product connected to each track."
-        summary={`${createdCount}/${release.tracks.length} linked`}
+        description="Create or synchronize individual track products and the release-level Album/EP storefront product."
+        summary={!isAlbumOrEp ? `${createdCount}/${release.tracks.length} linked` : `${createdCount}/${release.tracks.length} tracks · ${release.shopifyReleaseProductId ? "release product linked" : "release product pending"}`}
       >
         <ActionFeedback feedback={feedbackFor("products")} />
         <div className="rc-distribution-shopify-box" style={styles.shopifyBox}>
@@ -603,9 +686,137 @@ export default function DistributionWorkspace() {
           </button>
         </div>
         <div style={styles.muted}>
-          ReleaseCore applies the artwork, artist, price, identifiers, and
-          public music metadata. Existing products update in place.
+          ReleaseCore applies the artwork, artist, price, identifiers, category-scoped music metadata, and Shopify Music genre. Existing products update in place without overwriting merchant-added tags or publication state.
         </div>
+        <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
+          {release.tracks.map((track) => (
+            <div key={track.id} className="rc-directory-row" style={{ alignItems: "center" }}>
+              <div style={{ minWidth: 0 }}>
+                <strong>{track.position}. {track.title}</strong>
+                <div className="rc-directory-row__meta">
+                  {track.shopifyProductId ? shopifyPublicationLabel(track) : "No Shopify product linked"}
+                  {track.shopifyState?.templateSuffix ? ` · template ${track.shopifyState.templateSuffix}` : ""}
+                </div>
+              </div>
+              <div className="rc-directory-row__aside" style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                {track.shopifyProductId ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="rc-button rc-button--tertiary"
+                      onClick={() => { const f = new FormData(); f.set("intent", "publish-shopify-product"); f.set("trackId", track.id); mutate(f); }}
+                    >Publish now</button>
+                    <button
+                      type="button"
+                      disabled={busy || !release.releaseDate}
+                      className="rc-button rc-button--tertiary"
+                      onClick={() => { const f = new FormData(); f.set("intent", "schedule-shopify-product"); f.set("trackId", track.id); mutate(f); }}
+                    >Schedule</button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="rc-button rc-button--tertiary"
+                      onClick={() => { const f = new FormData(); f.set("intent", "unpublish-shopify-product"); f.set("trackId", track.id); mutate(f); }}
+                    >Unpublish</button>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+        {isAlbumOrEp ? (
+          <div style={{ marginTop: 18, paddingTop: 18, borderTop: "1px solid rgba(0,0,0,.08)" }}>
+            <ActionFeedback feedback={feedbackFor("release-product")} />
+            <div className="rc-distribution-shopify-box" style={styles.shopifyBox}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={styles.inputLabel}>{release.type === "EP" ? "EP" : "Album"} storefront product</div>
+                <div style={{ fontWeight: 760, marginTop: 3 }}>{releaseProductPublicationLabel(release)}</div>
+                <div style={styles.muted}>
+                  {release.shopifyReleaseState?.isBundle
+                    ? `Shopify fixed bundle · ${release.shopifyReleaseState.componentCount}/${release.tracks.length} components linked`
+                    : release.tracks.length > 30
+                      ? `Standard product fallback · Shopify fixed bundles support up to 30 components`
+                      : release.shopifyReleaseProductId
+                        ? "Standard product · component relationships are not managed as a fixed bundle"
+                        : `Creates a Shopify fixed bundle from all ${release.tracks.length} track products`}
+                  {release.shopifyReleaseState?.templateSuffix ? ` · template ${release.shopifyReleaseState.templateSuffix}` : ""}
+                </div>
+              </div>
+              {release.tracks.length <= 30 ? (
+                <div style={{ ...styles.muted, marginBottom: 10 }}>
+                  {bundleReadiness === null
+                    ? "Checking native Shopify bundle readiness…"
+                    : bundleReadiness.eligibleForBundles
+                      ? "Native Shopify bundles ready · managed by ReleaseCore"
+                      : `Native Shopify bundles unavailable · ${bundleReadiness.ineligibilityReason || "Shopify has not enabled fixed bundles for this store."} ReleaseCore includes bundling; no additional Shopify Bundles app is required.`}
+                </div>
+              ) : null}
+              <label>
+                <span style={styles.inputLabel}>Album / EP price</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={releasePrice}
+                  onChange={(event) => setReleasePrice(event.target.value)}
+                  className="rc-control"
+                  style={{ width: 130 }}
+                />
+              </label>
+              <button
+                type="button"
+                disabled={
+                  busy ||
+                  createdCount !== release.tracks.length ||
+                  (release.tracks.length <= 30 && bundleReadiness?.eligibleForBundles !== true)
+                }
+                onClick={() => {
+                  const f = new FormData();
+                  f.set("intent", "sync-shopify-release-product");
+                  f.set("price", releasePrice);
+                  mutate(f);
+                }}
+                className="rc-button rc-button--primary"
+              >
+                {busyAction === "sync-shopify-release-product"
+                  ? "Syncing Album/EP…"
+                  : release.shopifyReleaseProductId
+                    ? "Sync Album/EP product"
+                    : release.shopifyReleaseBundleOperationId
+                      ? "Finish bundle sync"
+                      : "Create Album/EP product"}
+              </button>
+            </div>
+            {createdCount !== release.tracks.length ? (
+              <div style={{ ...styles.muted, marginTop: 8 }}>
+                Sync every track product first. Shopify bundle components reference the individual track products.
+              </div>
+            ) : null}
+            {release.shopifyReleaseProductId ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="rc-button rc-button--tertiary"
+                  onClick={() => { const f = new FormData(); f.set("intent", "publish-shopify-release-product"); mutate(f); }}
+                >Publish now</button>
+                <button
+                  type="button"
+                  disabled={busy || !release.releaseDate}
+                  className="rc-button rc-button--tertiary"
+                  onClick={() => { const f = new FormData(); f.set("intent", "schedule-shopify-release-product"); mutate(f); }}
+                >Schedule</button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="rc-button rc-button--tertiary"
+                  onClick={() => { const f = new FormData(); f.set("intent", "unpublish-shopify-release-product"); mutate(f); }}
+                >Unpublish</button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </CollapsibleSection>
 
       <s-section heading="Distribution status">

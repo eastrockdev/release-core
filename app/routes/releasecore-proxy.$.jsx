@@ -34,6 +34,11 @@ import {
   localStorageStat,
 } from "../lib/storage.server";
 import { apiErrorResponse } from "../lib/http-security.server";
+import {
+  listCommerceDownloads,
+  recordCommerceDownload,
+  resolveCommerceDownload,
+} from "../lib/commerce-entitlements.server";
 
 function pathFromRequest(request) {
   const pathname = new URL(request.url).pathname;
@@ -90,12 +95,96 @@ async function masterAudioResponse({ request, identity, fileId }) {
   return new Response(Readable.toWeb(stream), { status: 200, headers: { ...headers, "Content-Length": String(total) } });
 }
 
+async function commerceDownloadResponse({ identity, entitlementId }) {
+  const orderId = identity.url.searchParams.get("order");
+  const token = identity.url.searchParams.get("token");
+  const format = identity.url.searchParams.get("format");
+
+  const { entitlement, file, format: resolvedFormat } =
+    await resolveCommerceDownload({
+      shop: identity.shop,
+      customerId: identity.customerId,
+      orderId,
+      token,
+      entitlementId,
+      format,
+    });
+
+  await recordCommerceDownload({
+    shop: identity.shop,
+    entitlementId: entitlement.id,
+    customerId: identity.customerId,
+    format: resolvedFormat,
+    releaseFileId: file.id,
+  });
+
+  if (file.storageProvider === "R2") {
+    const signedUrl = await getR2SignedReadUrl(file.storageKey, {
+      filename: file.filename || `download.${resolvedFormat}`,
+      mimeType:
+        file.mimeType ||
+        (resolvedFormat === "flac" ? "audio/flac" : "audio/mpeg"),
+      disposition: "attachment",
+    });
+
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: signedUrl,
+        "Cache-Control": "private, no-store",
+      },
+    });
+  }
+
+  if (file.storageProvider !== "LOCAL_DEV") {
+    return new Response("Download not available.", { status: 404 });
+  }
+
+  const info = await localStorageStat(file.storageKey);
+  const stream = localStorageReadStream(file.storageKey);
+  const filename = String(
+    file.filename || `download.${resolvedFormat}`,
+  ).replace(/["\r\n]/g, "_");
+
+  return new Response(Readable.toWeb(stream), {
+    status: 200,
+    headers: {
+      "Content-Type":
+        file.mimeType ||
+        (resolvedFormat === "flac" ? "audio/flac" : "audio/mpeg"),
+      "Content-Length": String(info.size),
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "private, no-store",
+    },
+  });
+}
+
 export const loader = async ({ request }) => {
   try {
     const context = await authenticate.public.appProxy(request);
     const identity = portalIdentity(request, context.session);
-    requirePortalCustomer(identity);
     const path = pathFromRequest(request);
+    if (path === "downloads") {
+      const orderId = identity.url.searchParams.get("order");
+      const token = identity.url.searchParams.get("token");
+      const downloads = await listCommerceDownloads({
+        shop: identity.shop,
+        customerId: identity.customerId,
+        orderId,
+        token,
+      });
+      return Response.json({ ok: true, downloads });
+    }
+
+    const commerceFileMatch = path.match(/^downloads\/([^/]+)\/file$/);
+    if (commerceFileMatch) {
+      return commerceDownloadResponse({
+        identity,
+        entitlementId: commerceFileMatch[1],
+      });
+    }
+
+    requirePortalCustomer(identity);
 
     const audioMatch = path.match(/^portal\/audio\/([^/]+)$/);
     if (audioMatch) return masterAudioResponse({ request, identity, fileId: audioMatch[1] });
