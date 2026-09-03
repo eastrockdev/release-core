@@ -20,7 +20,7 @@
     "vite": "vite",
     "typecheck": "react-router typegen && tsc --noEmit",
     "check:security": "node scripts/validate-security-boundaries.mjs",
-    "check": "npm run check:graphql && npm run check:security && npm run check:tenancy && npm run check:compliance && npm run check:app-store && npm run check:deployment-profile && npm run check:east-rock-compatibility && npm run check:artist-collection-compatibility && npm run check:release-timeline && npm run check:import-duplicate-guard && npm run check:catalog && npm run check:commerce && npm run check:purchased-music && npm run check:customer-metadata && npm run check:order-status-downloads && npm run check:architecture && npm run check:cleanup && npm run check:digital-catalog && npm run check:admin-artwork && npm run lint && npm run typecheck && npm run build && npm run check:east-rock-app-proxy",
+    "check": "npm run check:graphql && npm run check:security && npm run check:tenancy && npm run check:compliance && npm run check:app-store && npm run check:deployment-profile && npm run check:release-draft-deletion && npm run check:east-rock-compatibility && npm run check:artist-collection-compatibility && npm run check:release-timeline && npm run check:import-duplicate-guard && npm run check:catalog && npm run check:commerce && npm run check:purchased-music && npm run check:customer-metadata && npm run check:order-status-downloads && npm run check:architecture && npm run check:cleanup && npm run check:digital-catalog && npm run check:admin-artwork && npm run lint && npm run typecheck && npm run build && npm run check:east-rock-app-proxy",
     "check:architecture": "node scripts/validate-route-boundaries.mjs",
     "check:cleanup": "node scripts/validate-cleanup.mjs",
     "check:tenancy": "node scripts/validate-tenant-hardening.mjs",
@@ -42,7 +42,8 @@
     "check:east-rock-launch": "node scripts/validate-east-rock-launch.mjs",
     "check:import-duplicate-guard": "node scripts/validate-import-duplicate-guard.mjs",
     "check:artist-collection-compatibility": "node scripts/validate-artist-collection-compatibility.mjs",
-    "check:east-rock-app-proxy": "node scripts/validate-east-rock-app-proxy.mjs"
+    "check:east-rock-app-proxy": "node scripts/validate-east-rock-app-proxy.mjs",
+    "check:release-draft-deletion": "node scripts/validate-release-draft-deletion.mjs"
   },
   "type": "module",
   "engines": {

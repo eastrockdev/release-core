@@ -1197,6 +1197,23 @@ function WorkflowPanel({ release, readiness, mutate, busy, feedback }) {
               Reopen draft
             </button>
           ) : null}
+          {release.status === "DRAFT" &&
+          !release.submittedAt &&
+          !release.lastSubmittedAt &&
+          !release.shopifyReleaseProductId &&
+          !(release.tracks || []).some((track) => track.shopifyProductId) ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                if (!window.confirm("Delete this draft permanently? This cannot be undone.")) return;
+                send("delete-draft");
+              }}
+              className="rc-button rc-button--danger"
+            >
+              Delete draft
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -1409,7 +1426,8 @@ const WORKFLOW_INTENTS = new Set([
   "resolve-review-item",
   "approve-release",
   "reject-release",
-  "reopen-release",
+  "reopen-draft",
+  "delete-draft",
 ]);
 
 function releaseActionScope(formData) {
@@ -1448,7 +1466,8 @@ function releasePendingMessage(formData) {
     "resolve-review-item": "Resolving change request…",
     "approve-release": "Approving release…",
     "reject-release": "Rejecting release…",
-    "reopen-release": "Reopening release…",
+    "reopen-draft": "Reopening release…",
+    "delete-draft": "Deleting draft…",
   })[intent] || "Saving change…";
 }
 
@@ -1488,6 +1507,11 @@ export default function ReleaseWorkspace() {
         formData,
       );
       setNotice({ scope, tone: "good", message: result.message || "Saved." });
+      if (String(formData.get("intent") || "") === "delete-draft") {
+        shopify.toast.show(result.message || "Draft deleted");
+        navigate("/app/releases", { replace: true });
+        return;
+      }
       await revalidateInPlace(revalidator);
     } catch (error) {
       console.error("ReleaseCore: release save request failed", error);

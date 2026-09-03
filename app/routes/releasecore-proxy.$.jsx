@@ -22,6 +22,7 @@ import {
 } from "../lib/portal.server";
 import { portalReleaseAccess } from "../lib/automations.server";
 import db from "../db.server";
+import { deleteReleaseDraft } from "../lib/release-drafts.server";
 import {
   completePortalArtistImage,
   listPortalArtistProfiles,
@@ -312,6 +313,14 @@ export const action = async ({ request }) => {
     if (intent === "remove-credit") {
       await removePortalCredit({ ...identity, releaseId, trackId, creditId: String(formData.get("creditId") || "") });
       return Response.json({ ok: true });
+    }
+    if (intent === "delete-draft") {
+      const deleted = await deleteReleaseDraft({
+        shop: identity.shop,
+        ownerCustomerId: identity.customerId,
+        releaseId,
+      });
+      return Response.json({ ok: true, deleted });
     }
     if (intent === "submit-release") {
       await submitPortalRelease({ admin: context.admin, ...identity, releaseId });

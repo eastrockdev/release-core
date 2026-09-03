@@ -415,6 +415,7 @@
     function renderWorkspace() {
       const release = state.detail;
       const editable = Boolean(release.editable);
+      const deletableDraft = release.status === 'DRAFT' && !release.submittedAt && !release.lastSubmittedAt && !release.shopifyReleaseProductId && !(release.tracks || []).some((track) => track.shopifyProductId);
       const cover = currentCover(release);
       const split = currentSplit(release);
       const openReview = (release.reviewItems || []).filter((item) => item.status === 'OPEN');
@@ -466,6 +467,7 @@
                 ${readiness.ready ? '<div class="rc-checkline">All configured release requirements are complete.</div>' : readiness.blockers.map((item) => `<div class="rc-checkline rc-blocker">${esc(item.message)}</div>`).join('')}
               </div>
               ${release.canSubmit ? `<div class="rc-actions" style="margin-top:14px;"><button class="rc-btn rc-btn-primary" type="button" data-action="submit-release" ${readiness.ready && !openReview.length ? '' : 'disabled'}>${release.status === 'CHANGES_REQUESTED' ? 'Resubmit for review' : 'Submit for review'}</button></div>` : ''}
+              ${deletableDraft ? `<div class="rc-actions" style="margin-top:9px;"><button class="rc-btn rc-btn-danger" type="button" data-action="delete-draft">Delete draft</button></div>` : ''}
               ${openReview.length ? `<div class="rc-panel-copy" style="margin-top:9px;">Mark all requested corrections addressed before resubmitting.</div>` : ''}
             </section>
             <section class="rc-panel">
@@ -861,6 +863,16 @@
           button.disabled = true;
           const form = new FormData(); form.set('intent','resolve-review-item'); form.set('releaseId',state.detail.id); form.set('reviewItemId',button.dataset.reviewId);
           await post(form); await refreshDetail(); return;
+        }
+        if (action === 'delete-draft') {
+          if (!confirm('Delete this draft permanently? This cannot be undone.')) return;
+          button.disabled = true;
+          const form = new FormData(); form.set('intent','delete-draft'); form.set('releaseId',state.detail.id);
+          await post(form);
+          state.detail = null;
+          history.replaceState(null, '', `${location.pathname}${location.search}`);
+          await loadList();
+          return;
         }
         if (action === 'submit-release') {
           if (!confirm('Submit this release for review? Editing will be locked until it is returned for changes.')) return;

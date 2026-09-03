@@ -9,6 +9,7 @@ import { isrcAssignmentMode } from "../lib/isrc";
 import { apiErrorResponse, publicError } from "./http-security.server";
 import { findShopArtist, findShopContributor, findShopRelease } from "./tenant-db.server";
 import { parseReleaseTimelineFormData } from "./release-timeline.server";
+import { deleteReleaseDraft } from "./release-drafts.server";
 
 async function getOwnedRelease(id, shop, include = {}) {
   return findShopRelease(shop, id, { include });
@@ -166,6 +167,18 @@ export const action = async ({ request, params }) => {
       ]);
       await dispatchLatestEvent({ admin, shop: session.shop, releaseId: release.id, type: "REJECTED" });
       return Response.json({ ok: true, message: "Release rejected." });
+    }
+
+    if (intent === "delete-draft") {
+      const deleted = await deleteReleaseDraft({
+        shop: session.shop,
+        releaseId: release.id,
+      });
+      return Response.json({
+        ok: true,
+        deleted,
+        message: `Draft “${deleted.title || "Untitled Release"}” deleted.`,
+      });
     }
 
     if (intent === "reopen-draft") {
