@@ -16,15 +16,7 @@
     "xUrl",
   ];
 
-  const completionFields = [
-    "name",
-    "imageUrl",
-    "biography",
-    "email",
-    "ipi",
-    "spotifyUrl",
-    "appleMusicUrl",
-  ];
+  const completionFields=["name","imageUrl","biography","email","ipi","spotifyUrl","appleMusicUrl"];
 
   const requestJson = async (url, options = {}) => {
     const response = await fetch(url, {

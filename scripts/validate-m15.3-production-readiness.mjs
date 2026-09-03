@@ -371,6 +371,21 @@ for (const marker of [
   );
 }
 
+const cliDocs = [
+  read("docs/M15.3-PRODUCTION-RELEASE.md"),
+  read("docs/PRODUCTION-VERIFICATION.md"),
+  read("docs/APP-STORE-SUBMISSION.md"),
+].join("\n");
+if (
+  /shopify app deploy[^\n]*--no-release[^\n]*--allow-updates|shopify app deploy[^\n]*--allow-updates[^\n]*--no-release/.test(
+    cliDocs,
+  )
+) {
+  fail(
+    "M15.3 documentation contains the invalid --no-release / --allow-updates combination.",
+  );
+}
+
 const productionGuide = read("docs/PRODUCTION-VERIFICATION.md");
 for (const forbidden of [
   "releasecore-m11-6-review",
@@ -389,7 +404,7 @@ for (const marker of [
   "verify:production:east-rock",
   "check:production-env:releasecore",
   "check:production-env:east-rock",
-  "--allow-updates",
+  "--no-release",
 ]) {
   need(
     productionGuide,
@@ -402,7 +417,7 @@ const submissionGuide = read("docs/APP-STORE-SUBMISSION.md");
 for (const marker of [
   "releasecore-m15-3-review",
   "2026-07",
-  "--allow-updates",
+  "--no-release",
 ]) {
   need(
     submissionGuide,

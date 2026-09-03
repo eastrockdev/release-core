@@ -59,7 +59,7 @@ Use the stable `2026-07` API configuration.
 
 ```bash
 shopify app config use releasecore
-shopify app deploy --no-release --allow-updates --version releasecore-m15-3-review
+shopify app deploy --no-release --version releasecore-m15-3-review
 shopify app versions list
 ```
 
@@ -82,7 +82,7 @@ East Rock is a separate single-merchant deployment and must never use the generi
 
 ```bash
 shopify app config use east-rock
-shopify app deploy --no-release --allow-updates --version releasecore-east-rock-m15-3
+shopify app deploy --no-release --version releasecore-east-rock-m15-3
 ```
 
 Inspect the generated version before release and confirm its client/app identity, `https://releasecore-er-production.up.railway.app`, required operational scopes, app proxy, and webhook subscriptions.

@@ -101,10 +101,10 @@ npm run check:m15.3
 git diff --check
 
 shopify app config use releasecore
-shopify app deploy --no-release --allow-updates --version releasecore-m15-3-review
+shopify app deploy --no-release --version releasecore-m15-3-review
 ```
 
-Inspect the generated version before release. Routine automation should use `--allow-updates`; do not permit deletions unless an extension/config deletion is intentional and manually reviewed.
+Inspect the generated version before release. Create review versions with `--no-release`; do not permit deletions unless an extension/config deletion is intentional and manually reviewed.
 
 Then complete signed-webhook, fresh-store, Chrome-incognito, idle-uninstall/reinstall, Theme Editor, and reviewer-evidence checks from `docs/PRODUCTION-VERIFICATION.md`.
 
