@@ -73,6 +73,19 @@ for (const required of [
   }
 }
 
+for (const requiredProxySetting of [
+  "[app_proxy]",
+  'url = "/releasecore-proxy"',
+  'prefix = "apps"',
+  'subpath = "releasecore"',
+]) {
+  if (!eastRockConfig.includes(requiredProxySetting)) {
+    fail(
+      `East Rock Shopify config is missing required app proxy setting ${requiredProxySetting}.`,
+    );
+  }
+}
+
 const schema = read("prisma/schema.prisma");
 for (const field of [
   "preOrderDate",

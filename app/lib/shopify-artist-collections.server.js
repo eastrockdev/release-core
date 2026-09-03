@@ -1,5 +1,6 @@
 import { normalizeTemplateSuffix } from "./shopify-catalog.server";
 import { publicError } from "./http-security.server";
+import { deploymentProfileId } from "./deployment-profile.server";
 
 const RELEASECORE_COLLECTION_SOURCE_TITLE = "ReleaseCore artist catalog";
 
@@ -40,41 +41,49 @@ function publicProfile(artist) {
 }
 
 function metadataInput(artist, settings) {
+  const metafields = [
+    {
+      namespace: "releasecore",
+      key: "collection_type",
+      type: "single_line_text_field",
+      value: "artist",
+    },
+    {
+      namespace: "releasecore",
+      key: "artist_id",
+      type: "single_line_text_field",
+      value: String(artist.id),
+    },
+    {
+      namespace: "releasecore",
+      key: "artist_name",
+      type: "single_line_text_field",
+      value: String(artist.name || ""),
+    },
+    {
+      namespace: "releasecore",
+      key: "artist_profile",
+      type: "json",
+      value: JSON.stringify(publicProfile(artist)),
+    },
+  ];
+
+  // East Rock's existing custom.collection_type definition is a merchant
+  // choice metafield whose allowed value is title-cased "Artist".
+  // Keep ReleaseCore's canonical namespace independent from this legacy field.
+  if (deploymentProfileId() === "east-rock") {
+    metafields.push({
+      namespace: "custom",
+      key: "collection_type",
+      type: "single_line_text_field",
+      value: "Artist",
+    });
+  }
+
   const input = {
     title: artist.name || "Artist",
     descriptionHtml: descriptionHtml(artist),
-    metafields: [
-      {
-        namespace: "releasecore",
-        key: "collection_type",
-        type: "single_line_text_field",
-        value: "artist",
-      },
-      {
-        namespace: "releasecore",
-        key: "artist_id",
-        type: "single_line_text_field",
-        value: String(artist.id),
-      },
-      {
-        namespace: "releasecore",
-        key: "artist_name",
-        type: "single_line_text_field",
-        value: String(artist.name || ""),
-      },
-      {
-        namespace: "releasecore",
-        key: "artist_profile",
-        type: "json",
-        value: JSON.stringify(publicProfile(artist)),
-      },
-      {
-        namespace: "custom",
-        key: "collection_type",
-        type: "single_line_text_field",
-        value: "artist",
-      },
-    ],
+    metafields,
   };
 
   const templateSuffix = normalizeTemplateSuffix(

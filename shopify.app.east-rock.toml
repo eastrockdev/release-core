@@ -18,4 +18,10 @@ redirect_urls = [
 ]
 
 [build]
+include_config_on_deploy = true
 automatically_update_urls_on_dev = false
+
+[app_proxy]
+url = "/releasecore-proxy"
+prefix = "apps"
+subpath = "releasecore"

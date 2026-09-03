@@ -1,16 +1,50 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useLoaderData, useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
+import db from "../db.server";
 import { authenticatedPost } from "../lib/authenticated-post";
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
-  return null;
+  const { session } = await authenticate.admin(request);
+
+  const releases = await db.release.findMany({
+    where: { shop: session.shop },
+    select: {
+      id: true,
+      title: true,
+      shopifyReleaseProductId: true,
+      tracks: { select: { shopifyProductId: true } },
+    },
+  });
+
+  const importedProducts = {};
+
+  for (const release of releases) {
+    if (release.shopifyReleaseProductId) {
+      importedProducts[release.shopifyReleaseProductId] = {
+        releaseId: release.id,
+        releaseTitle: release.title,
+        source: "RELEASE",
+      };
+    }
+
+    for (const track of release.tracks || []) {
+      if (!track.shopifyProductId) continue;
+      importedProducts[track.shopifyProductId] = {
+        releaseId: release.id,
+        releaseTitle: release.title,
+        source: "TRACK",
+      };
+    }
+  }
+
+  return { importedProducts };
 };
 
 export default function ImportProductPage() {
+  const { importedProducts = {} } = useLoaderData();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const [product, setProduct] = useState(null);
@@ -30,6 +64,19 @@ export default function ImportProductPage() {
     });
     if (!selected?.length) return;
     const next = selected[0];
+    const existing = importedProducts[next.id];
+
+    if (existing) {
+      setProduct(null);
+      setNotice({
+        tone: "bad",
+        message: `${next.title || "This Shopify product"} is already imported into ReleaseCore as “${existing.releaseTitle || "an existing release"}”. Choose a different product.`,
+        existingReleaseId: existing.releaseId,
+      });
+      shopify.toast.show("That Shopify product is already imported");
+      return;
+    }
+
     setProduct(next);
     setNotice(null);
     if (!titleOverride) setTitleOverride(next.title || "");
@@ -37,6 +84,19 @@ export default function ImportProductPage() {
 
   const importProduct = async () => {
     if (!product?.id || busy) return;
+
+    const existing = importedProducts[product.id];
+    if (existing) {
+      setProduct(null);
+      setNotice({
+        tone: "bad",
+        message: `${product.title || "This Shopify product"} is already imported into ReleaseCore as “${existing.releaseTitle || "an existing release"}”. Choose a different product.`,
+        existingReleaseId: existing.releaseId,
+      });
+      shopify.toast.show("That Shopify product is already imported");
+      return;
+    }
+
     setBusy(true);
     setNotice(null);
     try {
@@ -74,13 +134,30 @@ export default function ImportProductPage() {
         </div>
       </s-section>
 
-      {notice ? <s-section><div style={styles.notice}>{notice.message}</div></s-section> : null}
+      {notice ? (
+        <s-section>
+          <div style={styles.notice}>
+            <div>{notice.message}</div>
+            {notice.existingReleaseId ? (
+              <div style={{ marginTop: 10 }}>
+                <s-button
+                  onClick={() =>
+                    navigate(`/app/release/${notice.existingReleaseId}`)
+                  }
+                >
+                  Open existing release
+                </s-button>
+              </div>
+            ) : null}
+          </div>
+        </s-section>
+      ) : null}
 
       <s-section heading="1. Choose Shopify product">
         {!product ? (
           <div style={styles.empty}>
             <div style={styles.emptyTitle}>Select a product from this Shopify store</div>
-            <div style={styles.muted}>Draft, active and archived products can be imported. ReleaseCore will never delete or recreate the selected product.</div>
+            <div style={styles.muted}>Draft, active and archived products can be imported once. Products already connected to a ReleaseCore release are blocked from being imported again. ReleaseCore will never delete or recreate the selected product.</div>
             <div style={{ marginTop: 14 }}><s-button variant="primary" onClick={selectProduct}>Select product</s-button></div>
           </div>
         ) : (

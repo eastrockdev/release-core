@@ -158,7 +158,12 @@ export async function importShopifyProductAsRelease({ admin, shop, productId, re
     },
   });
   if (existingRelease) {
-    return { imported: false, existing: true, releaseId: existingRelease.id, warnings: ["This Shopify product is already connected to ReleaseCore."] };
+    throw publicError(
+      "This Shopify product has already been imported into ReleaseCore.",
+      {
+        status: 409,
+      },
+    );
   }
 
   const product = await queryShopifyProduct(admin, productId);
