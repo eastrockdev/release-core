@@ -800,207 +800,28 @@ function ReleaseAssets({
 }
 
 
-function BulkTrackEditor({ release, mutate, busy, editable }) {
-  const [open, setOpen] = useState(false);
-  const normalize = (value) =>
-    String(value || "")
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "");
-
+function TrackEditorLaunch({ release }) {
+  const trackCount = release.tracks.length;
   return (
-    <>
-      <div className="rc-bulk-track-launch">
-        <div className="rc-bulk-track-launch__copy">
-          <strong>Bulk edit tracks</strong>
-          <span>
-            Edit all {release.tracks.length} tracks in a full-width workspace.
-          </span>
-        </div>
-        <button
-          type="button"
-          className="rc-button rc-button--primary"
-          onClick={() => setOpen(true)}
-        >
-          Open bulk editor
-        </button>
+    <div className="rc-track-editor-launch">
+      <div className="rc-track-editor-launch__copy">
+        <strong>Track editor</strong>
+        <span>
+          ${trackCount === 1
+            ? "Edit this track in the dedicated workspace, including ISRC corrections."
+            : `Edit all ${trackCount} tracks, ordering, lyrics and ISRCs in one dedicated workspace.`}
+        </span>
       </div>
-
-      {open ? (
-        <div
-          className="rc-bulk-track-modal-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setOpen(false);
-          }}
-        >
-          <div
-            className="rc-bulk-track-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="rc-bulk-track-modal-title"
-          >
-            <div className="rc-bulk-track-modal__header">
-              <div>
-                <h2 id="rc-bulk-track-modal-title">Bulk edit tracks</h2>
-                <p>
-                  {release.title} · {release.tracks.length} tracks. ISRC
-                  corrections are validated together before anything changes.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="rc-button"
-                onClick={() => setOpen(false)}
-              >
-                Close
-              </button>
-            </div>
-            <form
-        className="rc-bulk-track-editor__body"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const raw = new FormData(event.currentTarget);
-          const rows = release.tracks.map((track) => ({
-            trackId: track.id,
-            title: editable
-              ? String(raw.get(`title:${track.id}`) || "")
-              : track.title,
-            version: editable
-              ? String(raw.get(`version:${track.id}`) || "")
-              : track.version || "",
-            language: editable
-              ? String(raw.get(`language:${track.id}`) || "")
-              : track.language || "",
-            explicit: editable
-              ? raw.get(`explicit:${track.id}`) === "on"
-              : Boolean(track.explicit),
-            isrc: String(raw.get(`isrc:${track.id}`) || ""),
-          }));
-
-          const isrcChanges = rows.filter((row) => {
-            const current = release.tracks.find(
-              (track) => track.id === row.trackId,
-            );
-            return normalize(row.isrc) !== normalize(current?.isrc || "");
-          });
-
-          if (
-            isrcChanges.length &&
-            !window.confirm(
-              `Correct ISRC${isrcChanges.length === 1 ? "" : "s"} on ${isrcChanges.length} track${isrcChanges.length === 1 ? "" : "s"}? ReleaseCore will validate the complete set for uniqueness before changing any of them.`,
-            )
-          ) {
-            return;
-          }
-
-          const data = new FormData();
-          data.set("intent", "bulk-update-tracks");
-          data.set("tracks", JSON.stringify(rows));
-          mutate(data);
-          setOpen(false);
-        }}
+      <Link
+        to={`/app/release/${release.id}/tracks`}
+        className="rc-button rc-button--primary"
       >
-        <div className="rc-bulk-track-table-wrap">
-          <table className="rc-bulk-track-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Track title</th>
-                <th>Version</th>
-                <th>Language</th>
-                <th>Explicit</th>
-                <th>ISRC</th>
-              </tr>
-            </thead>
-            <tbody>
-              {release.tracks.map((track, index) => (
-                <tr key={track.id}>
-                  <td className="rc-bulk-track-table__number">
-                    {String(index + 1).padStart(2, "0")}
-                  </td>
-                  <td>
-                    <input
-                      className="rc-control rc-control--compact"
-                      name={`title:${track.id}`}
-                      defaultValue={
-                        track.title === "Untitled Track" ? "" : track.title
-                      }
-                      placeholder="Track title"
-                      disabled={busy || !editable}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="rc-control rc-control--compact"
-                      name={`version:${track.id}`}
-                      defaultValue={track.version || ""}
-                      placeholder="Original version"
-                      disabled={busy || !editable}
-                    />
-                  </td>
-                  <td>
-                    <select
-                      className="rc-control rc-control--compact"
-                      name={`language:${track.id}`}
-                      defaultValue={track.language || ""}
-                      disabled={busy || !editable}
-                    >
-                      <option value="">Choose language</option>
-                      {track.language && !LANGUAGES.includes(track.language) ? (
-                        <option value={track.language}>{track.language}</option>
-                      ) : null}
-                      {LANGUAGES.map((language) => (
-                        <option key={language} value={language}>
-                          {language}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="rc-bulk-track-table__check">
-                    <input
-                      type="checkbox"
-                      name={`explicit:${track.id}`}
-                      defaultChecked={Boolean(track.explicit)}
-                      disabled={busy || !editable}
-                      aria-label={`Explicit content for Track ${index + 1}`}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="rc-control rc-control--compact rc-bulk-track-table__isrc"
-                      name={`isrc:${track.id}`}
-                      defaultValue={track.isrc || ""}
-                      placeholder="USABC2600001"
-                      disabled={busy}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="rc-bulk-track-editor__footer">
-          <span>
-            {editable
-              ? "Use this table for changes that affect several songs at once."
-              : "Metadata is locked; administrators can still correct ISRCs."}
-          </span>
-          <button
-            type="submit"
-            disabled={busy}
-            className="rc-button rc-button--primary"
-          >
-            {busy ? "Saving…" : "Save all track changes"}
-          </button>
-        </div>
-      </form>
-          </div>
-        </div>
-      ) : null}
-    </>
+        Open track editor
+      </Link>
+    </div>
   );
 }
+
 
 function TrackCard({
   track,
@@ -1209,7 +1030,7 @@ function TrackCard({
               </Field>
               <Field
                 label="ISRC"
-                help="Edit ISRC in the bulk track editor above. This keeps single-track and multi-track corrections in one consistent workflow."
+                help="ISRC is managed in the dedicated Track editor. This read-only field prevents conflicting Admin edit paths."
               >
                 <input
                   value={track.isrc || ""}
@@ -2285,14 +2106,8 @@ export default function ReleaseWorkspace() {
             )}
           </div>
         </div>
-        {release.tracks.length > 1 ? (
-          <BulkTrackEditor
-            key={`${release.id}:${release.updatedAt}`}
-            release={release}
-            mutate={mutate}
-            busy={busy}
-            editable={editable}
-          />
+        {release.tracks.length ? (
+          <TrackEditorLaunch release={release} />
         ) : null}
         {canAddTrack && existingSongs?.length ? (
           <form

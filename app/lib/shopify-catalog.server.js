@@ -179,6 +179,12 @@ export async function getTrackProductState(admin, productId) {
     query ReleaseCoreTrackProductState($id: ID!) {
       product(id: $id) {
         id handle status templateSuffix
+        releasecoreMetafields: metafields(first: 100, namespace: "releasecore") {
+          nodes { key type value }
+        }
+        customMetafields: metafields(first: 100, namespace: "custom") {
+          nodes { key type value }
+        }
         resourcePublications(first: 50, onlyPublished: false) {
           nodes {
             isPublished
@@ -202,6 +208,8 @@ export async function getTrackProductState(admin, productId) {
     handle: product.handle,
     status: product.status,
     templateSuffix: product.templateSuffix || null,
+    metafields: product.releasecoreMetafields?.nodes || [],
+    customMetafields: product.customMetafields?.nodes || [],
     onlineStore: online ? {
       isPublished: Boolean(online.isPublished),
       scheduled,
@@ -216,9 +224,16 @@ export async function getReleaseProductState(admin, productId) {
     query ReleaseCoreReleaseProductState($id: ID!) {
       product(id: $id) {
         id handle status templateSuffix
+        releasecoreMetafields: metafields(first: 100, namespace: "releasecore") {
+          nodes { key type value }
+        }
+        customMetafields: metafields(first: 100, namespace: "custom") {
+          nodes { key type value }
+        }
         variants(first: 1) {
           nodes {
             id
+            price
             requiresComponents
             productVariantComponents(first: 50) {
               nodes {
@@ -253,8 +268,14 @@ export async function getReleaseProductState(admin, productId) {
     handle: product.handle,
     status: product.status,
     templateSuffix: product.templateSuffix || null,
+    metafields: product.releasecoreMetafields?.nodes || [],
+    customMetafields: product.customMetafields?.nodes || [],
     isBundle: Boolean(variant?.requiresComponents && components.length),
     variantId: variant?.id || null,
+    price:
+      variant?.price !== null && variant?.price !== undefined
+        ? Number(variant.price)
+        : null,
     componentCount: components.length,
     componentProductIds: [...new Set(components.map((item) => item.productVariant?.product?.id).filter(Boolean))],
     onlineStore: online ? {

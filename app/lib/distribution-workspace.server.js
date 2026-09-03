@@ -1,6 +1,10 @@
 import { getReleaseProductState, getTrackProductState } from "./shopify-catalog.server";
 import db from "../db.server";
 import { findShopRelease } from "./tenant-db.server";
+import {
+  buildDistributionHealth,
+  runDistributionPreflight,
+} from "./distribution-health.server";
 
 const DISTRIBUTION_RELEASE_INCLUDE = {
   artists: { include: { artist: true }, orderBy: { position: "asc" } },
@@ -36,5 +40,24 @@ export async function loadDistributionWorkspace({ admin, shop, releaseId }) {
     }))),
     release.shopifyReleaseProductId ? getReleaseProductState(admin, release.shopifyReleaseProductId) : null,
   ]);
-  return { release: { ...release, tracks, shopifyReleaseState }, settings };
+  const hydratedRelease = {
+    ...release,
+    tracks,
+    shopifyReleaseState,
+  };
+  const preflight = await runDistributionPreflight({
+    admin,
+    release: hydratedRelease,
+    settings,
+  });
+  const syncHealth = buildDistributionHealth({
+    release: hydratedRelease,
+    settings,
+    preflight,
+  });
+  return {
+    release: hydratedRelease,
+    settings,
+    syncHealth,
+  };
 }

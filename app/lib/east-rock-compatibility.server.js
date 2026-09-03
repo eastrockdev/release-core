@@ -262,6 +262,7 @@ function customerReference(value) {
 
 function releaseProductReference(release) {
   const candidates = [
+    release?.shopifyReleaseProductId,
     release?.shopifyProductId,
     release?.shopifyBundleProductId,
     release?.bundleProductId,

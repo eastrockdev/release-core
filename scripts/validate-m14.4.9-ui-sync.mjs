@@ -8,6 +8,7 @@ function read(path) {
 const compatibility = read("app/lib/east-rock-compatibility.server.js");
 const distribution = read("app/lib/distribution.server.js");
 const admin = read("app/routes/app.release.$releaseId.jsx");
+const trackEditor = read("app/routes/app.release.$releaseId.tracks.jsx");
 const css = read("app/styles/releasecore-admin.css");
 
 const failures = [];
@@ -37,17 +38,16 @@ need(
 need(distribution, "productSyncWarning", "Preview generation warning state is missing.");
 need(distribution, "Use Sync Shopify Products to retry", "Preview sync warning does not give a recovery action.");
 
-need(admin, "rc-bulk-track-modal-backdrop", "Bulk track editor is not moved into a modal.");
-need(admin, "Open bulk editor", "Bulk editor launch action is missing.");
-need(admin, 'aria-modal="true"', "Bulk track modal accessibility marker is missing.");
+need(admin, "TrackEditorLaunch", "Track editor launch action is missing.");
+need(trackEditor, "Dedicated track workspace", "Bulk editing is not segregated onto its own page.");
+need(trackEditor, "Save all track changes", "Dedicated Track editor save action is missing.");
 need(
   admin,
   'gridTemplateColumns: "minmax(0,1fr)"',
   "Add existing song layout is still using the cramped three-column grid.",
 );
-
-need(css, ".rc-bulk-track-modal", "Bulk track modal CSS is missing.");
-need(css, "max-width: 1400px", "Bulk track modal is not configured for a wide workspace.");
+need(css, ".rc-track-editor-grid", "Dedicated Track editor CSS is missing.");
+need(css, ".rc-track-editor-card", "Dedicated Track editor card layout is missing.");
 
 if (failures.length) {
   console.error("ReleaseCore M14.4.9 validation failed:");

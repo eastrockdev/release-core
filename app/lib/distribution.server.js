@@ -17,6 +17,12 @@ import { assignUpcToRelease } from "./upc.server";
 import { publishProductToOnlineStore, unpublishProductFromOnlineStore } from "./shopify-catalog.server";
 import { SHOPIFY_FIXED_BUNDLE_COMPONENT_LIMIT, syncReleaseProduct } from "./shopify-bundles.server";
 import { DISTRIBUTION_STATUSES } from "./workflow";
+import {
+  assertDistributionPreflight,
+  recordDistributionSyncWarning,
+  retryDistributionHealth,
+  runDistributionPreflight,
+} from "./distribution-health.server";
 
 const DISTRIBUTION_ACTION_INCLUDE = {
   artists: { include: { artist: true }, orderBy: { position: "asc" } },
@@ -346,6 +352,12 @@ export async function performDistributionAction({
         );
         syncWarning =
           " The code is saved; use Shopify product sync to retry its metafield update.";
+        await recordDistributionSyncWarning({
+          shop,
+          releaseId: release.id,
+          trackId: track.id,
+          message: `ISRC ${result.code} was saved, but its Shopify product sync was deferred: ${safeDiagnosticText(error?.message || error, 700)}`,
+        });
       }
     }
     if (result.assigned) {
@@ -369,6 +381,81 @@ export async function performDistributionAction({
           : track.shopifyProductId
             ? `ISRC ${result.code} assigned.${syncWarning}`
             : `ISRC ${result.code} assigned. It will sync when the Shopify product is created.`,
+    };
+  }
+
+  if (intent === "retry-sync-health") {
+    let trackIds = [];
+    try {
+      const parsed = JSON.parse(
+        String(formData.get("trackIds") || "[]"),
+      );
+      if (!Array.isArray(parsed)) {
+        throw new Error("Track IDs must be an array.");
+      }
+      trackIds = parsed.map((value) => String(value));
+    } catch {
+      throw publicError(
+        "ReleaseCore could not read the failed-item retry list.",
+        { status: 400 },
+      );
+    }
+
+    const retryReleaseProduct =
+      String(formData.get("retryReleaseProduct") || "") === "true";
+
+    if (!trackIds.length && !retryReleaseProduct) {
+      return { message: "No failed Shopify sync items need retrying." };
+    }
+
+    const currentRelease = await getDistributionRelease(
+      shop,
+      release.id,
+    );
+    const preflight = await runDistributionPreflight({
+      admin,
+      release: currentRelease,
+      settings,
+    });
+    const mode =
+      retryReleaseProduct && trackIds.length
+        ? "ALL"
+        : retryReleaseProduct
+          ? "RELEASE"
+          : "TRACKS";
+    assertDistributionPreflight(preflight, mode);
+
+    const result = await retryDistributionHealth({
+      admin,
+      shop,
+      release: currentRelease,
+      settings,
+      trackIds,
+      retryReleaseProduct,
+    });
+
+    const recovered = result.recovered.length;
+    const remaining = result.failures.length;
+    const pending = result.releaseProductPending
+      ? " Shopify is still processing the Album/EP bundle."
+      : "";
+    const message =
+      `${recovered} failed sync item${recovered === 1 ? "" : "s"} recovered.` +
+      (remaining
+        ? ` ${remaining} item${remaining === 1 ? "" : "s"} still need attention.`
+        : "") +
+      pending;
+
+    return {
+      message,
+      ...(remaining
+        ? {
+            warning: result.failures
+              .slice(0, 3)
+              .map((item) => `${item.title}: ${item.message}`)
+              .join(" "),
+          }
+        : {}),
     };
   }
 
@@ -490,6 +577,11 @@ export async function performDistributionAction({
       );
       productSyncWarning =
         " Audio previews were generated successfully, but Shopify product metadata could not be synced. Use Sync Shopify Products to retry.";
+      await recordDistributionSyncWarning({
+        shop,
+        releaseId: release.id,
+        message: `Audio previews were generated, but Shopify product sync was deferred: ${safeDiagnosticText(error?.message || error, 700)}`,
+      });
     }
     await recordEvent({
       releaseId: release.id,
@@ -562,6 +654,12 @@ export async function performDistributionAction({
     }
 
     const currentRelease = await getDistributionRelease(shop, release.id);
+    const preflight = await runDistributionPreflight({
+      admin,
+      release: currentRelease,
+      settings,
+    });
+    assertDistributionPreflight(preflight, "RELEASE");
     try {
       const result = await syncReleaseProduct({
         admin,
@@ -577,7 +675,31 @@ export async function performDistributionAction({
         return { message: "Shopify is still building the fixed bundle. Run Sync Album/EP product again in a moment to finish the catalog sync." };
       }
       const product = result.product;
-      if (product?.id) await persistReleaseShopifyProduct(release.id, product);
+      if (product?.id) {
+        await persistReleaseShopifyProduct(release.id, product);
+      }
+
+      let associationWarning = "";
+      try {
+        const refreshedRelease = await getDistributionRelease(
+          shop,
+          release.id,
+        );
+        await repairAndSyncExistingProducts({
+          admin,
+          release: refreshedRelease,
+          settings,
+        });
+      } catch (error) {
+        associationWarning =
+          " The Album/EP product is synchronized, but track associated-album reference sync was deferred. Retry failed items from Sync health.";
+        await recordDistributionSyncWarning({
+          shop,
+          releaseId: release.id,
+          message: `Album/EP product synchronized, but associated album reference sync was deferred: ${safeDiagnosticText(error?.message || error, 700)}`,
+        });
+      }
+
       await recordEvent({
         releaseId: release.id,
         type: "SHOPIFY_RELEASE_PRODUCT_SYNCED",
@@ -590,7 +712,16 @@ export async function performDistributionAction({
       const base = result.mode === "BUNDLE"
         ? `${release.type === "EP" ? "EP" : "Album"} fixed bundle synced with ${currentRelease.tracks.length} track${currentRelease.tracks.length === 1 ? "" : "s"}.`
         : `${release.type === "EP" ? "EP" : "Album"} product synced as a standard product.`;
-      return { message: result.warning ? `${base} ${result.warning}` : base };
+      const warnings = [
+        result.warning,
+        associationWarning,
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return {
+        message: warnings ? `${base} ${warnings}` : base,
+        ...(associationWarning ? { warning: associationWarning.trim() } : {}),
+      };
     } catch (error) {
       const message = String(error?.message || error);
       if (/bundles feature|not.*bundle|bundle.*not.*available|access to bundles/i.test(message)) {
@@ -654,6 +785,13 @@ export async function performDistributionAction({
     }
 
     const currentRelease = await getDistributionRelease(shop, release.id);
+    const preflight = await runDistributionPreflight({
+      admin,
+      release: currentRelease,
+      settings,
+    });
+    assertDistributionPreflight(preflight, "TRACKS");
+
     let created = 0;
     let updated = 0;
     let repaired = 0;

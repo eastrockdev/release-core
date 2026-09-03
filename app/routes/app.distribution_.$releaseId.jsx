@@ -62,6 +62,7 @@ function distributionActionScope(formData) {
   if (["assign-catalog", "save-manual-catalog"].includes(intent)) return "catalog";
   if (intent === "save-manual-isrc") return `track:${String(formData.get("trackId") || "")}`;
   if (intent === "generate-audio-previews") return "previews";
+  if (intent === "retry-sync-health") return "sync-health";
   if (["create-shopify-products", "publish-shopify-product", "schedule-shopify-product", "unpublish-shopify-product"].includes(intent)) return "products";
   if (["sync-shopify-release-product", "publish-shopify-release-product", "schedule-shopify-release-product", "unpublish-shopify-release-product"].includes(intent)) return "release-product";
   if (["update-distribution", "return-for-corrections"].includes(intent)) return "status";
@@ -96,8 +97,259 @@ function shopifyPublicationLabel(track) {
   return state.status === "ACTIVE" ? "Active / unpublished" : state.status;
 }
 
+function SyncHealthPill({ status, children }) {
+  const tone =
+    status === "healthy" || status === "good"
+      ? "good"
+      : status === "warning" || status === "bad"
+        ? "warning"
+        : "pending";
+  return (
+    <span className={`rc-sync-health-pill rc-sync-health-pill--${tone}`}>
+      {children}
+    </span>
+  );
+}
+
+function syncEventText(event) {
+  if (!event) return "None recorded";
+  const stamp = event.createdAt
+    ? new Date(event.createdAt).toLocaleString()
+    : "Unknown time";
+  return event.message
+    ? `${stamp} · ${event.message}`
+    : stamp;
+}
+
+function SyncHealthPanel({
+  health,
+  busy,
+  busyAction,
+  feedback,
+  onRetry,
+  onRefresh,
+}) {
+  if (!health) return null;
+
+  const preflight = health.preflight || {
+    ready: true,
+    blockers: [],
+    warnings: [],
+  };
+  const retryCount =
+    (health.retry?.trackIds || []).length +
+    (health.retry?.releaseProduct ? 1 : 0);
+
+  return (
+    <CollapsibleSection
+      icon="product"
+      title="Sync health"
+      description="Preflight, Shopify metadata state, previews, publication, and targeted recovery."
+      summary={`${health.summary?.healthyTracks || 0}/${health.tracks?.length || 0} tracks healthy`}
+      defaultOpen
+    >
+      <ActionFeedback feedback={feedback} />
+
+      <div className="rc-sync-health-grid">
+        <div className="rc-sync-health-metric">
+          <span>Preflight</span>
+          <strong>
+            {preflight.ready ? "Ready" : `${preflight.blockers.length} blocker${preflight.blockers.length === 1 ? "" : "s"}`}
+          </strong>
+        </div>
+        <div className="rc-sync-health-metric">
+          <span>Track products</span>
+          <strong>
+            {health.summary?.linkedTracks || 0}/{health.tracks?.length || 0}
+          </strong>
+        </div>
+        <div className="rc-sync-health-metric">
+          <span>Preview files</span>
+          <strong>
+            {health.summary?.previewReady || 0}/{health.tracks?.length || 0}
+          </strong>
+        </div>
+        <div className="rc-sync-health-metric">
+          <span>Preview sync</span>
+          <strong>
+            {health.summary?.previewSynced || 0}/{health.summary?.previewReady || 0}
+          </strong>
+        </div>
+      </div>
+
+      <div
+        className={`rc-sync-preflight ${preflight.ready ? "rc-sync-preflight--ready" : "rc-sync-preflight--blocked"}`}
+      >
+        <div className="rc-sync-preflight__heading">
+          <strong>
+            {preflight.ready
+              ? "Shopify sync preflight passed"
+              : "Resolve preflight blockers before the next full sync"}
+          </strong>
+          <span>
+            {preflight.checkedAt
+              ? `Checked ${new Date(preflight.checkedAt).toLocaleTimeString()}`
+              : "Preflight not yet checked"}
+          </span>
+        </div>
+
+        {preflight.blockers?.length ? (
+          <ul className="rc-sync-health-issues">
+            {preflight.blockers.map((item, index) => (
+              <li key={`${item.code}:${item.trackId || "release"}:${index}`}>
+                {item.message}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        {preflight.warnings?.length ? (
+          <div className="rc-sync-health-warnings">
+            {preflight.warnings.slice(0, 6).map((item, index) => (
+              <div key={`${item.code}:${item.trackId || "release"}:${index}`}>
+                {item.message}
+              </div>
+            ))}
+            {preflight.warnings.length > 6 ? (
+              <div>
+                +{preflight.warnings.length - 6} additional preflight warning
+                {preflight.warnings.length - 6 === 1 ? "" : "s"}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="rc-sync-health-history">
+        <div>
+          <span>Last successful sync</span>
+          <strong>{syncEventText(health.history?.lastSuccessfulSync)}</strong>
+        </div>
+        <div>
+          <span>Last warning</span>
+          <strong>{syncEventText(health.history?.lastWarning)}</strong>
+        </div>
+        <div>
+          <span>Last sync error</span>
+          <strong>{syncEventText(health.history?.lastError)}</strong>
+        </div>
+      </div>
+
+      <div className="rc-sync-health-list">
+        {health.tracks.map((track) => (
+          <div className="rc-sync-health-row" key={track.id}>
+            <div className="rc-sync-health-row__track">
+              <span>{String(track.position).padStart(2, "0")}</span>
+              <div>
+                <strong>{track.title}</strong>
+                <small>{track.isrc || "ISRC pending"}</small>
+              </div>
+            </div>
+            <div className="rc-sync-health-row__checks">
+              <SyncHealthPill status={track.product.exists ? "good" : track.status}>
+                Product · {track.product.label}
+              </SyncHealthPill>
+              <SyncHealthPill status={track.metadata.synced ? "good" : track.status}>
+                Metadata · {track.metadata.label}
+              </SyncHealthPill>
+              <SyncHealthPill
+                status={
+                  !track.preview.generated
+                    ? "pending"
+                    : track.preview.synced
+                      ? "good"
+                      : "warning"
+                }
+              >
+                Preview · {track.preview.label}
+              </SyncHealthPill>
+              <span className="rc-sync-health-publication">
+                Store · {track.publication}
+              </span>
+            </div>
+            {track.reasons?.length ? (
+              <div className="rc-sync-health-row__reason">
+                {track.reasons.join(" ")}
+              </div>
+            ) : null}
+          </div>
+        ))}
+
+        {health.releaseProduct ? (
+          <div className="rc-sync-health-row rc-sync-health-row--release">
+            <div className="rc-sync-health-row__track">
+              <span>LP</span>
+              <div>
+                <strong>Album / EP parent product</strong>
+                <small>{health.releaseProduct.publication}</small>
+              </div>
+            </div>
+            <div className="rc-sync-health-row__checks">
+              <SyncHealthPill
+                status={
+                  health.releaseProduct.product.exists
+                    ? "good"
+                    : health.releaseProduct.status
+                }
+              >
+                Product · {health.releaseProduct.product.label}
+              </SyncHealthPill>
+              <SyncHealthPill
+                status={
+                  health.releaseProduct.metadata.synced
+                    ? "good"
+                    : health.releaseProduct.status
+                }
+              >
+                Metadata · {health.releaseProduct.metadata.label}
+              </SyncHealthPill>
+              <SyncHealthPill
+                status={
+                  health.releaseProduct.bundle.synced
+                    ? "good"
+                    : health.releaseProduct.status
+                }
+              >
+                Bundle · {health.releaseProduct.bundle.label}
+              </SyncHealthPill>
+            </div>
+            {health.releaseProduct.reasons?.length ? (
+              <div className="rc-sync-health-row__reason">
+                {health.releaseProduct.reasons.join(" ")}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="rc-sync-health-actions">
+        <button
+          type="button"
+          disabled={busy || retryCount === 0}
+          onClick={onRetry}
+          className="rc-button rc-button--primary"
+        >
+          {busyAction === "retry-sync-health"
+            ? "Retrying failed items…"
+            : retryCount
+              ? `Retry failed items (${retryCount})`
+              : "No failed items"}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onRefresh}
+          className="rc-button"
+        >
+          Run preflight again
+        </button>
+      </div>
+    </CollapsibleSection>
+  );
+}
+
 export default function DistributionWorkspace() {
-  const { release, settings } = useLoaderData();
+  const { release, settings, syncHealth } = useLoaderData();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
@@ -172,6 +424,8 @@ export default function DistributionWorkspace() {
     ({
       "generate-audio-previews":
         "Generating MP3 previews… This may take a moment.",
+      "retry-sync-health":
+        "Retrying only the Shopify items that need recovery…",
       "assign-upc": "Assigning UPC…",
       "assign-catalog": "Assigning catalog number…",
       "create-shopify-products": "Syncing Shopify products…",
@@ -203,7 +457,13 @@ export default function DistributionWorkspace() {
         formData,
       );
       const message = r.message || "Saved.";
-      setNotice({ scope, tone: "good", message });
+      setNotice({
+        scope,
+        tone: r.warning ? "bad" : "good",
+        message: r.warning
+          ? `${message} ${r.warning}`
+          : message,
+      });
       shopify.toast.show(message);
       await revalidateInPlace(revalidator);
     } catch (e) {
@@ -223,6 +483,19 @@ export default function DistributionWorkspace() {
   const simple = (intent) => {
     const f = new FormData();
     f.set("intent", intent);
+    return mutate(f);
+  };
+  const retryFailedItems = () => {
+    const f = new FormData();
+    f.set("intent", "retry-sync-health");
+    f.set(
+      "trackIds",
+      JSON.stringify(syncHealth?.retry?.trackIds || []),
+    );
+    f.set(
+      "retryReleaseProduct",
+      syncHealth?.retry?.releaseProduct ? "true" : "false",
+    );
     return mutate(f);
   };
   return (
@@ -254,6 +527,15 @@ export default function DistributionWorkspace() {
         />
       </s-section>
       <ActionFeedback feedback={feedbackFor("distribution")} />
+
+      <SyncHealthPanel
+        health={syncHealth}
+        busy={busy}
+        busyAction={busyAction}
+        feedback={feedbackFor("sync-health")}
+        onRetry={retryFailedItems}
+        onRefresh={() => revalidateInPlace(revalidator)}
+      />
 
       <CollapsibleSection
         icon="files"
@@ -498,38 +780,27 @@ export default function DistributionWorkspace() {
                     value={`${publishingTotal(track)}%`}
                   />
                 </div>
-                {isrcAssignmentMode(settings) === "ADMIN" && !track.isrc ? (
-                  <form
-                    className="rc-admin-inline-form" style={styles.inlineForm}
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      const formData = new FormData(event.currentTarget);
-                      formData.set("intent", "save-manual-isrc");
-                      formData.set("trackId", track.id);
-                      mutate(formData);
-                    }}
-                  >
-                    <label style={{ flex: 1 }}>
-                      <span style={styles.inputLabel}>
-                        Permanent ISRC for track {track.position}
-                      </span>
-                      <input
-                        name="isrc"
-                        maxLength={17}
-                        autoCapitalize="characters"
-                        autoComplete="off"
-                        placeholder="USABC2600001 or US-ABC-26-00001"
-                        className="rc-control"
-                      />
-                    </label>
-                    <button disabled={busy} className="rc-button rc-button--primary">
-                      {busyAction === "save-manual-isrc"
-                        ? "Assigning ISRC…"
-                        : "Assign ISRC"}
+                                {isrcAssignmentMode(settings) === "ADMIN" && !track.isrc ? (
+                  <div className="rc-isrc-editor-redirect">
+                    <div>
+                      <strong>ISRC pending</strong>
+                      <div style={styles.muted}>
+                        ISRC assignment and corrections are managed in Track editor so identifiers have one authoritative Admin editing surface.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="rc-button rc-button--tertiary"
+                      onClick={() =>
+                        navigate(`/app/release/${release.id}/tracks`)
+                      }
+                    >
+                      Open track editor
                     </button>
-                  </form>
+                  </div>
                 ) : null}
-                <div style={styles.creditBlock}>
+<div style={styles.creditBlock}>
                   <div style={styles.creditLabel}>Credits</div>
                   {track.credits.length ? (
                     <div style={styles.creditRows}>

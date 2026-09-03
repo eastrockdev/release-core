@@ -29,6 +29,21 @@ function validIsrc(value, track) {
   }
 }
 
+function validPosition(value, trackCount, track) {
+  const position = Number(value ?? track.position);
+  if (
+    !Number.isInteger(position) ||
+    position < 1 ||
+    position > trackCount
+  ) {
+    throw publicError(
+      `Track ${track.position}: position must be a whole number from 1 to ${trackCount}.`,
+      { status: 400, code: "INVALID_TRACK_POSITION" },
+    );
+  }
+  return position;
+}
+
 export async function bulkUpdateReleaseTracks({
   shop,
   releaseId,
@@ -47,33 +62,51 @@ export async function bulkUpdateReleaseTracks({
 
   const editable = releaseIsEditable(release.status);
   const byId = new Map(release.tracks.map((track) => [track.id, track]));
+  const seen = new Set();
 
   const normalized = rows.map((row) => {
-    const track = byId.get(String(row?.trackId || ""));
+    const trackId = String(row?.trackId || "");
+    if (seen.has(trackId)) {
+      throw publicError(
+        "The track editor submitted the same track more than once.",
+        { status: 400 },
+      );
+    }
+    seen.add(trackId);
+
+    const track = byId.get(trackId);
     if (!track) {
       throw publicError("One selected track does not belong to this release.", {
         status: 400,
       });
     }
 
+    const position = validPosition(
+      row?.position,
+      release.tracks.length,
+      track,
+    );
     const title = text(row?.title, "Untitled Track");
     const version = text(row?.version);
     const language = text(row?.language);
     const explicit = Boolean(row?.explicit);
+    const lyrics = text(row?.lyrics);
     const isrc = validIsrc(row?.isrc, track);
 
     const metadataChanged =
+      position !== track.position ||
       title !== track.title ||
       (version || null) !== (track.version || null) ||
       (language || null) !== (track.language || null) ||
-      explicit !== Boolean(track.explicit);
+      explicit !== Boolean(track.explicit) ||
+      (lyrics || null) !== (track.lyrics || null);
 
     const isrcChanged =
       normalizeIsrc(isrc || "") !== normalizeIsrc(track.isrc || "");
 
     if (!editable && metadataChanged) {
       throw publicError(
-        "This release is locked. Reopen it before changing track metadata. Administrators can still correct ISRCs.",
+        "This release is locked. Reopen it before changing track metadata. Administrators can still correct ISRCs in the Track editor.",
         { status: 409 },
       );
     }
@@ -81,15 +114,47 @@ export async function bulkUpdateReleaseTracks({
     return {
       track,
       trackId: track.id,
+      position,
       title,
       version,
       language,
       explicit,
+      lyrics,
       isrc,
       metadataChanged,
       isrcChanged,
+      positionChanged: position !== track.position,
     };
   });
+
+  const positionChanges = normalized.filter((row) => row.positionChanged);
+  if (positionChanges.length) {
+    if (normalized.length !== release.tracks.length) {
+      throw publicError(
+        "Reordering requires every track on the release to be included in the Track editor save.",
+        { status: 400 },
+      );
+    }
+
+    const desiredPositions = normalized.map((row) => row.position);
+    if (new Set(desiredPositions).size !== desiredPositions.length) {
+      throw publicError(
+        "Every track must have a unique position.",
+        { status: 400, code: "DUPLICATE_TRACK_POSITION" },
+      );
+    }
+
+    const sorted = [...desiredPositions].sort((a, b) => a - b);
+    const completeSequence = sorted.every(
+      (position, index) => position === index + 1,
+    );
+    if (!completeSequence) {
+      throw publicError(
+        `Track positions must use every number from 1 to ${release.tracks.length}.`,
+        { status: 400, code: "INVALID_TRACK_POSITION_SEQUENCE" },
+      );
+    }
+  }
 
   const desiredCodes = normalized.map((row) => row.isrc).filter(Boolean);
   const repeated = desiredCodes.find(
@@ -97,7 +162,7 @@ export async function bulkUpdateReleaseTracks({
   );
   if (repeated) {
     throw publicError(
-      `ISRC ${repeated} appears more than once in this table. Every recording must have a unique ISRC.`,
+      `ISRC ${repeated} appears more than once in this editor. Every recording must have a unique ISRC.`,
       { status: 409, code: "ISRC_ALREADY_ASSIGNED" },
     );
   }
@@ -126,11 +191,29 @@ export async function bulkUpdateReleaseTracks({
     (row) => row.metadataChanged || row.isrcChanged,
   );
   const isrcChanges = changed.filter((row) => row.isrcChanged);
-  if (!changed.length) return { changed: 0, isrcCorrections: 0 };
+  if (!changed.length) {
+    return {
+      changed: 0,
+      isrcCorrections: 0,
+      reordered: false,
+    };
+  }
 
   const now = new Date();
   await db.$transaction(async (tx) => {
-    // Clear changing codes first so valid swaps can be committed atomically.
+    // Move every row to a temporary negative position before applying a new
+    // complete sequence. This keeps @@unique([releaseId, position]) valid
+    // during swaps and arbitrary reorder operations.
+    if (positionChanges.length) {
+      for (const [index, row] of normalized.entries()) {
+        await tx.track.update({
+          where: { id: row.trackId },
+          data: { position: -(index + 1) },
+        });
+      }
+    }
+
+    // Clear changing codes first so valid ISRC swaps can be committed atomically.
     if (isrcChanges.length) {
       await tx.track.updateMany({
         where: { id: { in: isrcChanges.map((row) => row.trackId) } },
@@ -138,21 +221,33 @@ export async function bulkUpdateReleaseTracks({
       });
     }
 
-    for (const row of changed) {
+    for (const row of normalized) {
       const data = {};
+
       if (editable && row.metadataChanged) {
         data.title = row.title;
         data.version = row.version;
         data.language = row.language;
         data.explicit = row.explicit;
+        data.lyrics = row.lyrics;
       }
+
+      if (editable && positionChanges.length) {
+        data.position = row.position;
+      }
+
       if (row.isrcChanged) {
         data.isrc = row.isrc;
         data.isrcAssignedAt = now;
       }
+
       if (Object.keys(data).length) {
-        await tx.track.update({ where: { id: row.trackId }, data });
+        await tx.track.update({
+          where: { id: row.trackId },
+          data,
+        });
       }
+
       if (row.isrcChanged) {
         await tx.submissionEvent.create({
           data: {
@@ -160,8 +255,8 @@ export async function bulkUpdateReleaseTracks({
             trackId: row.trackId,
             type: row.track.isrc ? "ISRC_CORRECTED" : "ISRC_ASSIGNED",
             message: row.track.isrc
-              ? `Track ${row.track.position} ISRC corrected from ${row.track.isrc} to ${row.isrc} by the distributor in bulk edit.`
-              : `Track ${row.track.position} assigned ${row.isrc} manually by the distributor in bulk edit.`,
+              ? `Track ${row.track.position} ISRC corrected from ${row.track.isrc} to ${row.isrc} by the distributor in the Track editor.`
+              : `Track ${row.track.position} assigned ${row.isrc} manually by the distributor in the Track editor.`,
             actorLabel,
           },
         });
@@ -172,11 +267,12 @@ export async function bulkUpdateReleaseTracks({
       where: { id: release.id },
       data: { updatedAt: now },
     });
+
     await tx.submissionEvent.create({
       data: {
         releaseId: release.id,
         type: "TRACKS_BULK_UPDATED",
-        message: `${changed.length} track${changed.length === 1 ? "" : "s"} updated in bulk edit.`,
+        message: `${changed.length} track${changed.length === 1 ? "" : "s"} updated in the dedicated Track editor${positionChanges.length ? "; track order updated" : ""}.`,
         actorLabel,
       },
     });
@@ -185,5 +281,6 @@ export async function bulkUpdateReleaseTracks({
   return {
     changed: changed.length,
     isrcCorrections: isrcChanges.length,
+    reordered: Boolean(positionChanges.length),
   };
 }
