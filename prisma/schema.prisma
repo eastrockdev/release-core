@@ -75,6 +75,7 @@ model Release {
   events                      SubmissionEvent[]
   notifications               NotificationDelivery[]
   reviewItems                 ReleaseReviewItem[]
+  operationJobs              OperationJob[]
 
   @@unique([shop, catalogNumber])
   @@index([shop, status])
@@ -328,6 +329,51 @@ model ReleaseReviewItem {
 
   @@index([releaseId, status])
   @@index([trackId])
+}
+
+model OperationJob {
+  id                String                @id @default(cuid())
+  shop              String
+  deploymentProfile String                @default("releasecore")
+  releaseId         String?
+  intent            String
+  status            String                @default("QUEUED")
+  fingerprint       String
+  idempotencyKey    String
+  payload           Json
+  result            Json?
+  attempts          Int                   @default(0)
+  maxAttempts       Int                   @default(3)
+  availableAt       DateTime              @default(now())
+  lockedAt          DateTime?
+  lockedBy          String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  lastError         String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  release           Release?              @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  attemptLog        OperationJobAttempt[]
+
+  @@unique([shop, idempotencyKey])
+  @@index([deploymentProfile, status, availableAt])
+  @@index([shop, releaseId, createdAt])
+  @@index([shop, status, updatedAt])
+}
+
+model OperationJobAttempt {
+  id          String       @id @default(cuid())
+  jobId       String
+  attempt     Int
+  status      String       @default("RUNNING")
+  startedAt   DateTime     @default(now())
+  completedAt DateTime?
+  error       String?
+  result      Json?
+  job         OperationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, attempt])
+  @@index([jobId, startedAt])
 }
 
 model AppSettings {

@@ -313,6 +313,8 @@ export async function loadOperationsCenter({
     releases,
     waitingReview,
     scheduledNextSevenDays,
+    activeBackgroundJobs,
+    failedBackgroundJobs,
   ] = await Promise.all([
     db.appSettings.findUnique({ where: { shop } }),
     db.release.findMany({
@@ -437,9 +439,84 @@ export async function loadOperationsCenter({
         },
       },
     }),
+    db.operationJob.count({
+      where: {
+        shop,
+        status: { in: ["QUEUED", "RUNNING"] },
+      },
+    }),
+    db.operationJob.findMany({
+      where: {
+        shop,
+        status: "FAILED",
+        releaseId: { not: null },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 10,
+      include: {
+        release: {
+          select: {
+            id: true,
+            title: true,
+            type: true,
+            artistName: true,
+            status: true,
+            distributionStatus: true,
+            releaseDate: true,
+            catalogNumber: true,
+            upc: true,
+            files: {
+              where: {
+                trackId: null,
+                kind: "COVER_ART",
+              },
+              select: {
+                kind: true,
+                url: true,
+              },
+              take: 1,
+            },
+            _count: {
+              select: { tracks: true },
+            },
+          },
+        },
+      },
+    }),
   ]);
 
   const issues = [];
+
+  for (const job of failedBackgroundJobs) {
+    if (!job.release) continue;
+    issues.push({
+      key: `operation-job:${job.id}`,
+      severity: "critical",
+      requiresAction: true,
+      category: "Background job",
+      title: `${job.intent.replaceAll("-", " ")} failed`,
+      message:
+        job.lastError ||
+        "A background release operation exhausted its retry budget.",
+      href: `/app/distribution/${job.release.id}`,
+      actionLabel: "Open distribution",
+      release: {
+        id: job.release.id,
+        title: job.release.title,
+        type: job.release.type,
+        artistName: job.release.artistName,
+        status: job.release.status,
+        distributionStatus:
+          job.release.distributionStatus,
+        releaseDate: job.release.releaseDate,
+        catalogNumber: job.release.catalogNumber,
+        upc: job.release.upc,
+        trackCount: job.release._count.tracks,
+        files: job.release.files || [],
+      },
+    });
+  }
+
   const readyToDistribute = [];
   const scheduled = [];
 
@@ -514,6 +591,7 @@ export async function loadOperationsCenter({
       waitingReview,
       readyToDistribute: readyToDistribute.length,
       scheduledNextSevenDays,
+      activeBackgroundJobs,
     },
     issues: actionable.slice(0, issueLimit),
     advisories: advisories.slice(0, issueLimit),

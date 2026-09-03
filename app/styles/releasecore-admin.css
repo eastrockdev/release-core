@@ -2021,3 +2021,55 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     flex-direction: column;
   }
 }
+
+
+/* M16.2 — Durable background operation jobs. */
+.rc-operation-jobs {
+  display: grid;
+  gap: 10px;
+}
+.rc-operation-job {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--p-color-border-secondary, #dedede);
+  border-radius: 13px;
+  background: var(--p-color-bg-surface, #fff);
+}
+.rc-operation-job__main {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+.rc-operation-job__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.rc-operation-job__meta,
+.rc-operation-job__attempts {
+  color: var(--p-color-text-secondary, #616161);
+  font-size: 12px;
+}
+.rc-operation-job__attempts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.rc-operation-job__error {
+  color: var(--p-color-text-critical, #8e1f0b);
+  font-size: 12px;
+  line-height: 1.45;
+}
+@media (max-width: 720px) {
+  .rc-operation-job {
+    grid-template-columns: 1fr;
+  }
+  .rc-operation-job .rc-button {
+    width: 100%;
+    justify-content: center;
+  }
+}

@@ -136,6 +136,11 @@ export default function Operations() {
             value={data.stats.scheduledNextSevenDays}
             detail="Upcoming undelivered releases"
           />
+          <MetricCard
+            label="Background jobs"
+            value={data.stats.activeBackgroundJobs}
+            detail="Queued or currently running"
+          />
         </MetricGrid>
         {data.capped ? (
           <div className="rc-operations-note">

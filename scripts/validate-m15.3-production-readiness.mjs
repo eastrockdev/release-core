@@ -168,7 +168,7 @@ const scripts = packageJson.scripts || {};
 
 for (const [name, expected] of [
   ["setup", "prisma generate && prisma migrate deploy"],
-  ["docker-start", "npm run setup && npm run start"],
+  ["docker-start", "npm run setup && node scripts/start-production.mjs"],
   ["verify:production", "node scripts/verify-production.mjs"],
   [
     "verify:production:releasecore",

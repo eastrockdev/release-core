@@ -2,6 +2,10 @@ import { authenticate } from "../shopify.server";
 import { performDistributionAction } from "../lib/distribution.server";
 import { apiErrorResponse, safeDiagnosticText } from "../lib/http-security.server";
 import { recordDistributionFailure } from "../lib/distribution-health.server";
+import {
+  enqueueDistributionOperation,
+  isBackgroundDistributionIntent,
+} from "../lib/operation-jobs.server";
 
 export const action = async ({ request, params }) => {
   if (request.method !== "POST") {
@@ -20,6 +24,27 @@ export const action = async ({ request, params }) => {
 
     const formData = await request.formData();
     intent = String(formData.get("intent") || "");
+
+    if (isBackgroundDistributionIntent(intent)) {
+      const queued = await enqueueDistributionOperation({
+        shop,
+        releaseId: params.releaseId,
+        intent,
+        formData,
+      });
+
+      return Response.json(
+        {
+          ok: true,
+          queued: true,
+          job: queued.job,
+          message: queued.reused
+            ? `${queued.job.label} is already queued or running.`
+            : `${queued.job.label} queued. You can leave this page while ReleaseCore finishes it.`,
+        },
+        { status: 202 },
+      );
+    }
 
     const result = await performDistributionAction({
       admin,

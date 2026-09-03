@@ -70,6 +70,132 @@ function distributionActionScope(formData) {
   return "distribution";
 }
 
+const BACKGROUND_DISTRIBUTION_INTENTS = new Set([
+  "generate-audio-previews",
+  "retry-sync-health",
+  "orchestrate-publication",
+  "create-shopify-products",
+  "sync-shopify-release-product",
+  "publish-shopify-product",
+  "schedule-shopify-product",
+  "unpublish-shopify-product",
+  "publish-shopify-release-product",
+  "schedule-shopify-release-product",
+  "unpublish-shopify-release-product",
+]);
+
+function operationJobStatusLabel(status) {
+  return (
+    {
+      QUEUED: "Queued",
+      RUNNING: "Running",
+      SUCCEEDED: "Completed",
+      FAILED: "Failed",
+    }[status] || status
+  );
+}
+
+function operationJobTone(status) {
+  if (status === "SUCCEEDED") return "good";
+  if (status === "FAILED") return "warning";
+  return "pending";
+}
+
+function BackgroundOperationsPanel({
+  jobs,
+  busy,
+  busyAction,
+  onRetry,
+}) {
+  return (
+    <CollapsibleSection
+      icon="history"
+      title="Background operations"
+      description="Long-running preview, Shopify sync, bundle, recovery, and publication work continues independently of this browser page."
+      summary={
+        jobs.some((job) =>
+          ["QUEUED", "RUNNING"].includes(job.status),
+        )
+          ? "Work in progress"
+          : jobs.length
+            ? "Recent activity"
+            : "No jobs yet"
+      }
+      defaultOpen={jobs.some((job) =>
+        ["QUEUED", "RUNNING", "FAILED"].includes(
+          job.status,
+        ),
+      )}
+    >
+      {jobs.length ? (
+        <div className="rc-operation-jobs">
+          {jobs.map((job) => (
+            <div
+              className="rc-operation-job"
+              key={job.id}
+            >
+              <div className="rc-operation-job__main">
+                <div className="rc-operation-job__title">
+                  <strong>{job.label}</strong>
+                  <SyncHealthPill
+                    status={operationJobTone(job.status)}
+                  >
+                    {operationJobStatusLabel(job.status)}
+                  </SyncHealthPill>
+                </div>
+                <div className="rc-operation-job__meta">
+                  Attempt {job.attempts}/{job.maxAttempts}
+                  {" · "}
+                  {new Date(
+                    job.updatedAt || job.createdAt,
+                  ).toLocaleString()}
+                </div>
+                {job.lastError ? (
+                  <div className="rc-operation-job__error">
+                    {job.lastError}
+                  </div>
+                ) : null}
+                {job.attemptLog?.length ? (
+                  <div className="rc-operation-job__attempts">
+                    {job.attemptLog
+                      .slice(0, 3)
+                      .map((attempt) => (
+                        <span key={attempt.id}>
+                          #{attempt.attempt}{" "}
+                          {operationJobStatusLabel(
+                            attempt.status,
+                          )}
+                        </span>
+                      ))}
+                  </div>
+                ) : null}
+              </div>
+              {job.status === "FAILED" ? (
+                <button
+                  type="button"
+                  className="rc-button rc-button--compact"
+                  disabled={busy}
+                  onClick={() => onRetry(job.id)}
+                >
+                  {busyAction ===
+                  `operation-job:${job.id}`
+                    ? "Queueing retry…"
+                    : "Retry"}
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={styles.emptyInline}>
+          Long-running distribution work will appear here
+          after it is queued.
+        </div>
+      )}
+    </CollapsibleSection>
+  );
+}
+
 function releaseProductPublicationLabel(release) {
   if (!release.shopifyReleaseProductId) {
     return release.shopifyReleaseBundleOperationId ? "Bundle operation processing" : "Not created";
@@ -543,6 +669,7 @@ export default function DistributionWorkspace() {
     release,
     settings,
     syncHealth,
+    operationJobs = [],
     publicationOrchestration,
   } = useLoaderData();
   const shopify = useAppBridge();
@@ -551,6 +678,7 @@ export default function DistributionWorkspace() {
   const [busy, setBusy] = useState(false);
   const [busyAction, setBusyAction] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [jobs, setJobs] = useState(operationJobs);
   const [bundleReadiness, setBundleReadiness] = useState(null);
   const [price, setPrice] = useState(
     String(settings?.defaultTrackPrice ?? 1.29),
@@ -561,6 +689,60 @@ export default function DistributionWorkspace() {
   const [publicationMode, setPublicationMode] = useState(
     publicationOrchestration?.defaultMode || "KEEP_UNPUBLISHED",
   );
+  useEffect(() => {
+    setJobs(operationJobs);
+  }, [operationJobs]);
+
+  const hasActiveJobs = jobs.some((job) =>
+    ["QUEUED", "RUNNING"].includes(job.status),
+  );
+
+  useEffect(() => {
+    if (!hasActiveJobs) return undefined;
+
+    let cancelled = false;
+    let timer = null;
+
+    const poll = async () => {
+      try {
+        const formData = new FormData();
+        formData.set("intent", "list");
+        const result = await authenticatedPost(
+          shopify,
+          `/api/operation-jobs/${release.id}`,
+          formData,
+        );
+        if (cancelled) return;
+        const nextJobs = result.jobs || [];
+        setJobs(nextJobs);
+        const stillActive = nextJobs.some((job) =>
+          ["QUEUED", "RUNNING"].includes(job.status),
+        );
+        if (stillActive) {
+          timer = window.setTimeout(poll, 2500);
+        } else {
+          await revalidateInPlace(revalidator);
+        }
+      } catch {
+        if (!cancelled) {
+          timer = window.setTimeout(poll, 5000);
+        }
+      }
+    };
+
+    timer = window.setTimeout(poll, 1500);
+
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [
+    hasActiveJobs,
+    release.id,
+    revalidator,
+    shopify,
+  ]);
+
   const createdCount = release.tracks.filter((t) => t.shopifyProductId).length;
   const isAlbumOrEp = ["ALBUM", "EP"].includes(String(release.type || "").toUpperCase());
   useEffect(() => {
@@ -647,6 +829,16 @@ export default function DistributionWorkspace() {
     if (busy) return;
     const intent = String(formData.get("intent") || "");
     const scope = distributionActionScope(formData);
+    if (
+      BACKGROUND_DISTRIBUTION_INTENTS.has(intent) &&
+      !formData.get("idempotencyKey")
+    ) {
+      formData.set(
+        "idempotencyKey",
+        window.crypto?.randomUUID?.() ||
+          `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      );
+    }
     setBusy(true);
     setBusyAction(intent);
     setNotice({ scope, tone: "info", message: pendingMessage(intent) });
@@ -685,6 +877,39 @@ export default function DistributionWorkspace() {
     f.set("intent", intent);
     return mutate(f);
   };
+  const retryBackgroundOperation = async (jobId) => {
+    if (busy) return;
+    setBusy(true);
+    setBusyAction(`operation-job:${jobId}`);
+    try {
+      const formData = new FormData();
+      formData.set("intent", "retry");
+      formData.set("jobId", jobId);
+      const result = await authenticatedPost(
+        shopify,
+        `/api/operation-jobs/${release.id}`,
+        formData,
+      );
+      setJobs(result.jobs || []);
+      shopify.toast.show(
+        result.message ||
+          "Background operation queued for retry.",
+      );
+    } catch (error) {
+      setNotice({
+        scope: "distribution",
+        tone: "bad",
+        message:
+          error instanceof Error
+            ? error.message
+            : "ReleaseCore could not retry the background operation.",
+      });
+    } finally {
+      setBusy(false);
+      setBusyAction(null);
+    }
+  };
+
   const retryFailedItems = () => {
     const f = new FormData();
     f.set("intent", "retry-sync-health");
@@ -755,6 +980,13 @@ export default function DistributionWorkspace() {
         />
       </s-section>
       <ActionFeedback feedback={feedbackFor("distribution")} />
+
+      <BackgroundOperationsPanel
+        jobs={jobs}
+        busy={busy}
+        busyAction={busyAction}
+        onRetry={retryBackgroundOperation}
+      />
 
       <SyncHealthPanel
         health={syncHealth}

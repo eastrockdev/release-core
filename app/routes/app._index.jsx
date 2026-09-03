@@ -76,6 +76,7 @@ export default function Index() {
           <MetricCard label="Waiting for review" value={operations.stats.waitingReview} detail="Submitted or currently in review" href="/app/submissions" />
           <MetricCard label="Ready to distribute" value={operations.stats.readyToDistribute} detail="Approved and preflight-complete" href="/app/distribution" />
           <MetricCard label="Next 7 days" value={operations.stats.scheduledNextSevenDays} detail="Upcoming undelivered releases" href="/app/operations" />
+          <MetricCard label="Background jobs" value={operations.stats.activeBackgroundJobs} detail="Queued or running operations" href="/app/operations" />
         </MetricGrid>
         {operations.issues.length ? (
           <div className="rc-operations-home-list">
