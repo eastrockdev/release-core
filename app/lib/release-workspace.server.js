@@ -21,7 +21,7 @@ const RELEASE_WORKSPACE_INCLUDE = {
 };
 
 export async function loadReleaseWorkspace({ shop, releaseId }) {
-  const [release, artists, contributors, settings] = await Promise.all([
+  const [release, artists, contributors, settings, existingSongReleases] = await Promise.all([
     findShopRelease(shop, releaseId, { include: RELEASE_WORKSPACE_INCLUDE }),
     db.artist.findMany({
       where: { shop },
@@ -34,6 +34,36 @@ export async function loadReleaseWorkspace({ shop, releaseId }) {
       include: { artists: { include: { artist: true } } },
     }),
     db.appSettings.findUnique({ where: { shop } }),
+    db.release.findMany({
+      where: {
+        shop,
+        id: { not: releaseId },
+        type: "SINGLE",
+        tracks: {
+          some: { shopifyProductId: { not: null } },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 250,
+      include: {
+        artists: {
+          include: { artist: true },
+          orderBy: { position: "asc" },
+        },
+        tracks: {
+          where: { shopifyProductId: { not: null } },
+          orderBy: { position: "asc" },
+          take: 1,
+          include: {
+            artists: {
+              include: { artist: true },
+              orderBy: { position: "asc" },
+            },
+          },
+        },
+        _count: { select: { tracks: true } },
+      },
+    }),
   ]);
 
   if (!release) return null;
@@ -54,5 +84,36 @@ export async function loadReleaseWorkspace({ shop, releaseId }) {
       mode: isrcAssignmentMode(settings),
     },
     workflowSettings: settings || {},
+    existingSongs: existingSongReleases
+      .filter(
+        (item) =>
+          item._count.tracks === 1 &&
+          item.tracks.length === 1 &&
+          item.tracks[0].shopifyProductId,
+      )
+      .map((item) => {
+        const track = item.tracks[0];
+        const primaryTrackArtist = (track.artists || []).find(
+          (assignment) => assignment.role === "PRIMARY",
+        );
+        const primaryReleaseArtist = (item.artists || []).find(
+          (assignment) => assignment.role === "PRIMARY",
+        );
+        return {
+          releaseId: item.id,
+          releaseTitle: item.title,
+          releaseStatus: item.status,
+          trackId: track.id,
+          title: track.title,
+          isrc: track.isrc,
+          shopifyProductId: track.shopifyProductId,
+          shopifyProductHandle: track.shopifyProductHandle,
+          artistName:
+            primaryTrackArtist?.artist?.name ||
+            primaryReleaseArtist?.artist?.name ||
+            item.artistName ||
+            null,
+        };
+      }),
   };
 }

@@ -14,6 +14,10 @@ import { apiErrorResponse, publicError } from "./http-security.server";
 import { findShopArtist, findShopContributor, findShopRelease } from "./tenant-db.server";
 import { parseReleaseTimelineFormData } from "./release-timeline.server";
 import { deleteReleaseDraft } from "./release-drafts.server";
+import {
+  attachExistingSingleTrack,
+  deleteDraftTrack,
+} from "./release-tracks.server";
 
 async function getOwnedRelease(id, shop, include = {}) {
   return findShopRelease(shop, id, { include });
@@ -314,6 +318,27 @@ export const action = async ({ request, params }) => {
       });
     }
 
+    if (intent === "attach-existing-track") {
+      const sourceReleaseId = String(
+        formData.get("sourceReleaseId") || "",
+      ).trim();
+      if (!sourceReleaseId) {
+        return Response.json(
+          { ok: false, error: "Choose an existing song to add." },
+          { status: 400 },
+        );
+      }
+      const attached = await attachExistingSingleTrack({
+        shop: session.shop,
+        targetReleaseId: release.id,
+        sourceReleaseId,
+      });
+      return Response.json({
+        ok: true,
+        message: `"${attached.title}" added to this ${release.type}. Its existing Shopify song product remains linked for the bundle.`,
+      });
+    }
+
     if (intent === "add-track") {
       if (release.type === "SINGLE" && release.tracks.length >= 1) {
         return Response.json({ ok: false, error: "A Single supports one track. Choose EP or Album for a multi-track release." }, { status: 400 });
@@ -346,6 +371,18 @@ export const action = async ({ request, params }) => {
     const trackId = String(formData.get("trackId") || "");
     const track = release.tracks.find((item) => item.id === trackId);
     if (!track) return Response.json({ ok: false, error: "That track could not be found in this release." }, { status: 404 });
+
+    if (intent === "delete-track") {
+      const deleted = await deleteDraftTrack({
+        shop: session.shop,
+        releaseId: release.id,
+        trackId: track.id,
+      });
+      return Response.json({
+        ok: true,
+        message: `Draft track "${deleted.title || "Untitled Track"}" deleted.`,
+      });
+    }
 
     if (intent === "update-track") {
       const title = String(formData.get("title") || "").trim() || "Untitled Track";

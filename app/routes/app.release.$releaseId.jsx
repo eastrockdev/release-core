@@ -779,6 +779,7 @@ function TrackCard({
   isrcConfigured,
   isrcMode,
   creditSplitsEnabled,
+  canDeleteTrack,
 }) {
   const complete = !trackNeedsTitle(track);
   const writerCredits = track.credits.filter((credit) =>
@@ -896,6 +897,24 @@ function TrackCard({
             >
               ↓
             </button>
+            {canDeleteTrack ? (
+              <button
+                type="button"
+                disabled={busy}
+                className="rc-button rc-button--danger rc-button--compact"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Delete Track ${index + 1} permanently from this draft? This cannot be undone.`,
+                    )
+                  ) {
+                    move("delete-track");
+                  }
+                }}
+              >
+                Delete track
+              </button>
+            ) : null}
           </div>
         </div>
         <ActionFeedback feedback={feedbackFor(`track:${track.id}`)} />
@@ -1669,7 +1688,7 @@ function releaseActionScope(formData) {
   if (WORKFLOW_INTENTS.has(intent)) return "workflow";
   if (["add-release-artist", "update-release-artist", "remove-release-artist"].includes(intent)) return "release-artists";
   if (intent === "update-release") return "release-details";
-  if (["add-track", "assign-missing-isrcs"].includes(intent)) return "tracklist";
+  if (["add-track", "attach-existing-track", "assign-missing-isrcs"].includes(intent)) return "tracklist";
   return "release";
 }
 
@@ -1681,6 +1700,8 @@ function releasePendingMessage(formData) {
     "update-release-artist": "Saving artist role…",
     "remove-release-artist": "Removing release artist…",
     "add-track": "Adding track…",
+    "attach-existing-track": "Adding existing song…",
+    "delete-track": "Deleting draft track…",
     "assign-missing-isrcs": "Assigning missing ISRCs…",
     "update-track": "Saving track details…",
     "update-isrc": "Saving ISRC…",
@@ -1705,8 +1726,14 @@ function releasePendingMessage(formData) {
 }
 
 export default function ReleaseWorkspace() {
-  const { release, artists, contributors, isrcSettings, workflowSettings } =
-    useLoaderData();
+  const {
+    release,
+    artists,
+    contributors,
+    isrcSettings,
+    workflowSettings,
+    existingSongs,
+  } = useLoaderData();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const shopify = useAppBridge();
@@ -1764,6 +1791,12 @@ export default function ReleaseWorkspace() {
   const addTrack = () => {
     const data = new FormData();
     data.set("intent", "add-track");
+    mutate(data);
+  };
+  const addExistingSong = (sourceReleaseId) => {
+    const data = new FormData();
+    data.set("intent", "attach-existing-track");
+    data.set("sourceReleaseId", sourceReleaseId);
     mutate(data);
   };
   const assignMissingIsrcs = () => {
@@ -2027,6 +2060,50 @@ export default function ReleaseWorkspace() {
             )}
           </div>
         </div>
+        {canAddTrack && existingSongs?.length ? (
+          <form
+            style={styles.existingSongRow}
+            onSubmit={(event) => {
+              event.preventDefault();
+              const data = new FormData(event.currentTarget);
+              const sourceReleaseId = String(
+                data.get("sourceReleaseId") || "",
+              );
+              if (sourceReleaseId) addExistingSong(sourceReleaseId);
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div style={styles.subheading}>Add existing song</div>
+              <div style={styles.subcopy}>
+                Move an already-imported Single into this {release.type} as a
+                track. Its existing Shopify song product, ISRC, artists and
+                credits stay attached and can be used as a bundle component.
+              </div>
+            </div>
+            <select
+              name="sourceReleaseId"
+              required
+              className="rc-control"
+              defaultValue=""
+            >
+              <option value="">Choose imported song…</option>
+              {existingSongs.map((song) => (
+                <option key={song.releaseId} value={song.releaseId}>
+                  {song.title || song.releaseTitle}
+                  {song.artistName ? ` — ${song.artistName}` : ""}
+                  {song.isrc ? ` · ${song.isrc}` : ""}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              disabled={busy}
+              className="rc-button rc-button--primary"
+            >
+              Add to release
+            </button>
+          </form>
+        ) : null}
         <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
           {release.tracks.map((track, index) => (
             <TrackCard
@@ -2047,6 +2124,11 @@ export default function ReleaseWorkspace() {
               isrcConfigured={isrcSettings.configured}
               isrcMode={isrcSettings.mode}
               creditSplitsEnabled={workflowSettings?.requirePublishing ?? true}
+              canDeleteTrack={
+                release.status === "DRAFT" &&
+                release.type !== "SINGLE" &&
+                !track.shopifyProductId
+              }
             />
           ))}
         </div>
@@ -2328,6 +2410,17 @@ const styles = {
     gap: 8,
     alignItems: "center",
     flexWrap: "wrap",
+  },
+  existingSongRow: {
+    display: "grid",
+    gridTemplateColumns: "minmax(260px,1fr) minmax(260px,1fr) auto",
+    gap: 12,
+    alignItems: "end",
+    marginTop: 16,
+    padding: 14,
+    border: "1px solid #dedede",
+    borderRadius: 12,
+    background: "#fafafa",
   },
   muted: { color: "#6d7175", fontSize: 13 },
   trackCard: {
