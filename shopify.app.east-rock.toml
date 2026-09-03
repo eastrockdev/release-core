@@ -1,0 +1,22 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "886119f2c8907b1f36c64dff6acb63bf"
+application_url = "https://releasecore-er-production.up.railway.app"
+embedded = true
+name = "ReleaseCore — East Rock"
+
+[webhooks]
+api_version = "2026-10"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_customers,read_files,read_metaobject_definitions,read_metaobjects,read_orders,read_products,read_publications,write_app_proxy,write_files,write_metaobject_definitions,write_metaobjects,write_products,write_publications,write_orders,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders"
+
+[auth]
+redirect_urls = [
+  "https://releasecore-er-production.up.railway.app/api/auth"
+]
+
+[build]
+include_config_on_deploy = true
+automatically_update_urls_on_dev = false
