@@ -443,6 +443,21 @@ function walk(relative) {
 }
 for (const sourceRoot of sourceRoots) walk(sourceRoot);
 
+const artistProfileAsset =
+  "extensions/releasecore-artist-portal/assets/releasecore-artist-profile.js";
+if (!exists(artistProfileAsset)) {
+  fail(`${artistProfileAsset} is missing.`);
+} else {
+  const artistProfileBytes = fs.statSync(
+    path.join(root, artistProfileAsset),
+  ).size;
+  if (artistProfileBytes > 10000) {
+    fail(
+      `${artistProfileAsset} is ${artistProfileBytes} bytes; Shopify Theme Check requires app-block JavaScript to remain at or below 10000 bytes.`,
+    );
+  }
+}
+
 for (const rel of sourceFiles) {
   const source = read(rel);
   if (/\bdebugger\s*;/.test(source)) {

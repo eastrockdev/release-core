@@ -1,20 +1,5 @@
 (() => {
-  const profileFields = [
-    "name",
-    "legalName",
-    "email",
-    "pro",
-    "ipi",
-    "websiteUrl",
-    "biography",
-    "spotifyUrl",
-    "appleMusicUrl",
-    "instagramUrl",
-    "facebookUrl",
-    "tiktokUrl",
-    "youtubeUrl",
-    "xUrl",
-  ];
+  const profileFields=["name","legalName","email","pro","ipi","websiteUrl","biography","spotifyUrl","appleMusicUrl","instagramUrl","facebookUrl","tiktokUrl","youtubeUrl","xUrl"];
 
   const completionFields=["name","imageUrl","biography","email","ipi","spotifyUrl","appleMusicUrl"];
 
