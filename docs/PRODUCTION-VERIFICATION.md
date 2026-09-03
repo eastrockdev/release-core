@@ -1,13 +1,11 @@
 # ReleaseCore production and Shopify App Store verification
 
-Use this checklist on the exact build that will be submitted to Shopify. Repository checks are necessary but not sufficient: Shopify app configuration and theme extensions are versioned separately from the Railway web application, and webhook trigger commands test endpoint behavior but do not prove that the production app version is subscribed to the topic.
+Use this checklist on the exact M15.3 release candidate. Repository checks are necessary but not sufficient: the Railway web application and Shopify app configuration/extensions are separate deployment surfaces.
 
-## 1. Freeze and validate the review build
-
-From the ReleaseCore repository root:
+## 1. Freeze and validate the release candidate
 
 ```bash
-npm install
+npm ci
 npx prisma generate
 npx prisma migrate deploy
 npm run check
@@ -16,76 +14,86 @@ git diff --check
 
 Do not continue while any command fails.
 
-## 2. Deploy the web application to Railway
-
-Deploy the exact reviewed commit to the production Railway service. `shopify app deploy` does **not** deploy the ReleaseCore web server; it versions Shopify app configuration and extensions only.
-
-Production environment must include the normal ReleaseCore secrets/configuration, including:
-
-- `NODE_ENV=production`
-- `SHOPIFY_API_KEY`
-- `SHOPIFY_API_SECRET`
-- `SHOPIFY_APP_URL=https://releasecore-web-production.up.railway.app`
-- `DATABASE_URL`
-- `RELEASECORE_MASTER_STORAGE=R2`
-- `R2_ACCOUNT_ID`
-- `R2_ACCESS_KEY_ID`
-- `R2_SECRET_ACCESS_KEY`
-- `R2_BUCKET`
-- `RELEASECORE_ENCRYPTION_KEY`
-- `RELEASECORE_SUPPORT_EMAIL` when a direct email link should appear on the public support page
-
-Never paste secret values into the App Store review instructions or screenshots.
-
-After Railway reports the deployment healthy, run:
+The M15.3-specific static gate is also available directly:
 
 ```bash
-npm run verify:production
+npm run check:m15.3
 ```
 
-The verifier checks the live public home, Privacy Policy, Support page, Shopify-owned install guidance, HTTPS availability, and invalid-HMAC rejection on the compliance and uninstall webhook endpoints.
+## 2. Validate production environment contracts
 
-## 3. Create the Shopify review app version
+Run against the actual environment variables configured for each Railway service.
 
-Select the production ReleaseCore config:
+Generic ReleaseCore:
+
+```bash
+npm run check:production-env:releasecore
+```
+
+East Rock:
+
+```bash
+npm run check:production-env:east-rock
+```
+
+Both services must use `NODE_ENV=production`, the correct profile-specific Shopify credentials/URL, production database, encryption key, and R2 master storage.
+
+## 3. Deploy the web applications to Railway
+
+Deploy the exact reviewed commit to each applicable Railway production service.
+
+`shopify app deploy` does **not** deploy the ReleaseCore web server.
+
+After Railway reports healthy deployments:
+
+```bash
+npm run verify:production:releasecore
+npm run verify:production:east-rock
+```
+
+The verifier checks public home, Privacy Policy, Support, Shopify-owned install guidance, HTTPS, and invalid-HMAC rejection for compliance and uninstall webhook endpoints.
+
+## 4. Create the generic Shopify review version
+
+Use the stable `2026-07` API configuration.
 
 ```bash
 shopify app config use releasecore
-```
-
-Create the version without releasing it first:
-
-```bash
-shopify app deploy --no-release --version releasecore-m11-6-review
-```
-
-List versions:
-
-```bash
+shopify app deploy --no-release --allow-updates --version releasecore-m15-3-review
 shopify app versions list
 ```
 
-In Shopify Dev Dashboard → ReleaseCore → Versions, inspect `releasecore-m11-6-review` and confirm it contains:
+In Shopify Dev Dashboard → ReleaseCore → Versions, inspect `releasecore-m15-3-review` and confirm:
 
 - production application URL and `/api/auth` redirect;
-- `read_customers`, product/file/metaobject/app-proxy scopes declared by ReleaseCore;
+- required customer/product/file/metaobject/publication/order/app-proxy scopes;
 - `/webhooks/app/uninstalled`;
 - `/webhooks/app/scopes_update`;
+- `orders/paid`, `orders/cancelled`, and `refunds/create`;
 - `/webhooks/compliance` with `customers/data_request`, `customers/redact`, and `shop/redact`;
 - stable webhook API version `2026-07`;
 - ReleaseCore Artist Portal theme app extension.
 
-Only after that inspection, release the version:
+Only after inspection, release the reviewed version through Shopify CLI or Dev Dashboard.
+
+## 5. Deploy East Rock Shopify configuration
+
+East Rock is a separate single-merchant deployment and must never use the generic ReleaseCore client ID or Railway URL.
 
 ```bash
-shopify app release --version releasecore-m11-6-review
+shopify app config use east-rock
+shopify app deploy --no-release --allow-updates --version releasecore-east-rock-m15-3
 ```
 
-Configuration changes do not become production subscriptions until a Shopify app version containing them is released.
+Inspect the generated version before release and confirm its client/app identity, `https://releasecore-er-production.up.railway.app`, required operational scopes, app proxy, and webhook subscriptions.
 
-## 4. Verify signed webhook handling
+Do not use `--allow-deletes` for routine releases.
 
-Use Shopify CLI to send signed sample deliveries to the production endpoint:
+## 6. Verify signed webhook handling
+
+Use Shopify CLI to send signed sample deliveries to the relevant production endpoint.
+
+Generic example:
 
 ```bash
 shopify app webhook trigger \
@@ -104,101 +112,91 @@ shopify app webhook trigger \
   --topic=shop/redact
 ```
 
-The CLI can prompt for any missing authentication details. Do not place the app secret in a shared script or screenshot.
+Repeat against the East Rock production endpoint when validating that deployment.
 
-Expected result: each signed delivery receives a 2xx acknowledgement. Privacy processing is persisted first and continues independently so the HTTP acknowledgement is not held open by long-running export/redaction work.
+Expected result: each signed delivery receives a 2xx acknowledgement.
 
-Important: `shopify app webhook trigger` validates the endpoint, **not** the active subscription. Confirm subscriptions separately on the released app version.
+Webhook trigger commands validate endpoint behavior; they do not prove the active released app version is subscribed. Confirm subscriptions separately.
 
-## 5. Fresh-store install and reinstall test
+## 7. Fresh-store install and reinstall test
 
 Use a clean development store with no ReleaseCore tenant data.
 
-1. Start installation from a Shopify-owned installation/review surface.
+1. Start installation from a Shopify-owned surface.
 2. Confirm ReleaseCore never asks for a `myshopify.com` domain.
-3. Accept permissions and confirm OAuth redirects directly into ReleaseCore Admin.
-4. Navigate every primary ReleaseCore route.
+3. Accept permissions and confirm OAuth redirects into embedded Admin.
+4. Navigate every primary route.
 5. Create an artist and contributor.
-6. Create a Single release and Album/EP release.
-7. Upload cover artwork and a master WAV.
-8. Link a Shopify customer through Portal access.
-9. Open Storefront setup and use each relevant Theme Editor deep link.
-10. Save a Release Portal/Recent Releases/Artist Profile block and verify it on desktop and mobile.
-11. Sign in as the linked storefront customer and confirm tenant/customer ownership restrictions.
-12. Submit/review/approve a disposable release and open Distribution.
-13. Confirm the Privacy workspace is available.
+6. Create a Single and Album/EP.
+7. Open the Edit Track Info page and assign/correct a Single ISRC.
+8. Upload artwork and a master WAV.
+9. Link a Shopify customer through Portal access.
+10. Open Storefront setup and use Theme Editor deep links.
+11. Verify Release Portal, Recent Releases, and Artist Profile on desktop/mobile.
+12. Submit/review/approve a disposable release.
+13. Generate audio previews.
+14. Sync Shopify products and Album/EP bundle.
+15. Confirm Sync Health and targeted recovery.
+16. Exercise Storefront publication preview and a safe publication mode.
+17. Confirm the Privacy workspace.
 
 ### Chrome incognito/session-token test
 
-Open a Chrome incognito window, sign into the test Shopify Admin, and open ReleaseCore. Verify the embedded app works without relying on third-party cookies or browser local storage. Repeat a normal navigation and save action.
+Open Chrome incognito, sign into the test Shopify Admin, and use ReleaseCore without relying on third-party cookies or browser local storage. Repeat navigation and one save action.
 
 ### Idle uninstall test
 
-This test is intentionally stricter than an immediate uninstall:
+1. Install/open ReleaseCore on a disposable store.
+2. Leave it unused for at least 65 minutes.
+3. Without reopening ReleaseCore, uninstall it.
+4. Confirm `app/uninstalled` receives 2xx and local sessions are removed.
+5. Reinstall and confirm Shopify authentication occurs before app interaction.
 
-1. Install/open ReleaseCore on the disposable test store.
-2. Leave the app unused for **at least 65 minutes** so the current expiring offline access token is stale.
-3. Without reopening ReleaseCore, uninstall it from Shopify Admin.
-4. Confirm `app/uninstalled` receives a successful 2xx delivery and the local shop sessions are removed.
-5. Reinstall ReleaseCore and confirm OAuth occurs immediately before the merchant can interact with the app.
+Shopify normally sends the real `shop/redact` later. Confirm the active subscription now, exercise the signed endpoint with CLI, and verify the real disposable-store event when available.
 
-This catches uninstall/authentication failures that can be hidden when uninstalling immediately after active app use.
+## 8. Protected customer data and App Store controls
 
-Shopify normally sends the real `shop/redact` event 48 hours after uninstall. For the review build, confirm the active subscription now, exercise the signed endpoint with CLI, and verify a real disposable-store `shop/redact` when the 48-hour event becomes available.
+Do not submit generic ReleaseCore until:
 
-## 6. Protected customer data and Partner Dashboard
+- protected customer data access is approved;
+- Name and Email field justifications match actual usage;
+- phone/address are not requested without a real feature need;
+- support email is monitored;
+- emergency developer contact is current;
+- Privacy Policy URL is `https://releasecore-web-production.up.railway.app/privacy-policy`;
+- Support URL is `https://releasecore-web-production.up.railway.app/support`.
 
-Do not submit until the protected customer data request is approved for the customer fields ReleaseCore actually uses.
+Use `docs/APP-STORE-SUBMISSION.md` for the submission copy.
 
-Confirm:
-
-- Customer protected-data access is approved.
-- Name is approved for customer identification during Artist Portal assignment.
-- Email is approved for record disambiguation and merchant-enabled transactional notifications.
-- Phone/address are not requested.
-- Support email is valid and actively monitored.
-- Emergency developer contact has current email and phone details.
-- Privacy Policy URL is `https://releasecore-web-production.up.railway.app/privacy-policy`.
-- Support portal URL is `https://releasecore-web-production.up.railway.app/support` when the listing exposes a support portal.
-
-Use the justifications in `docs/APP-STORE-SUBMISSION.md`.
-
-## 7. Listing and reviewer evidence
-
-Before clicking Submit:
-
-- Primary English listing is complete and factual.
-- App name is consistently `ReleaseCore`.
-- 1200 × 1200 app icon is uploaded.
-- Listing screenshots show the actual current review build.
-- Theme-extension screenshots do not contain app promotions/review requests.
-- Demo screencast shows onboarding and all core features claimed by the listing.
-- Reviewer instructions include a functional storefront test customer and any sample files required for upload testing.
-- Test credentials are rechecked immediately before submission.
-- No listing field, screenshot, policy URL, or testing instruction references localhost, a tunnel, an expired development domain, or unreleased functionality.
-
-## 8. Final sign-off
-
-Record the evidence before submission:
+## 9. Final sign-off
 
 | Gate | Result / evidence |
 | --- | --- |
 | `npm run check` | |
-| `npm run verify:production` | |
-| Railway production deploy commit | |
-| Released Shopify version | |
-| Compliance topics visible on active version | |
-| Signed `customers/data_request` delivery | |
-| Signed `customers/redact` delivery | |
-| Signed `shop/redact` delivery | |
+| `npm run check:m15.3` | |
+| Generic production env validation | |
+| East Rock production env validation | |
+| Generic production endpoint verification | |
+| East Rock production endpoint verification | |
+| Generic Railway commit | |
+| East Rock Railway commit | |
+| Generic Shopify version | |
+| East Rock Shopify version | |
+| Compliance/uninstall/order subscriptions | |
+| Signed compliance deliveries | |
 | Fresh-store install | |
 | Chrome incognito/session-token test | |
 | 65+ minute idle uninstall | |
 | Reinstall/OAuth test | |
 | Theme Editor deep links/blocks | |
+| Edit Track Info Single ISRC correction | |
+| Audio preview + Shopify sync | |
+| Sync Health targeted recovery | |
+| Publication orchestration | |
+| East Rock compatibility smoke test | |
 | Protected customer data approved | |
 | Support/emergency contacts verified | |
 | App icon/listing/screenshots complete | |
 | Screencast/reviewer credentials complete | |
 
-When every row is complete, the ReleaseCore codebase and production deployment are ready for Shopify App Store submission review.
+When every applicable row is complete, the current ReleaseCore release candidate is ready for production/App Store sign-off.

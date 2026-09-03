@@ -6,15 +6,10 @@ import { authenticate } from "../shopify.server";
 import { hydrateReleaseCoverUrl } from "../lib/release-artwork.server";
 import {
   ARTIST_ROLES,
-  CREDIT_ROLES,
   GENRES,
-  LANGUAGES,
   artistRoleLabel,
-  creditRoleLabel,
-  contributorDisplayName,
   dateInputValue,
   formatDate,
-  isPublishingRole,
   trackNeedsTitle,
   typeLabel,
 } from "../lib/releasecore";
@@ -124,28 +119,6 @@ function RoleSelect({
       {ARTIST_ROLES.map((role) => (
         <option key={role} value={role}>
           {artistRoleLabel(role)}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-function CreditRoleSelect({
-  defaultValue = "SONGWRITER",
-  onChange,
-  disabled = false,
-}) {
-  return (
-    <select
-      className="rc-control rc-control--compact"
-      name="role"
-      defaultValue={defaultValue}
-      onChange={onChange}
-      disabled={disabled}
-    >
-      {CREDIT_ROLES.map((role) => (
-        <option key={role} value={role}>
-          {creditRoleLabel(role)}
         </option>
       ))}
     </select>
@@ -800,632 +773,74 @@ function ReleaseAssets({
 }
 
 
-function TrackEditorLaunch({ release }) {
-  const trackCount = release.tracks.length;
-  return (
-    <div className="rc-track-editor-launch">
-      <div className="rc-track-editor-launch__copy">
-        <strong>Track editor</strong>
-        <span>
-          ${trackCount === 1
-            ? "Edit this track in the dedicated workspace, including ISRC corrections."
-            : `Edit all ${trackCount} tracks, ordering, lyrics and ISRCs in one dedicated workspace.`}
-        </span>
-      </div>
-      <Link
-        to={`/app/release/${release.id}/tracks`}
-        className="rc-button rc-button--primary"
-      >
-        Open track editor
-      </Link>
-    </div>
-  );
-}
-
-
-function TrackCard({
+function TrackListItem({
   track,
   index,
-  count,
-  mutate,
-  busy,
-  adminBusy,
-  artists,
-  contributors,
-  releaseArtists,
-  uploadFile,
-  removeFile,
-  uploadState,
-  feedbackFor,
+  release,
   isrcConfigured,
   isrcMode,
-  creditSplitsEnabled,
-  canDeleteTrack,
 }) {
-  const complete = !trackNeedsTitle(track);
-  const writerCredits = track.credits.filter((credit) =>
-    isPublishingRole(credit.role),
-  );
-  const publishingTotal = writerCredits.reduce(
-    (sum, credit) => sum + (credit.ownershipPercent || 0),
-    0,
-  );
-  const publishingTone =
-    publishingTotal === 100 ? "good" : publishingTotal > 0 ? "warn" : "neutral";
-  const master = track.files.find(
+  const master = (track.files || []).find(
     (file) => file.kind === FILE_KINDS.MASTER_WAV,
   );
-  const lyricsReady =
-    track.language === "Instrumental / No linguistic content" ||
-    Boolean(track.lyrics?.trim());
-  const move = (intent) => {
-    const data = new FormData();
-    data.set("intent", intent);
-    data.set("trackId", track.id);
-    mutate(data);
-  };
-  const relationshipArtists = track.artists.length ? track.artists : releaseArtists;
-  const trackArtistIds = new Set(relationshipArtists.map((item) => item.artistId));
-  const linkedContributorIds = new Set(
-    artists
-      .filter((artist) => trackArtistIds.has(artist.id))
-      .flatMap((artist) =>
-        artist.contributors.map((item) => item.contributorId),
-      ),
-  );
-  const suggestedContributors = contributors.filter((item) =>
-    linkedContributorIds.has(item.id),
-  );
-  const otherContributors = contributors.filter(
-    (item) => !linkedContributorIds.has(item.id),
-  );
+  const complete = !trackNeedsTitle(track);
+  const artistCount = track.artists.length || release.artists.length;
 
   return (
-    <details style={styles.trackCard}>
-      <summary className="rc-track-summary" style={styles.trackSummary}>
-        <div style={styles.trackNumber}>
-          {String(index + 1).padStart(2, "0")}
-        </div>
-        <div style={{ minWidth: 0 }}>
-          <div style={styles.trackTitle}>{track.title || "Untitled Track"}</div>
-          <div style={styles.trackMeta}>
-            {track.version || "Original version"}
-            {track.language ? ` · ${track.language}` : ""}
-            {track.explicit ? " · Explicit" : " · Clean / not marked explicit"}
-          </div>
-        </div>
-        <div className="rc-track-summary__status" style={styles.trackSummaryRight}>
-          <StatusPill tone={complete ? "good" : "warn"}>
-            {complete ? "Basics saved" : "Needs title"}
-          </StatusPill>
-          <StatusPill
-            tone={
-              track.isrc
-                ? "good"
-                : isrcMode === "ADMIN"
-                  ? "neutral"
-                  : isrcConfigured
-                    ? "warn"
-                    : "neutral"
-            }
-          >
-            {track.isrc
-              ? track.isrc
+    <Link
+      to={`/app/release/${release.id}/track/${track.id}`}
+      className="rc-track-list-item"
+    >
+      <span className="rc-track-list-item__number">
+        {String(index + 1).padStart(2, "0")}
+      </span>
+      <span className="rc-track-list-item__identity">
+        <strong>{track.title || "Untitled Track"}</strong>
+        <span>
+          {track.version || "Original version"}
+          {track.language ? ` · ${track.language}` : ""}
+          {track.explicit ? " · Explicit" : ""}
+        </span>
+      </span>
+      <span className="rc-track-list-item__status">
+        <StatusPill tone={complete ? "good" : "warn"}>
+          {complete ? "Basics saved" : "Needs title"}
+        </StatusPill>
+        <StatusPill
+          tone={
+            track.isrc
+              ? "good"
               : isrcMode === "ADMIN"
-                ? "Provided in Distribution"
+                ? "warn"
+                : isrcConfigured
+                  ? "warn"
+                  : "neutral"
+          }
+        >
+          {track.isrc ||
+            (isrcMode === "ADMIN"
+              ? "Needs ISRC"
               : isrcConfigured
                 ? "Needs ISRC"
-                : "ISRC not configured"}
-          </StatusPill>
-          <StatusPill tone={master ? "good" : "warn"}>
-            {master ? "Master uploaded" : "Needs master"}
-          </StatusPill>
-          <StatusPill tone={track.artists.length ? "good" : "warn"}>
-            {track.artists.length} artist{track.artists.length === 1 ? "" : "s"}
-          </StatusPill>
-          {creditSplitsEnabled ? (
-            <StatusPill tone={publishingTone}>
-              {publishingTotal}% publishing
-            </StatusPill>
-          ) : (
-            <StatusPill tone="neutral">
-              {track.credits.length} credit{track.credits.length === 1 ? "" : "s"}
-            </StatusPill>
-          )}
-          <span style={styles.expandHint}>Edit</span>
-        </div>
-      </summary>
-      <div style={styles.trackBody}>
-        <div style={styles.trackToolbar}>
-          <div>
-            <div style={styles.smallEyebrow}>Track {index + 1}</div>
-            <div style={{ fontWeight: 700 }}>Song workspace</div>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => move("move-up")}
-              disabled={busy || index === 0}
-              className="rc-button rc-button--icon"
-            >
-              ↑
-            </button>
-            <button
-              type="button"
-              onClick={() => move("move-down")}
-              disabled={busy || index === count - 1}
-              className="rc-button rc-button--icon"
-            >
-              ↓
-            </button>
-            {canDeleteTrack ? (
-              <button
-                type="button"
-                disabled={busy}
-                className="rc-button rc-button--danger rc-button--compact"
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `Delete Track ${index + 1} permanently from this draft? This cannot be undone.`,
-                    )
-                  ) {
-                    move("delete-track");
-                  }
-                }}
-              >
-                Delete track
-              </button>
-            ) : null}
-          </div>
-        </div>
-        <ActionFeedback feedback={feedbackFor(`track:${track.id}`)} />
-
-        <div style={styles.subsection}>
-          <div style={styles.subheading}>Basic details</div>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              const data = new FormData(event.currentTarget);
-              data.set("intent", "update-track");
-              data.set("trackId", track.id);
-              mutate(data);
-            }}
-          >
-            <div style={styles.formGrid}>
-              <Field
-                label="Track title"
-                help="Use the song title only. Version information has its own field."
-              >
-                <input
-                  name="title"
-                  defaultValue={
-                    track.title === "Untitled Track" ? "" : track.title
-                  }
-                  placeholder="Song title"
-                  className="rc-control"
-                />
-              </Field>
-              <Field
-                label="Version / subtitle"
-                help="Examples: Remix, Acoustic, Radio Edit. Leave blank for the original version."
-              >
-                <input
-                  name="version"
-                  defaultValue={track.version || ""}
-                  placeholder="Original version"
-                  className="rc-control"
-                />
-              </Field>
-              <Field label="Language">
-                <Select
-                  name="language"
-                  defaultValue={track.language || ""}
-                  options={LANGUAGES}
-                  placeholder="Choose language"
-                  disabled={busy}
-                  onChange={(event) =>
-                    event.currentTarget.form?.requestSubmit()
-                  }
-                />
-              </Field>
-              <Field
-                label="ISRC"
-                help="ISRC is managed in the dedicated Track editor. This read-only field prevents conflicting Admin edit paths."
-              >
-                <input
-                  value={track.isrc || ""}
-                  placeholder="No ISRC assigned"
-                  className="rc-control"
-                  readOnly
-                  aria-label={`ISRC for Track ${index + 1}`}
-                />
-              </Field>
-            </div>
-            <div style={styles.checkRow}>
-              <input
-                id={`track-${track.id}-explicit`}
-                type="checkbox"
-                name="explicit"
-                defaultChecked={track.explicit}
-                disabled={busy}
-                onChange={(event) =>
-                  event.currentTarget.form?.requestSubmit()
-                }
-              />
-              <span>
-                <label
-                  htmlFor={`track-${track.id}-explicit`}
-                  style={{ fontWeight: 700, cursor: "pointer" }}
-                >
-                  Explicit content
-                </label>
-                <span style={styles.checkHelp}>
-                  {" "}
-                  Mark this track explicit if its lyrical or audio content
-                  requires an explicit designation.
-                </span>
-              </span>
-            </div>
-            <div style={styles.trackFooter}>
-              <button disabled={busy} className="rc-button">
-                {busy ? "Saving…" : "Save title / version"}
-              </button>
-            </div>
-          </form>
-        </div>
-
-        <div style={styles.subsection}>
-          <div style={styles.assetHeading}>
-            <div>
-              <div style={styles.subheading}>Audio master</div>
-              <div style={styles.subcopy}>
-                Upload the final uncompressed WAV that should be delivered for
-                this recording.
-              </div>
-            </div>
-            <StatusPill tone={master ? "good" : "warn"}>
-              {master ? "Ready" : "Required"}
-            </StatusPill>
-          </div>
-          {master ? (
-            <FileCard file={master} removeFile={removeFile} busy={busy} />
-          ) : (
-            <div style={styles.emptyInline}>No master WAV uploaded.</div>
-          )}
-          <UploadControl
-            label={master ? "Replace master WAV" : "Upload master WAV"}
-            help="WAV only. Maximum 500 MB. Masters are stored privately and are never exposed as permanent public files."
-            accept="audio/wav,audio/x-wav,.wav"
-            kind={FILE_KINDS.MASTER_WAV}
-            trackId={track.id}
-            uploadFile={uploadFile}
-            busy={busy}
-            progress={
-              uploadState?.trackId === track.id &&
-              uploadState?.kind === FILE_KINDS.MASTER_WAV
-                ? uploadState
-                : null
-            }
-            feedback={feedbackFor(`upload:${FILE_KINDS.MASTER_WAV}:${track.id}`)}
-          />
-        </div>
-
-        <div style={styles.subsection}>
-          <div style={styles.assetHeading}>
-            <div>
-              <div style={styles.subheading}>Lyrics</div>
-              <div style={styles.subcopy}>
-                Enter the complete lyrics exactly as performed. Instrumental
-                tracks can leave this blank when the language is marked
-                accordingly.
-              </div>
-            </div>
-            <StatusPill tone={lyricsReady ? "good" : "warn"}>
-              {lyricsReady ? "Ready" : "Missing"}
-            </StatusPill>
-          </div>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              const data = new FormData(event.currentTarget);
-              data.set("intent", "update-lyrics");
-              data.set("trackId", track.id);
-              mutate(data);
-            }}
-          >
-            <textarea
-              name="lyrics"
-              defaultValue={track.lyrics || ""}
-              placeholder="Paste complete lyrics here…"
-              className="rc-control"
-            />
-            <div style={styles.trackFooter}>
-              <button disabled={busy} className="rc-button">
-                {busy ? "Saving…" : "Save lyrics"}
-              </button>
-            </div>
-          </form>
-        </div>
-
-        <div style={styles.subsection}>
-          <div style={styles.subheading}>Artists</div>
-          <div style={styles.subcopy}>
-            Primary and featured artist identities for this recording.
-          </div>
-          {track.artists.length ? (
-            <div style={styles.assignmentList}>
-              {track.artists.map((assignment) => (
-                <form
-                  key={assignment.id}
-                  className="rc-assignment-row"
-                  style={styles.assignmentRow}
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    const data = new FormData(event.currentTarget);
-                    data.set("intent", "update-track-artist");
-                    data.set("trackId", track.id);
-                    data.set("assignmentId", assignment.id);
-                    mutate(data);
-                  }}
-                >
-                  <div className="rc-artist-assignment-identity">
-                    <ArtistAvatar artist={assignment.artist} size="small" />
-                    <div style={{ minWidth: 0 }}>
-                      <strong>{assignment.artist.name}</strong>
-                      <div style={styles.micro}>
-                        {assignment.artist.legalName || "Artist identity"}
-                      </div>
-                    </div>
-                  </div>
-                  <RoleSelect
-                defaultValue={assignment.role}
-                disabled={busy}
-                onChange={(event) =>
-                  event.currentTarget.form?.requestSubmit()
-                }
-              />
-                  <div style={styles.rowActions}>
-                    <button disabled={busy} className="rc-button rc-button--compact">
-                      Save
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      className="rc-button rc-button--danger rc-button--compact"
-                      onClick={() => {
-                        const data = new FormData();
-                        data.set("intent", "remove-track-artist");
-                        data.set("trackId", track.id);
-                        data.set("assignmentId", assignment.id);
-                        mutate(data);
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </form>
-              ))}
-            </div>
-          ) : (
-            <div style={styles.emptyInline}>
-              No artists assigned to this track.
-            </div>
-          )}
-          {artists.length ? (
-            <form
-              style={styles.addRow}
-              onSubmit={(event) => {
-                event.preventDefault();
-                const data = new FormData(event.currentTarget);
-                data.set("intent", "add-track-artist");
-                data.set("trackId", track.id);
-                mutate(data);
-              }}
-            >
-              <select name="artistId" required className="rc-control">
-                <option value="">Choose artist…</option>
-                {artists.map((artist) => (
-                  <option key={artist.id} value={artist.id}>
-                    {artist.name}
-                  </option>
-                ))}
-              </select>
-              <RoleSelect />
-              <button disabled={busy} className="rc-button">
-                Add artist
-              </button>
-            </form>
-          ) : (
-            <div style={styles.directoryPrompt}>
-              No artist identities yet.{" "}
-              <Link to="/app/artists">Add artists</Link>.
-            </div>
-          )}
-        </div>
-
-        <div style={styles.subsection}>
-          <div style={styles.creditHeading}>
-            <div>
-              <div style={styles.subheading}>
-                {creditSplitsEnabled ? "Credits & splits" : "Credits"}
-              </div>
-              <div style={styles.subcopy}>
-                {creditSplitsEnabled
-                  ? "Credit reusable contributors, then assign writer/composer ownership splits."
-                  : "Credit reusable contributors without collecting publishing ownership percentages."}
-              </div>
-            </div>
-            {creditSplitsEnabled ? (
-              <StatusPill tone={publishingTone}>
-                {publishingTotal}% songwriter ownership
-              </StatusPill>
-            ) : null}
-          </div>
-          {track.credits.length ? (
-            <div style={styles.assignmentList}>
-              {track.credits.map((credit) => (
-                <form
-                  key={credit.id}
-                  className={`rc-credit-row${creditSplitsEnabled ? "" : " rc-credit-row--credits-only"}`}
-                  style={{
-                    ...styles.creditRow,
-                    gridTemplateColumns: creditSplitsEnabled
-                      ? styles.creditRow.gridTemplateColumns
-                      : "minmax(180px,1fr) minmax(170px,230px) auto",
-                  }}
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    const data = new FormData(event.currentTarget);
-                    data.set("intent", "update-credit");
-                    data.set("trackId", track.id);
-                    data.set("creditId", credit.id);
-                    mutate(data);
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <strong>
-                      {contributorDisplayName(credit.contributor)}
-                    </strong>
-                    <div style={styles.micro}>
-                      {credit.contributor.legalName}
-                      {credit.contributor.pro
-                        ? ` · ${credit.contributor.pro}`
-                        : ""}
-                      {credit.contributor.ipi
-                        ? ` · IPI ${credit.contributor.ipi}`
-                        : ""}
-                    </div>
-                  </div>
-                  <CreditRoleSelect
-                    defaultValue={credit.role}
-                    disabled={adminBusy}
-                    onChange={(event) =>
-                      event.currentTarget.form?.requestSubmit()
-                    }
-                  />
-                  {creditSplitsEnabled ? (
-                    <input
-                      name="ownershipPercent"
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      defaultValue={credit.ownershipPercent ?? ""}
-                      placeholder="Split %"
-                      className="rc-control rc-control--compact"
-                      disabled={adminBusy}
-                      onBlur={(event) =>
-                        event.currentTarget.form?.requestSubmit()
-                      }
-                    />
-                  ) : null}
-                  <div style={styles.rowActions}>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      className="rc-button rc-button--danger rc-button--compact"
-                      onClick={() => {
-                        const data = new FormData();
-                        data.set("intent", "remove-credit");
-                        data.set("trackId", track.id);
-                        data.set("creditId", credit.id);
-                        mutate(data);
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </form>
-              ))}
-            </div>
-          ) : (
-            <div style={styles.emptyInline}>No contributors credited yet.</div>
-          )}
-          {suggestedContributors.length ? (
-            <div className="rc-linked-suggestion">
-              Suggested for{" "}
-              {relationshipArtists.map((item) => item.artist.name).join(", ")}:{" "}
-              {suggestedContributors.map(contributorDisplayName).join(", ")}
-            </div>
-          ) : null}
-          {contributors.length ? (
-            <form
-              style={{
-                ...styles.creditAddRow,
-                gridTemplateColumns: creditSplitsEnabled
-                  ? styles.creditAddRow.gridTemplateColumns
-                  : "minmax(220px,1fr) minmax(170px,230px) auto",
-              }}
-              className={`rc-credit-row${creditSplitsEnabled ? "" : " rc-credit-row--credits-only"}`}
-              onSubmit={(event) => {
-                event.preventDefault();
-                const data = new FormData(event.currentTarget);
-                data.set("intent", "add-credit");
-                data.set("trackId", track.id);
-                mutate(data);
-              }}
-            >
-              <select name="contributorId" required className="rc-control">
-                <option value="">Choose contributor…</option>
-                {suggestedContributors.length ? (
-                  <optgroup label="Linked to this artist">
-                    {suggestedContributors.map((contributor) => (
-                      <option key={contributor.id} value={contributor.id}>
-                        {contributorDisplayName(contributor)} —{" "}
-                        {contributor.legalName}
-                      </option>
-                    ))}
-                  </optgroup>
-                ) : null}
-                {otherContributors.length ? (
-                  <optgroup
-                    label={
-                      suggestedContributors.length
-                        ? "All other contributors"
-                        : "All contributors"
-                    }
-                  >
-                    {otherContributors.map((contributor) => (
-                      <option key={contributor.id} value={contributor.id}>
-                        {contributorDisplayName(contributor)} —{" "}
-                        {contributor.legalName}
-                      </option>
-                    ))}
-                  </optgroup>
-                ) : null}
-              </select>
-              <CreditRoleSelect />
-              {creditSplitsEnabled ? (
-                <input
-                  name="ownershipPercent"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  placeholder="Split %"
-                  className="rc-control rc-control--compact"
-                />
-              ) : null}
-              <button disabled={busy} className="rc-button">
-                Add credit
-              </button>
-            </form>
-          ) : (
-            <div style={styles.directoryPrompt}>
-              No contributor records yet.{" "}
-              <Link to="/app/contributors">Add contributors</Link>.
-            </div>
-          )}
-          <div style={styles.splitHelp}>
-            {creditSplitsEnabled
-              ? "Ownership is stored for Songwriter and Composer credits. Publishing ownership cannot exceed 100%."
-              : "This store is configured for credits only. Publishing ownership percentages are not collected."}
-          </div>
-        </div>
-      </div>
-    </details>
+                : "ISRC not configured")}
+        </StatusPill>
+        <StatusPill tone={master ? "good" : "warn"}>
+          {master ? "Master ready" : "Needs master"}
+        </StatusPill>
+        <StatusPill tone={artistCount ? "good" : "warn"}>
+          {artistCount} artist{artistCount === 1 ? "" : "s"}
+        </StatusPill>
+        <StatusPill tone="neutral">
+          {track.credits.length} credit{track.credits.length === 1 ? "" : "s"}
+        </StatusPill>
+      </span>
+      <span className="rc-track-list-item__action">
+        Edit track info <span aria-hidden="true">→</span>
+      </span>
+    </Link>
   );
 }
+
 
 function WorkflowPanel({ release, readiness, mutate, busy, feedback }) {
   const editable = releaseIsEditable(release.status);
@@ -2071,8 +1486,7 @@ export default function ReleaseWorkspace() {
               {titledTracks} of {release.tracks.length} tracks named
             </div>
             <div style={styles.muted}>
-              Expand a song to manage metadata, master audio, lyrics, artists,
-              contributors and publishing splits.
+              Select a track to open its complete Edit Track Info page. Multi-track releases also have a separate bulk editor for repeated core fields.
             </div>
           </div>
           <div className="rc-tracklist-actions" style={styles.tracklistActions}>
@@ -2090,6 +1504,14 @@ export default function ReleaseWorkspace() {
                 Configure ISRC
               </s-button>
             ) : null}
+            {release.tracks.length > 1 ? (
+              <Link
+                to={`/app/release/${release.id}/tracks/bulk`}
+                className="rc-button"
+              >
+                Bulk edit tracks
+              </Link>
+            ) : null}
             {release.type === "SINGLE" ? (
               <StatusPill>Single · 1 track</StatusPill>
             ) : editable ? (
@@ -2106,9 +1528,6 @@ export default function ReleaseWorkspace() {
             )}
           </div>
         </div>
-        {release.tracks.length ? (
-          <TrackEditorLaunch release={release} />
-        ) : null}
         {canAddTrack && existingSongs?.length ? (
           <form
             style={styles.existingSongRow}
@@ -2153,31 +1572,15 @@ export default function ReleaseWorkspace() {
             </button>
           </form>
         ) : null}
-        <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
+        <div className="rc-track-list">
           {release.tracks.map((track, index) => (
-            <TrackCard
+            <TrackListItem
               key={track.id}
               track={track}
               index={index}
-              count={release.tracks.length}
-              mutate={mutate}
-              busy={busy || !editable}
-              adminBusy={busy}
-              artists={artists}
-              contributors={contributors}
-              releaseArtists={release.artists}
-              uploadFile={uploadFile}
-              removeFile={removeFile}
-              uploadState={uploadState}
-              feedbackFor={feedbackFor}
+              release={release}
               isrcConfigured={isrcSettings.configured}
               isrcMode={isrcSettings.mode}
-              creditSplitsEnabled={workflowSettings?.requirePublishing ?? true}
-              canDeleteTrack={
-                release.status === "DRAFT" &&
-                release.type !== "SINGLE" &&
-                !track.shopifyProductId
-              }
             />
           ))}
         </div>
@@ -2216,7 +1619,7 @@ export default function ReleaseWorkspace() {
           <span>ISRC assigned</span>
           <strong>
             {isrcReady}/{release.tracks.length}
-            {isrcSettings.mode === "ADMIN" ? " · during distribution" : ""}
+            {isrcSettings.mode === "ADMIN" ? " · manual" : ""}
           </strong>
         </div>
         <div style={styles.readinessRow}>

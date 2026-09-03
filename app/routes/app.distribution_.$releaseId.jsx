@@ -941,7 +941,7 @@ export default function DistributionWorkspace() {
       >
         <div style={styles.intro}>
           {isrcAssignmentMode(settings) === "ADMIN"
-            ? "Your aggregator or admin provides ISRCs. Enter each permanent code below; saved codes cannot be replaced."
+            ? "Your aggregator or admin provides ISRCs. Assign or correct each code from that track's Edit Track Info page."
             : "ReleaseCore assigns ISRCs from the configured issuer sequence. Missing automatic codes can be assigned from the release workspace."}
         </div>
         <div style={styles.trackList}>
@@ -1013,7 +1013,7 @@ export default function DistributionWorkspace() {
                     <div>
                       <strong>ISRC pending</strong>
                       <div style={styles.muted}>
-                        ISRC assignment and corrections are managed in Track editor so identifiers have one authoritative Admin editing surface.
+                        ISRC assignment and corrections are managed in Edit Track Info so identifiers have one authoritative Admin editing surface.
                       </div>
                     </div>
                     <button
@@ -1021,10 +1021,10 @@ export default function DistributionWorkspace() {
                       disabled={busy}
                       className="rc-button rc-button--tertiary"
                       onClick={() =>
-                        navigate(`/app/release/${release.id}/tracks`)
+                        navigate(`/app/release/${release.id}/track/${track.id}`)
                       }
                     >
-                      Open track editor
+                      Edit track info
                     </button>
                   </div>
                 ) : null}

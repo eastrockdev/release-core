@@ -1,6 +1,6 @@
 # ReleaseCore Shopify App Store submission runbook
 
-This document covers the remaining Partner Dashboard and reviewer-preparation work that cannot be completed by application code alone. Keep it with the release checklist and update it whenever ReleaseCore's scopes or public URLs change.
+This document covers Partner Dashboard / Shopify Dev Dashboard and reviewer-preparation work that cannot be completed by application code alone.
 
 ## Production configuration
 
@@ -11,129 +11,101 @@ This document covers the remaining Partner Dashboard and reviewer-preparation wo
 - **Public support page:** `https://releasecore-web-production.up.railway.app/support`
 - **Compliance webhook endpoint:** `https://releasecore-web-production.up.railway.app/webhooks/compliance`
 - **App proxy:** `/apps/releasecore` → `/releasecore-proxy`
-- **Webhook API version:** `2026-07`
+- **Stable webhook API version:** `2026-07`
+- **M15.3 review version:** `releasecore-m15-3-review`
 
-Do not submit while any Partner Dashboard URL still contains `example.com`, a development tunnel, localhost, or an expired preview domain.
+Do not submit while any URL contains `example.com`, a development tunnel, localhost, or an expired preview domain.
 
 ## Support and developer contacts
 
-Shopify requires a valid **support email address** for public apps. Configure the real monitored ReleaseCore support address in the primary App Store listing. If desired, also set the same address as `RELEASECORE_SUPPORT_EMAIL` in Railway so `/support` exposes a direct mail link.
+Shopify requires a valid support email for public apps. Configure the real monitored ReleaseCore support address in the App Store listing. If desired, also set the same address as `RELEASECORE_SUPPORT_EMAIL` in Railway so `/support` exposes a direct mail link.
 
 Before submission, verify:
 
-- Support email is monitored and can receive Shopify-forwarded merchant requests.
-- API contact email is current and does not misuse Shopify branding.
-- **Emergency developer contact** has a current email address and phone number in Partner account settings.
+- support email is monitored;
+- API contact email is current;
+- **Emergency developer contact** has current email and phone details;
 - `noreply@shopify.com` is allowed by the submission/contact mailbox.
 
 ## Protected customer data
 
-ReleaseCore requests `read_customers` because Artist Portal and merchant-configured automation depend on a Shopify customer identity. Complete the Protected customer data request **before** submitting the app for review.
+ReleaseCore requests `read_customers` because Artist Portal and merchant-configured automation depend on Shopify customer identity. Complete the Protected customer data request before submitting.
 
 ### Protected customer data justification
-
-Use wording equivalent to:
 
 > ReleaseCore uses Shopify Customer records only to associate a merchant-selected Shopify customer with an Artist Portal identity, enforce merchant-configured customer-tag eligibility and automation rules, and route transactional notifications about that customer's own release workflow. Customer data is not used for independent advertising or sold to third parties.
 
 ### Name field justification
 
-> ReleaseCore displays the customer's name to the merchant when searching for and assigning an Artist Portal account. The name is required to distinguish similarly named/email-addressed customer records and reduce the risk of assigning private artist access to the wrong customer.
+> ReleaseCore displays the customer's name to the merchant when searching for and assigning an Artist Portal account. The name is required to distinguish customer records and reduce the risk of assigning private artist access to the wrong customer.
 
 ### Email field justification
 
 > ReleaseCore displays the customer's email to the merchant to distinguish customer records during Artist Portal assignment. When the merchant enables transactional notifications, the email can also be used to deliver release-status messages related to that customer's own releases.
 
-Do not request phone or address fields unless a future ReleaseCore feature actually requires them.
-
-### Data protection details to verify in Partner Dashboard
-
-Confirm the answers accurately describe the deployed system:
-
-- Customer access is limited to the minimum fields ReleaseCore uses.
-- Tenant-aware authorization prevents one Shopify shop/customer from reading another tenant's private release data.
-- Embedded admin requests use Shopify authentication/session tokens.
-- Private master audio is stored in private object storage and accessed through scoped ReleaseCore authorization.
-- Production traffic uses HTTPS.
-- Customer/shop privacy requests are processed through the mandatory Shopify compliance webhooks.
-- `shop/redact` deletes tenant records and private master-storage objects.
-- Access to production data is limited to people who need it to operate/support the service.
+Do not request phone or address unless a future feature actually requires them.
 
 ## App listing
 
 Before submission:
 
-- Create the primary English listing.
-- Upload a **1200 × 1200** PNG or JPEG app icon.
-- Add screenshots that show actual merchant workflows. Do not include reviews/testimonials, promotional pricing outside Shopify's pricing fields, fabricated statistics, or URLs inside screenshots/listing copy.
-- Use `ReleaseCore` consistently as the app name.
-- Add the Privacy policy URL above.
-- Configure the real support email and optional Support portal URL above.
-- Describe only functionality that is available in the review build.
-- If pricing is introduced, configure it through Shopify's supported pricing/billing surfaces before listing claims are added.
+- complete the primary English listing;
+- upload a **1200 × 1200** PNG or JPEG app icon;
+- add screenshots showing the actual current build;
+- use `ReleaseCore` consistently;
+- add the Privacy Policy URL above;
+- configure the monitored support email and optional support portal;
+- describe only functionality available in the review build;
+- configure any pricing through Shopify-supported billing/pricing surfaces before making listing claims.
 
 ## Reviewer screencast
 
-Record an English screencast (or provide English subtitles) showing the complete onboarding and core workflow. A recommended sequence:
+Recommended sequence:
 
-1. Install ReleaseCore from the Shopify-owned installation/review flow.
-2. Confirm the app opens directly inside Shopify Admin after OAuth.
-3. Open **Settings** and show identifier/publishing configuration.
-4. Create a Single release and an Album/EP release.
-5. Add tracks, credits, artwork, and a master WAV.
-6. Create/select an Artist and use **Portal access** to link the review customer.
-7. Open **Storefront setup**, use the Theme Editor deep link, add the Release Portal block, configure it, and save the theme.
-8. Sign in to the storefront as the provided test Shopify customer and show that customer's Artist Portal/release workflow.
-9. Submit a release, return to Admin, review it, approve it, and open Distribution.
-10. Show UPC/catalog/ISRC handling and the distribution status workspace.
-11. Show the Privacy workspace so reviewers can see that Shopify privacy requests are tracked and actionable.
+1. Install ReleaseCore from Shopify's installation/review flow.
+2. Confirm the app opens in Shopify Admin after OAuth.
+3. Open Settings.
+4. Create a Single and Album/EP.
+5. Open the Edit Track Info page and show Single ISRC assignment/correction.
+6. Add tracks, credits, artwork, and master WAV.
+7. Create/select an Artist and link the review customer through Portal access.
+8. Open Storefront setup and add/save Release Portal in Theme Editor.
+9. Sign into storefront as the provided test customer and show Artist Portal access.
+10. Submit, review, approve, and open Distribution.
+11. Show UPC/catalog/ISRC handling.
+12. Generate an audio preview.
+13. Show Shopify product/Album bundle sync and Sync Health.
+14. Show release-level Storefront publication preview without modifying real merchant catalog data.
+15. Show Privacy workspace.
 
 ## Reviewer test instructions
 
-Provide enough detail that a reviewer can reproduce the screencast without asking for clarification.
+- Open Shopify Admin → Apps → ReleaseCore.
+- No separate ReleaseCore login is required.
+- Use supplied storefront customer credentials for Artist Portal.
+- In Admin, open Portal access and confirm the customer is linked to the review artist.
+- Use Storefront setup for Theme Editor deep links.
+- The review customer should see only releases allowed by that customer's Artist Portal access.
+- Use provided sample audio/artwork for upload testing.
+- Use a disposable release for submission/distribution tests.
+- Use the Edit Track Info page for ISRC assignment/correction.
+- Use Sync Health to inspect Shopify product/preview/publication state.
 
-### Reviewer test instructions template
+## Create the review version
 
-- Open the app from Shopify Admin → Apps → ReleaseCore.
-- No separate ReleaseCore login is required; Shopify authenticates the embedded admin app.
-- Use the supplied Shopify storefront customer credentials to test the Artist Portal.
-- In Admin, open Portal access and confirm that the test customer is linked to the review artist.
-- Open Storefront setup and use the Release Portal Theme Editor deep link if the review theme does not already contain the block.
-- The review customer should see only releases owned by that customer's linked Artist Portal identity.
-- Use the provided sample audio/artwork files to test upload behavior if the reviewer needs to exercise file flows.
-- Use a dedicated test release for submission/review/distribution testing so production catalog data is not modified.
-
-If the review store requires credentials beyond Shopify Admin access, include functional credentials in the submission and verify them immediately before submitting.
-
-## Fresh-store install test
-
-Before submission, install the exact production app version on a clean development store and verify:
-
-- Installation begins on a Shopify-owned surface; ReleaseCore never asks for a shop domain manually.
-- OAuth completes and redirects directly to `/app`.
-- Every navigation route loads without exceptions.
-- Required scopes are granted and protected customer fields work with the development approval.
-- Release creation, artist/customer linking, uploads, submission, review, Distribution, Privacy, and Storefront setup work without pre-existing database records.
-- Theme app blocks render in Theme Editor and Online Store on desktop and mobile.
-- Uninstall removes app blocks automatically; Shopify's later `shop/redact` request removes ReleaseCore tenant data.
-- Reinstall starts with Shopify authentication again.
-
-## Final automated and production gates
-
-From the repository root before deployment:
+From the reviewed repository tree:
 
 ```bash
 npm run check
-npm run check:app-store
+npm run check:m15.3
 git diff --check
+
+shopify app config use releasecore
+shopify app deploy --no-release --allow-updates --version releasecore-m15-3-review
 ```
 
-After the exact review build is live on Railway:
+Inspect the generated version before release. Routine automation should use `--allow-updates`; do not permit deletions unless an extension/config deletion is intentional and manually reviewed.
 
-```bash
-npm run verify:production
-```
+Then complete signed-webhook, fresh-store, Chrome-incognito, idle-uninstall/reinstall, Theme Editor, and reviewer-evidence checks from `docs/PRODUCTION-VERIFICATION.md`.
 
-Then complete the Shopify app-version, signed-webhook, fresh-store, Chrome-incognito, idle-uninstall/reinstall, and reviewer-evidence sequence in `docs/PRODUCTION-VERIFICATION.md`.
-
-Do not submit while any repository, production, or manual review gate is incomplete.
+Do not submit while any automated or manual review gate is incomplete.
