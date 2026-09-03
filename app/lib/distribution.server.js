@@ -476,11 +476,21 @@ export async function performDistributionAction({
     });
     await ensureReleaseCoreProductMetafields(admin);
     const currentRelease = await getDistributionRelease(shop, release.id);
-    await repairAndSyncExistingProducts({
-      admin,
-      release: currentRelease,
-      settings,
-    });
+    let productSyncWarning = "";
+    try {
+      await repairAndSyncExistingProducts({
+        admin,
+        release: currentRelease,
+        settings,
+      });
+    } catch (error) {
+      console.warn(
+        "ReleaseCore: audio previews generated but Shopify product sync was deferred",
+        { message: safeDiagnosticText(error?.message || error) },
+      );
+      productSyncWarning =
+        " Audio previews were generated successfully, but Shopify product metadata could not be synced. Use Sync Shopify Products to retry.";
+    }
     await recordEvent({
       releaseId: release.id,
       type: "AUDIO_PREVIEWS_GENERATED",
@@ -492,7 +502,9 @@ export async function performDistributionAction({
       throw publicError(result.errors.join(" "), { status: 400 });
     }
     return {
-      message: `${result.generated} MP3 preview${result.generated === 1 ? "" : "s"} generated and synced to Shopify.${result.errors.length ? ` ${result.errors.join(" ")}` : ""}`,
+      message: productSyncWarning
+        ? `${result.generated} MP3 preview${result.generated === 1 ? "" : "s"} generated.${productSyncWarning}${result.errors.length ? ` ${result.errors.join(" ")}` : ""}`
+        : `${result.generated} MP3 preview${result.generated === 1 ? "" : "s"} generated and synced to Shopify.${result.errors.length ? ` ${result.errors.join(" ")}` : ""}`,
     };
   }
 

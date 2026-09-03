@@ -801,6 +801,7 @@ function ReleaseAssets({
 
 
 function BulkTrackEditor({ release, mutate, busy, editable }) {
+  const [open, setOpen] = useState(false);
   const normalize = (value) =>
     String(value || "")
       .trim()
@@ -808,19 +809,54 @@ function BulkTrackEditor({ release, mutate, busy, editable }) {
       .replace(/[^A-Z0-9]/g, "");
 
   return (
-    <details className="rc-bulk-track-editor" open>
-      <summary className="rc-bulk-track-editor__summary">
-        <div>
+    <>
+      <div className="rc-bulk-track-launch">
+        <div className="rc-bulk-track-launch__copy">
           <strong>Bulk edit tracks</strong>
           <span>
-            Edit titles, versions, language, explicit status and ISRCs in one
-            table. ISRC corrections are validated together before anything is
-            changed.
+            Edit all {release.tracks.length} tracks in a full-width workspace.
           </span>
         </div>
-        <span>{release.tracks.length} tracks</span>
-      </summary>
-      <form
+        <button
+          type="button"
+          className="rc-button rc-button--primary"
+          onClick={() => setOpen(true)}
+        >
+          Open bulk editor
+        </button>
+      </div>
+
+      {open ? (
+        <div
+          className="rc-bulk-track-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setOpen(false);
+          }}
+        >
+          <div
+            className="rc-bulk-track-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="rc-bulk-track-modal-title"
+          >
+            <div className="rc-bulk-track-modal__header">
+              <div>
+                <h2 id="rc-bulk-track-modal-title">Bulk edit tracks</h2>
+                <p>
+                  {release.title} · {release.tracks.length} tracks. ISRC
+                  corrections are validated together before anything changes.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rc-button"
+                onClick={() => setOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+            <form
         className="rc-bulk-track-editor__body"
         onSubmit={(event) => {
           event.preventDefault();
@@ -862,6 +898,7 @@ function BulkTrackEditor({ release, mutate, busy, editable }) {
           data.set("intent", "bulk-update-tracks");
           data.set("tracks", JSON.stringify(rows));
           mutate(data);
+          setOpen(false);
         }}
       >
         <div className="rc-bulk-track-table-wrap">
@@ -958,7 +995,10 @@ function BulkTrackEditor({ release, mutate, busy, editable }) {
           </button>
         </div>
       </form>
-    </details>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -2607,9 +2647,9 @@ const styles = {
   },
   existingSongRow: {
     display: "grid",
-    gridTemplateColumns: "minmax(260px,1fr) minmax(260px,1fr) auto",
-    gap: 12,
-    alignItems: "end",
+    gridTemplateColumns: "minmax(0,1fr)",
+    gap: 10,
+    alignItems: "stretch",
     marginTop: 16,
     padding: 14,
     border: "1px solid #dedede",

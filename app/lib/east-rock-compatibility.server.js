@@ -105,6 +105,26 @@ function releaseTypeLabel(type) {
   return clean(type);
 }
 
+export const EAST_ROCK_PARENTAL_ADVISORY_CHOICES = [
+  "Explicit",
+  "Non-Explicit",
+  "Cleaned Version",
+];
+
+export function eastRockParentalAdvisoryValue(track) {
+  if (track?.explicit) return "Explicit";
+
+  const version = String(track?.version || "")
+    .trim()
+    .toLowerCase();
+
+  if (/\bclean(?:ed)?\b/.test(version)) {
+    return "Cleaned Version";
+  }
+
+  return "Non-Explicit";
+}
+
 export const EAST_ROCK_DISTRIBUTION_STATUS_CHOICES = [
   "Pending Review",
   "In-Review",
@@ -364,9 +384,9 @@ export function buildEastRockTrackProductMetafields({
     metafield(
       "parental_advisory",
       "single_line_text_field",
-      track?.explicit
-        ? "Explicit"
-        : "Clean",
+      eastRockParentalAdvisoryValue(
+        track,
+      ),
     ),
     metafield(
       "recording_engineer",

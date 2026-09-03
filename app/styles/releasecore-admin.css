@@ -788,3 +788,107 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   .rc-credit-row--credits-only > :last-child .rc-button,
   .rc-credit-row--credits-only > :last-child.rc-button { width: 100%; }
 }
+
+/* M14.4.9 — wide bulk track modal. */
+.rc-bulk-track-launch {
+  align-items: center;
+  background: var(--rc-surface-subdued);
+  border: 1px solid var(--rc-border);
+  border-radius: var(--rc-radius-md);
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding: 14px;
+}
+.rc-bulk-track-launch__copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.rc-bulk-track-launch__copy strong { font-size: 13px; }
+.rc-bulk-track-launch__copy span {
+  color: var(--rc-text-subdued);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.rc-bulk-track-modal-backdrop {
+  align-items: center;
+  background: rgba(16, 18, 20, .5);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 10000;
+}
+.rc-bulk-track-modal {
+  background: var(--rc-surface);
+  border: 1px solid var(--rc-border);
+  border-radius: var(--rc-radius-lg);
+  box-shadow: 0 24px 80px rgba(0,0,0,.28);
+  max-height: calc(100vh - 48px);
+  max-width: 1400px;
+  overflow: auto;
+  width: calc(100vw - 48px);
+}
+.rc-bulk-track-modal__header {
+  align-items: flex-start;
+  background: var(--rc-surface);
+  border-bottom: 1px solid var(--rc-border);
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  padding: 18px 20px;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+.rc-bulk-track-modal__header h2 {
+  font-size: 20px;
+  line-height: 1.2;
+  margin: 0;
+}
+.rc-bulk-track-modal__header p {
+  color: var(--rc-text-subdued);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 5px 0 0;
+}
+.rc-bulk-track-modal .rc-bulk-track-editor__body {
+  border-top: 0;
+}
+.rc-bulk-track-modal .rc-bulk-track-table-wrap {
+  overflow-x: auto;
+}
+.rc-bulk-track-modal .rc-bulk-track-table {
+  min-width: 980px;
+}
+.rc-bulk-track-modal .rc-bulk-track-editor__footer {
+  background: var(--rc-surface);
+  bottom: 0;
+  border-top: 1px solid var(--rc-border);
+  position: sticky;
+  z-index: 2;
+}
+
+@media (max-width: 720px) {
+  .rc-bulk-track-launch {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .rc-bulk-track-launch .rc-button { width: 100%; }
+  .rc-bulk-track-modal-backdrop { padding: 8px; }
+  .rc-bulk-track-modal {
+    border-radius: 12px;
+    max-height: calc(100vh - 16px);
+    width: calc(100vw - 16px);
+  }
+  .rc-bulk-track-modal__header {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 14px;
+  }
+  .rc-bulk-track-modal__header .rc-button { width: 100%; }
+}
