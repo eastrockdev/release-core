@@ -4,6 +4,7 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { typeLabel, formatDate } from "../lib/releasecore";
 import { statusLabel, statusTone } from "../lib/workflow";
+import { loadOperationsCenter } from "../lib/operations-center.server";
 import { EmptyState, MetricCard, MetricGrid, PageIntro, ReleaseListItem } from "../components/releasecore-ui";
 
 export const loader = async ({ request }) => {
@@ -36,11 +37,17 @@ export const loader = async ({ request }) => {
     db.contributor.count({ where: { shop: session.shop } }),
   ]);
 
-  return { releases, stats: { total, drafts, activeSubmissions, approved, distributionQueue, artists, contributors } };
+  const operations = await loadOperationsCenter({
+    shop: session.shop,
+    releaseLimit: 80,
+    issueLimit: 4,
+  });
+
+  return { releases, stats: { total, drafts, activeSubmissions, approved, distributionQueue, artists, contributors }, operations };
 };
 
 export default function Index() {
-  const { releases, stats } = useLoaderData();
+  const { releases, stats, operations } = useLoaderData();
   const navigate = useNavigate();
 
   return (
@@ -61,6 +68,33 @@ export default function Index() {
         >
           Track every release from draft through approval and delivery without losing the artists, credits, files, or identifiers attached to it.
         </PageIntro>
+      </s-section>
+
+      <s-section heading="Production operations">
+        <MetricGrid>
+          <MetricCard label="Needs attention" value={operations.stats.needsAttention} detail="Active releases with an actionable issue" href="/app/operations" />
+          <MetricCard label="Waiting for review" value={operations.stats.waitingReview} detail="Submitted or currently in review" href="/app/submissions" />
+          <MetricCard label="Ready to distribute" value={operations.stats.readyToDistribute} detail="Approved and preflight-complete" href="/app/distribution" />
+          <MetricCard label="Next 7 days" value={operations.stats.scheduledNextSevenDays} detail="Upcoming undelivered releases" href="/app/operations" />
+        </MetricGrid>
+        {operations.issues.length ? (
+          <div className="rc-operations-home-list">
+            {operations.issues.map((issue) => (
+              <Link key={issue.key} to={issue.href} className="rc-operations-home-row">
+                <span>
+                  <strong>{issue.release.title}</strong>
+                  <span>{issue.title}</span>
+                </span>
+                <span aria-hidden="true">→</span>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="rc-operations-home-clear">No active release issues found.</div>
+        )}
+        <div className="rc-card__actions">
+          <s-button onClick={() => navigate("/app/operations")}>Open operations center</s-button>
+        </div>
       </s-section>
 
       <s-section heading="Getting started">
