@@ -105,28 +105,64 @@ function releaseTypeLabel(type) {
   return clean(type);
 }
 
-function distributionStatusLabel(status) {
-  const value =
-    String(status || "")
-      .trim()
-      .toUpperCase();
+export const EAST_ROCK_DISTRIBUTION_STATUS_CHOICES = [
+  "Pending Review",
+  "In-Review",
+  "Submitted",
+  "Rejected",
+  "Approved",
+  "Live",
+  "Takedown",
+  "Copyright",
+];
 
-  const labels = {
-    NOT_QUEUED: "Not queued",
-    QUEUED: "Queued",
-    IN_REVIEW: "In review",
-    APPROVED: "Approved",
-    SCHEDULED: "Scheduled",
-    LIVE: "Live",
-    TAKEDOWN_REQUESTED: "Takedown requested",
-    TAKEDOWN: "Takedown",
-    REJECTED: "Rejected",
-  };
+export function eastRockDistributionStatusValue(release) {
+  const releaseStatus = String(release?.status || "")
+    .trim()
+    .toUpperCase();
+  const distributionStatus = String(release?.distributionStatus || "")
+    .trim()
+    .toUpperCase();
 
-  return (
-    labels[value] ||
-    clean(status)
-  );
+  if (
+    distributionStatus === "TAKEDOWN" ||
+    distributionStatus === "TAKEDOWN_REQUESTED"
+  ) {
+    return "Takedown";
+  }
+
+  if (
+    releaseStatus === "COPYRIGHT" ||
+    distributionStatus === "COPYRIGHT"
+  ) {
+    return "Copyright";
+  }
+
+  if (releaseStatus === "REJECTED") {
+    return "Rejected";
+  }
+
+  if (distributionStatus === "DELIVERED") {
+    return "Live";
+  }
+
+  if (releaseStatus === "APPROVED") {
+    return "Approved";
+  }
+
+  if (
+    releaseStatus === "IN_REVIEW" ||
+    releaseStatus === "CHANGES_REQUESTED" ||
+    distributionStatus === "RETURNED_FOR_CORRECTIONS"
+  ) {
+    return "In-Review";
+  }
+
+  if (releaseStatus === "SUBMITTED") {
+    return "Submitted";
+  }
+
+  return "Pending Review";
 }
 
 function legacyGenre(value) {
@@ -301,8 +337,8 @@ export function buildEastRockTrackProductMetafields({
     metafield(
       "distribution_status",
       "single_line_text_field",
-      distributionStatusLabel(
-        release?.distributionStatus,
+      eastRockDistributionStatusValue(
+        release,
       ),
     ),
     listMetafield(

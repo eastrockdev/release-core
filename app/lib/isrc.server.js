@@ -1,4 +1,5 @@
 import db from "../db.server";
+import { publicError } from "./http-security.server";
 import {
   buildIsrc,
   isrcAssignmentMode,
@@ -150,13 +151,42 @@ export async function maybeAutoAssignIsrc({ trackId, shop }) {
   return assignIsrcToTrack({ trackId, shop });
 }
 
+function validateAdminIsrc(value) {
+  try {
+    return validateIsrc(value);
+  } catch (error) {
+    throw publicError(
+      error instanceof Error
+        ? error.message
+        : "Enter a valid 12-character ISRC.",
+      { status: 400, code: "INVALID_ISRC" },
+    );
+  }
+}
+
+function duplicateIsrcError(duplicate, shop, code) {
+  if (duplicate?.release?.shop === shop) {
+    const trackTitle = duplicate.title || "Untitled Track";
+    const releaseTitle = duplicate.release?.title || "Untitled Release";
+    return publicError(
+      `ISRC ${code} is already assigned to "${trackTitle}" on "${releaseTitle}". If this is the same recording, use Add existing song to move that imported Single into the EP/Album instead of assigning the ISRC twice.`,
+      { status: 409, code: "ISRC_ALREADY_ASSIGNED" },
+    );
+  }
+
+  return publicError(
+    `ISRC ${code} is already assigned to another recording.`,
+    { status: 409, code: "ISRC_ALREADY_ASSIGNED" },
+  );
+}
+
 export async function assignManualIsrcToTrack({
   trackId,
   shop,
   value,
   actorLabel = "Shopify admin",
 }) {
-  const code = validateIsrc(value);
+  const code = validateAdminIsrc(value);
 
   return db.$transaction(async (tx) => {
     const track = await tx.track.findUnique({
@@ -175,9 +205,12 @@ export async function assignManualIsrcToTrack({
       );
     }
 
-    const duplicate = await tx.track.findUnique({ where: { isrc: code } });
+    const duplicate = await tx.track.findUnique({
+      where: { isrc: code },
+      include: { release: true },
+    });
     if (duplicate) {
-      throw new Error("That ISRC is already assigned to another track.");
+      throw duplicateIsrcError(duplicate, shop, code);
     }
 
     const updated = await tx.track.updateMany({
@@ -214,7 +247,7 @@ export async function correctIsrcForTrack({
   value,
   actorLabel = "Shopify admin",
 }) {
-  const code = validateIsrc(value);
+  const code = validateAdminIsrc(value);
 
   return db.$transaction(async (tx) => {
     const track = await tx.track.findUnique({
@@ -228,9 +261,12 @@ export async function correctIsrcForTrack({
       return { code, corrected: false, previousCode: track.isrc, track };
     }
 
-    const duplicate = await tx.track.findUnique({ where: { isrc: code } });
+    const duplicate = await tx.track.findUnique({
+      where: { isrc: code },
+      include: { release: true },
+    });
     if (duplicate && duplicate.id !== track.id) {
-      throw new Error("That ISRC is already assigned to another track.");
+      throw duplicateIsrcError(duplicate, shop, code);
     }
 
     const previousCode = track.isrc || null;
