@@ -18,6 +18,7 @@ import {
   attachExistingSingleTrack,
   deleteDraftTrack,
 } from "./release-tracks.server";
+import { bulkUpdateReleaseTracks } from "./bulk-track-edit.server";
 
 async function getOwnedRelease(id, shop, include = {}) {
   return findShopRelease(shop, id, { include });
@@ -196,6 +197,31 @@ export const action = async ({ request, params }) => {
         db.submissionEvent.create({ data: { releaseId: release.id, type: "REOPENED", message: "Release returned to draft by an administrator.", actorLabel: "Shopify admin", fromStatus: release.status, toStatus: "DRAFT" } }),
       ]);
       return Response.json({ ok: true, message: "Release reopened as a draft." });
+    }
+
+    if (intent === "bulk-update-tracks") {
+      let rows;
+      try {
+        rows = JSON.parse(String(formData.get("tracks") || "[]"));
+      } catch {
+        throw publicError("The bulk track payload could not be read.", {
+          status: 400,
+        });
+      }
+
+      const result = await bulkUpdateReleaseTracks({
+        shop: session.shop,
+        releaseId: release.id,
+        rows,
+        actorLabel: "Shopify admin",
+      });
+
+      return Response.json({
+        ok: true,
+        message: result.changed
+          ? `${result.changed} track${result.changed === 1 ? "" : "s"} saved${result.isrcCorrections ? ` · ${result.isrcCorrections} ISRC correction${result.isrcCorrections === 1 ? "" : "s"}` : ""}.`
+          : "No track changes to save.",
+      });
     }
 
     if (intent === "update-isrc") {

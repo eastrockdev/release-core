@@ -27,7 +27,21 @@ need(action, 'intent !== "update-credit"', "Admin credit correction is still blo
 need(action, 'const creditSplitsEnabled = appSettings?.requirePublishing ?? true;', "Admin mutations do not respect the credit mode.");
 need(admin, 'creditSplitsEnabled={workflowSettings?.requirePublishing ?? true}', "Admin release UI does not receive the credit mode.");
 need(admin, '{creditSplitsEnabled ? "Credits & splits" : "Credits"}', "Admin credit section does not reflect the mode.");
-need(admin, '<button disabled={adminBusy}', "Admin credit Save is still disabled on locked catalog releases.");
+need(
+  admin,
+  "disabled={adminBusy}",
+  "Admin credit correction controls do not use the admin-only busy state.",
+);
+need(
+  admin,
+  "event.currentTarget.form?.requestSubmit()",
+  "Admin credit correction no longer autosaves from the editable credit controls.",
+);
+need(
+  action,
+  'intent !== "update-credit"',
+  "Admin credit correction is no longer allowed on locked catalog releases.",
+);
 need(portalServer, 'creditSplitsEnabled: settings?.requirePublishing ?? true', "Portal detail does not expose the credit mode.");
 need(portalServer, 'export async function updatePortalCredit', "Portal existing-credit update service is missing.");
 need(proxy, 'intent === "update-credit"', "Portal existing-credit update route is missing.");

@@ -20,7 +20,7 @@
     "vite": "vite",
     "typecheck": "react-router typegen && tsc --noEmit",
     "check:security": "node scripts/validate-security-boundaries.mjs",
-    "check": "npm run check:graphql && npm run check:security && npm run check:tenancy && npm run check:compliance && npm run check:app-store && npm run check:deployment-profile && npm run check:release-draft-deletion && npm run check:m14.4.2 && npm run check:m14.4.3 && npm run check:m14.4.4 && npm run check:m14.4.5 && npm run check:m14.4.6 && npm run check:m14.4.7 && npm run check:east-rock-compatibility && npm run check:artist-collection-compatibility && npm run check:release-timeline && npm run check:import-duplicate-guard && npm run check:catalog && npm run check:commerce && npm run check:purchased-music && npm run check:customer-metadata && npm run check:order-status-downloads && npm run check:architecture && npm run check:cleanup && npm run check:digital-catalog && npm run check:admin-artwork && npm run lint && npm run typecheck && npm run build && npm run check:east-rock-app-proxy",
+    "check": "npm run check:graphql && npm run check:security && npm run check:tenancy && npm run check:compliance && npm run check:app-store && npm run check:deployment-profile && npm run check:release-draft-deletion && npm run check:m14.4.2 && npm run check:m14.4.3 && npm run check:m14.4.4 && npm run check:m14.4.5 && npm run check:m14.4.6 && npm run check:m14.4.7 && npm run check:m14.4.8 && npm run check:east-rock-compatibility && npm run check:artist-collection-compatibility && npm run check:release-timeline && npm run check:import-duplicate-guard && npm run check:catalog && npm run check:commerce && npm run check:purchased-music && npm run check:customer-metadata && npm run check:order-status-downloads && npm run check:architecture && npm run check:cleanup && npm run check:digital-catalog && npm run check:admin-artwork && npm run lint && npm run typecheck && npm run build && npm run check:east-rock-app-proxy",
     "check:architecture": "node scripts/validate-route-boundaries.mjs",
     "check:cleanup": "node scripts/validate-cleanup.mjs",
     "check:tenancy": "node scripts/validate-tenant-hardening.mjs",
@@ -49,7 +49,8 @@
     "check:m14.4.4": "node scripts/validate-m14.4.4-credit-mode-collections.mjs",
     "check:m14.4.5": "node scripts/validate-m14.4.5-artist-release-access.mjs",
     "check:m14.4.6": "node scripts/validate-m14.4.6-existing-tracks.mjs",
-    "check:m14.4.7": "node scripts/validate-m14.4.7-east-rock-sync.mjs"
+    "check:m14.4.7": "node scripts/validate-m14.4.7-east-rock-sync.mjs",
+    "check:m14.4.8": "node scripts/validate-m14.4.8-bulk-track-edit.mjs"
   },
   "type": "module",
   "engines": {

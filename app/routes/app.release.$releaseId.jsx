@@ -78,9 +78,22 @@ function Field({ label, help, children }) {
   );
 }
 
-function Select({ name, defaultValue = "", options, placeholder = "Select" }) {
+function Select({
+  name,
+  defaultValue = "",
+  options,
+  placeholder = "Select",
+  onChange,
+  disabled = false,
+}) {
   return (
-    <select className="rc-control" name={name} defaultValue={defaultValue}>
+    <select
+      className="rc-control"
+      name={name}
+      defaultValue={defaultValue}
+      onChange={onChange}
+      disabled={disabled}
+    >
       <option value="">{placeholder}</option>
       {defaultValue && !options.includes(defaultValue) ? (
         <option value={defaultValue}>{defaultValue}</option>
@@ -94,9 +107,20 @@ function Select({ name, defaultValue = "", options, placeholder = "Select" }) {
   );
 }
 
-function RoleSelect({ name = "role", defaultValue = "PRIMARY" }) {
+function RoleSelect({
+  name = "role",
+  defaultValue = "PRIMARY",
+  onChange,
+  disabled = false,
+}) {
   return (
-    <select className="rc-control rc-control--compact" name={name} defaultValue={defaultValue}>
+    <select
+      className="rc-control rc-control--compact"
+      name={name}
+      defaultValue={defaultValue}
+      onChange={onChange}
+      disabled={disabled}
+    >
       {ARTIST_ROLES.map((role) => (
         <option key={role} value={role}>
           {artistRoleLabel(role)}
@@ -106,9 +130,19 @@ function RoleSelect({ name = "role", defaultValue = "PRIMARY" }) {
   );
 }
 
-function CreditRoleSelect({ defaultValue = "SONGWRITER" }) {
+function CreditRoleSelect({
+  defaultValue = "SONGWRITER",
+  onChange,
+  disabled = false,
+}) {
   return (
-    <select className="rc-control rc-control--compact" name="role" defaultValue={defaultValue}>
+    <select
+      className="rc-control rc-control--compact"
+      name="role"
+      defaultValue={defaultValue}
+      onChange={onChange}
+      disabled={disabled}
+    >
       {CREDIT_ROLES.map((role) => (
         <option key={role} value={role}>
           {creditRoleLabel(role)}
@@ -548,11 +582,14 @@ function ReleaseArtists({ release, artists, mutate, busy, feedback }) {
                   </div>
                 </div>
               </div>
-              <RoleSelect defaultValue={assignment.role} />
+              <RoleSelect
+                defaultValue={assignment.role}
+                disabled={busy}
+                onChange={(event) =>
+                  event.currentTarget.form?.requestSubmit()
+                }
+              />
               <div style={styles.rowActions}>
-                <button disabled={busy} className="rc-button rc-button--compact">
-                  Save
-                </button>
                 <button
                   type="button"
                   disabled={busy}
@@ -762,6 +799,169 @@ function ReleaseAssets({
   );
 }
 
+
+function BulkTrackEditor({ release, mutate, busy, editable }) {
+  const normalize = (value) =>
+    String(value || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "");
+
+  return (
+    <details className="rc-bulk-track-editor" open>
+      <summary className="rc-bulk-track-editor__summary">
+        <div>
+          <strong>Bulk edit tracks</strong>
+          <span>
+            Edit titles, versions, language, explicit status and ISRCs in one
+            table. ISRC corrections are validated together before anything is
+            changed.
+          </span>
+        </div>
+        <span>{release.tracks.length} tracks</span>
+      </summary>
+      <form
+        className="rc-bulk-track-editor__body"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const raw = new FormData(event.currentTarget);
+          const rows = release.tracks.map((track) => ({
+            trackId: track.id,
+            title: editable
+              ? String(raw.get(`title:${track.id}`) || "")
+              : track.title,
+            version: editable
+              ? String(raw.get(`version:${track.id}`) || "")
+              : track.version || "",
+            language: editable
+              ? String(raw.get(`language:${track.id}`) || "")
+              : track.language || "",
+            explicit: editable
+              ? raw.get(`explicit:${track.id}`) === "on"
+              : Boolean(track.explicit),
+            isrc: String(raw.get(`isrc:${track.id}`) || ""),
+          }));
+
+          const isrcChanges = rows.filter((row) => {
+            const current = release.tracks.find(
+              (track) => track.id === row.trackId,
+            );
+            return normalize(row.isrc) !== normalize(current?.isrc || "");
+          });
+
+          if (
+            isrcChanges.length &&
+            !window.confirm(
+              `Correct ISRC${isrcChanges.length === 1 ? "" : "s"} on ${isrcChanges.length} track${isrcChanges.length === 1 ? "" : "s"}? ReleaseCore will validate the complete set for uniqueness before changing any of them.`,
+            )
+          ) {
+            return;
+          }
+
+          const data = new FormData();
+          data.set("intent", "bulk-update-tracks");
+          data.set("tracks", JSON.stringify(rows));
+          mutate(data);
+        }}
+      >
+        <div className="rc-bulk-track-table-wrap">
+          <table className="rc-bulk-track-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Track title</th>
+                <th>Version</th>
+                <th>Language</th>
+                <th>Explicit</th>
+                <th>ISRC</th>
+              </tr>
+            </thead>
+            <tbody>
+              {release.tracks.map((track, index) => (
+                <tr key={track.id}>
+                  <td className="rc-bulk-track-table__number">
+                    {String(index + 1).padStart(2, "0")}
+                  </td>
+                  <td>
+                    <input
+                      className="rc-control rc-control--compact"
+                      name={`title:${track.id}`}
+                      defaultValue={
+                        track.title === "Untitled Track" ? "" : track.title
+                      }
+                      placeholder="Track title"
+                      disabled={busy || !editable}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      className="rc-control rc-control--compact"
+                      name={`version:${track.id}`}
+                      defaultValue={track.version || ""}
+                      placeholder="Original version"
+                      disabled={busy || !editable}
+                    />
+                  </td>
+                  <td>
+                    <select
+                      className="rc-control rc-control--compact"
+                      name={`language:${track.id}`}
+                      defaultValue={track.language || ""}
+                      disabled={busy || !editable}
+                    >
+                      <option value="">Choose language</option>
+                      {track.language && !LANGUAGES.includes(track.language) ? (
+                        <option value={track.language}>{track.language}</option>
+                      ) : null}
+                      {LANGUAGES.map((language) => (
+                        <option key={language} value={language}>
+                          {language}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="rc-bulk-track-table__check">
+                    <input
+                      type="checkbox"
+                      name={`explicit:${track.id}`}
+                      defaultChecked={Boolean(track.explicit)}
+                      disabled={busy || !editable}
+                      aria-label={`Explicit content for Track ${index + 1}`}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      className="rc-control rc-control--compact rc-bulk-track-table__isrc"
+                      name={`isrc:${track.id}`}
+                      defaultValue={track.isrc || ""}
+                      placeholder="USABC2600001"
+                      disabled={busy}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="rc-bulk-track-editor__footer">
+          <span>
+            {editable
+              ? "Use this table for changes that affect several songs at once."
+              : "Metadata is locked; administrators can still correct ISRCs."}
+          </span>
+          <button
+            type="submit"
+            disabled={busy}
+            className="rc-button rc-button--primary"
+          >
+            {busy ? "Saving…" : "Save all track changes"}
+          </button>
+        </div>
+      </form>
+    </details>
+  );
+}
+
 function TrackCard({
   track,
   index,
@@ -961,56 +1161,23 @@ function TrackCard({
                   defaultValue={track.language || ""}
                   options={LANGUAGES}
                   placeholder="Choose language"
+                  disabled={busy}
+                  onChange={(event) =>
+                    event.currentTarget.form?.requestSubmit()
+                  }
                 />
               </Field>
               <Field
                 label="ISRC"
-                help={
-                  track.isrc
-                    ? "Admin correction field. Use the recording's original ISRC; changes are logged in status history."
-                    : "Enter an existing ISRC when this recording already has one. Artist Portal users cannot edit this field."
-                }
+                help="Edit ISRC in the bulk track editor above. This keeps single-track and multi-track corrections in one consistent workflow."
               >
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <input
-                    defaultValue={track.isrc || ""}
-                    placeholder="USABC2600001"
-                    className="rc-control"
-                    data-admin-isrc
-                    aria-label={`ISRC for Track ${index + 1}`}
-                  />
-                  <button
-                    type="button"
-                    disabled={adminBusy}
-                    className="rc-button"
-                    onClick={(event) => {
-                      const input = event.currentTarget.parentElement?.querySelector(
-                        "[data-admin-isrc]",
-                      );
-                      const value = String(input?.value || "").trim();
-                      if (!value) return;
-                      const normalized = value
-                        .toUpperCase()
-                        .replace(/[^A-Z0-9]/g, "");
-                      if (
-                        track.isrc &&
-                        normalized !== String(track.isrc).toUpperCase() &&
-                        !window.confirm(
-                          `Change this recording's ISRC from ${track.isrc} to ${normalized}? Use this only to correct an incorrect identifier.`,
-                        )
-                      ) {
-                        return;
-                      }
-                      const data = new FormData();
-                      data.set("intent", "update-isrc");
-                      data.set("trackId", track.id);
-                      data.set("isrc", value);
-                      mutate(data);
-                    }}
-                  >
-                    {adminBusy ? "Saving…" : "Save ISRC"}
-                  </button>
-                </div>
+                <input
+                  value={track.isrc || ""}
+                  placeholder="No ISRC assigned"
+                  className="rc-control"
+                  readOnly
+                  aria-label={`ISRC for Track ${index + 1}`}
+                />
               </Field>
             </div>
             <div style={styles.checkRow}>
@@ -1019,6 +1186,10 @@ function TrackCard({
                 type="checkbox"
                 name="explicit"
                 defaultChecked={track.explicit}
+                disabled={busy}
+                onChange={(event) =>
+                  event.currentTarget.form?.requestSubmit()
+                }
               />
               <span>
                 <label
@@ -1036,7 +1207,7 @@ function TrackCard({
             </div>
             <div style={styles.trackFooter}>
               <button disabled={busy} className="rc-button">
-                {busy ? "Saving…" : "Save basic details"}
+                {busy ? "Saving…" : "Save title / version"}
               </button>
             </div>
           </form>
@@ -1145,7 +1316,13 @@ function TrackCard({
                       </div>
                     </div>
                   </div>
-                  <RoleSelect defaultValue={assignment.role} />
+                  <RoleSelect
+                defaultValue={assignment.role}
+                disabled={busy}
+                onChange={(event) =>
+                  event.currentTarget.form?.requestSubmit()
+                }
+              />
                   <div style={styles.rowActions}>
                     <button disabled={busy} className="rc-button rc-button--compact">
                       Save
@@ -1228,7 +1405,7 @@ function TrackCard({
               {track.credits.map((credit) => (
                 <form
                   key={credit.id}
-                  className="rc-credit-row"
+                  className={`rc-credit-row${creditSplitsEnabled ? "" : " rc-credit-row--credits-only"}`}
                   style={{
                     ...styles.creditRow,
                     gridTemplateColumns: creditSplitsEnabled
@@ -1258,7 +1435,13 @@ function TrackCard({
                         : ""}
                     </div>
                   </div>
-                  <CreditRoleSelect defaultValue={credit.role} />
+                  <CreditRoleSelect
+                    defaultValue={credit.role}
+                    disabled={adminBusy}
+                    onChange={(event) =>
+                      event.currentTarget.form?.requestSubmit()
+                    }
+                  />
                   {creditSplitsEnabled ? (
                     <input
                       name="ownershipPercent"
@@ -1269,12 +1452,13 @@ function TrackCard({
                       defaultValue={credit.ownershipPercent ?? ""}
                       placeholder="Split %"
                       className="rc-control rc-control--compact"
+                      disabled={adminBusy}
+                      onBlur={(event) =>
+                        event.currentTarget.form?.requestSubmit()
+                      }
                     />
                   ) : null}
                   <div style={styles.rowActions}>
-                    <button disabled={adminBusy} className="rc-button rc-button--compact">
-                      {adminBusy ? "Saving…" : "Save"}
-                    </button>
                     <button
                       type="button"
                       disabled={busy}
@@ -1311,7 +1495,7 @@ function TrackCard({
                   ? styles.creditAddRow.gridTemplateColumns
                   : "minmax(220px,1fr) minmax(170px,230px) auto",
               }}
-              className="rc-credit-row"
+              className={`rc-credit-row${creditSplitsEnabled ? "" : " rc-credit-row--credits-only"}`}
               onSubmit={(event) => {
                 event.preventDefault();
                 const data = new FormData(event.currentTarget);
@@ -1688,7 +1872,7 @@ function releaseActionScope(formData) {
   if (WORKFLOW_INTENTS.has(intent)) return "workflow";
   if (["add-release-artist", "update-release-artist", "remove-release-artist"].includes(intent)) return "release-artists";
   if (intent === "update-release") return "release-details";
-  if (["add-track", "attach-existing-track", "assign-missing-isrcs"].includes(intent)) return "tracklist";
+  if (["add-track", "attach-existing-track", "bulk-update-tracks", "assign-missing-isrcs"].includes(intent)) return "tracklist";
   return "release";
 }
 
@@ -1701,6 +1885,7 @@ function releasePendingMessage(formData) {
     "remove-release-artist": "Removing release artist…",
     "add-track": "Adding track…",
     "attach-existing-track": "Adding existing song…",
+    "bulk-update-tracks": "Saving track table…",
     "delete-track": "Deleting draft track…",
     "assign-missing-isrcs": "Assigning missing ISRCs…",
     "update-track": "Saving track details…",
@@ -2060,6 +2245,15 @@ export default function ReleaseWorkspace() {
             )}
           </div>
         </div>
+        {release.tracks.length > 1 ? (
+          <BulkTrackEditor
+            key={`${release.id}:${release.updatedAt}`}
+            release={release}
+            mutate={mutate}
+            busy={busy}
+            editable={editable}
+          />
+        ) : null}
         {canAddTrack && existingSongs?.length ? (
           <form
             style={styles.existingSongRow}

@@ -27,10 +27,56 @@ need(isrcServer, "duplicate && duplicate.id !== track.id", "ISRC uniqueness prot
 need(action, 'intent === "update-isrc"', "Admin ISRC update action is missing.");
 need(action, "correctIsrcForTrack", "Admin ISRC correction service is not wired.");
 
-need(admin, "data-admin-isrc", "Admin ISRC field is not editable.");
-need(admin, 'data.set("intent", "update-isrc")', "Admin ISRC save action is missing.");
-need(admin, "adminBusy={busy}", "Admin ISRC correction remains locked on approved/imported releases.");
-need(admin, '"update-isrc": "Saving ISRC…"', "Admin ISRC pending state is missing.");
+const hasLegacyAdminIsrcEditor =
+  admin.includes("data-admin-isrc") &&
+  admin.includes('data.set("intent", "update-isrc")');
+
+const hasBulkAdminIsrcEditor =
+  admin.includes("function BulkTrackEditor") &&
+  admin.includes('data.set("intent", "bulk-update-tracks")') &&
+  admin.includes("Save all track changes") &&
+  admin.includes("Edit ISRC in the bulk track editor above.");
+
+if (!hasLegacyAdminIsrcEditor && !hasBulkAdminIsrcEditor) {
+  failures.push("Admin ISRC correction UI is missing.");
+}
+
+need(
+  action,
+  'intent === "update-isrc"',
+  "Dedicated single-track Admin ISRC correction action is missing.",
+);
+need(
+  action,
+  "correctIsrcForTrack",
+  "Dedicated single-track Admin ISRC correction service is not wired.",
+);
+
+if (hasLegacyAdminIsrcEditor) {
+  need(
+    admin,
+    "adminBusy={busy}",
+    "Admin ISRC correction remains locked on approved/imported releases.",
+  );
+  need(
+    admin,
+    '"update-isrc": "Saving ISRC…"',
+    "Admin ISRC pending state is missing.",
+  );
+}
+
+if (hasBulkAdminIsrcEditor) {
+  need(
+    admin,
+    'bulk-update-tracks',
+    "Bulk Admin ISRC correction intent is missing.",
+  );
+  need(
+    admin,
+    "Save all track changes",
+    "Bulk Admin ISRC correction save action is missing.",
+  );
+}
 
 if (/name=["']isrc["']/.test(portal)) {
   failures.push("Artist Portal exposes a named/editable ISRC input.");
