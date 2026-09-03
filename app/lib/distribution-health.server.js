@@ -23,6 +23,7 @@ const SYNC_FAILURE_INTENTS = new Set([
   "sync-shopify-release-product",
   "generate-audio-previews",
   "retry-sync-health",
+  "orchestrate-publication",
 ]);
 
 const CREDIT_LIST_KEYS = new Set([
@@ -761,8 +762,11 @@ export function buildDistributionHealth({
       "SHOPIFY_SYNC_RETRY_SUCCEEDED",
     ].includes(event.type),
   );
-  const lastWarning = events.find(
-    (event) => event.type === "SHOPIFY_SYNC_WARNING",
+  const lastWarning = events.find((event) =>
+    [
+      "SHOPIFY_SYNC_WARNING",
+      "SHOPIFY_PUBLICATION_WARNING",
+    ].includes(event.type),
   );
   const lastError = events.find(
     (event) => event.type === "SHOPIFY_SYNC_FAILED",

@@ -8,7 +8,7 @@ function read(path) {
 const compatibility = read("app/lib/east-rock-compatibility.server.js");
 const distribution = read("app/lib/distribution.server.js");
 const admin = read("app/routes/app.release.$releaseId.jsx");
-const trackEditor = read("app/routes/app.release.$releaseId.tracks.jsx");
+const trackEditor = read("app/routes/app.release_.$releaseId.tracks.jsx");
 const css = read("app/styles/releasecore-admin.css");
 
 const failures = [];

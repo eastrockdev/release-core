@@ -23,6 +23,7 @@ import {
   retryDistributionHealth,
   runDistributionPreflight,
 } from "./distribution-health.server";
+import { orchestrateReleasePublication } from "./publication-orchestration.server";
 
 const DISTRIBUTION_ACTION_INCLUDE = {
   artists: { include: { artist: true }, orderBy: { position: "asc" } },
@@ -455,6 +456,20 @@ export async function performDistributionAction({
               .map((item) => `${item.title}: ${item.message}`)
               .join(" "),
           }
+        : {}),
+    };
+  }
+
+  if (intent === "orchestrate-publication") {
+    const result = await orchestrateReleasePublication({
+      admin,
+      release,
+      mode: formData.get("mode"),
+    });
+    return {
+      message: result.message,
+      ...(result.warning
+        ? { warning: result.warning }
         : {}),
     };
   }

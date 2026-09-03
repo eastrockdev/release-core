@@ -98,6 +98,14 @@ async function updateProductStatus(admin, productId, status) {
   return json?.data?.productUpdate?.product || null;
 }
 
+export async function setProductStatus(admin, productId, status) {
+  const normalized = String(status || "").trim().toUpperCase();
+  if (!["ACTIVE", "DRAFT"].includes(normalized)) {
+    throw new Error("ReleaseCore publication orchestration only supports ACTIVE or DRAFT product status changes.");
+  }
+  return updateProductStatus(admin, productId, normalized);
+}
+
 export async function publishProductToOnlineStore({ admin, productId, publishDate = null }) {
   const publication = await getOnlineStorePublication(admin);
   if (!publication) throw new Error("Shopify Online Store publication was not found for this store.");

@@ -9,7 +9,7 @@ const importer = read("app/lib/import-product.server.js");
 const isrcServer = read("app/lib/isrc.server.js");
 const action = read("app/lib/api-releases-release-action.server.js");
 const admin = read("app/routes/app.release.$releaseId.jsx");
-const trackEditor = read("app/routes/app.release.$releaseId.tracks.jsx");
+const trackEditor = read("app/routes/app.release_.$releaseId.tracks.jsx");
 const portal = read("extensions/releasecore-artist-portal/assets/releasecore-portal.js");
 
 const failures = [];

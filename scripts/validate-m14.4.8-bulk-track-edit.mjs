@@ -4,7 +4,7 @@ const read = (path) => fs.readFileSync(path, "utf8");
 const service = read("app/lib/bulk-track-edit.server.js");
 const action = read("app/lib/api-releases-release-action.server.js");
 const admin = read("app/routes/app.release.$releaseId.jsx");
-const trackEditor = read("app/routes/app.release.$releaseId.tracks.jsx");
+const trackEditor = read("app/routes/app.release_.$releaseId.tracks.jsx");
 const css = read("app/styles/releasecore-admin.css");
 const m1443 = read("scripts/validate-m14.4.3-isrc-import-admin.mjs");
 const m1444 = read("scripts/validate-m14.4.4-credit-mode-collections.mjs");

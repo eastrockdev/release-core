@@ -5,6 +5,7 @@ import {
   buildDistributionHealth,
   runDistributionPreflight,
 } from "./distribution-health.server";
+import { buildPublicationOrchestration } from "./publication-orchestration.server";
 
 const DISTRIBUTION_RELEASE_INCLUDE = {
   artists: { include: { artist: true }, orderBy: { position: "asc" } },
@@ -55,9 +56,15 @@ export async function loadDistributionWorkspace({ admin, shop, releaseId }) {
     settings,
     preflight,
   });
+  const publicationOrchestration =
+    await buildPublicationOrchestration({
+      admin,
+      release: hydratedRelease,
+    });
   return {
     release: hydratedRelease,
     settings,
     syncHealth,
+    publicationOrchestration,
   };
 }

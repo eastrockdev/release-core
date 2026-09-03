@@ -63,6 +63,7 @@ function distributionActionScope(formData) {
   if (intent === "save-manual-isrc") return `track:${String(formData.get("trackId") || "")}`;
   if (intent === "generate-audio-previews") return "previews";
   if (intent === "retry-sync-health") return "sync-health";
+  if (intent === "orchestrate-publication") return "publication";
   if (["create-shopify-products", "publish-shopify-product", "schedule-shopify-product", "unpublish-shopify-product"].includes(intent)) return "products";
   if (["sync-shopify-release-product", "publish-shopify-release-product", "schedule-shopify-release-product", "unpublish-shopify-release-product"].includes(intent)) return "release-product";
   if (["update-distribution", "return-for-corrections"].includes(intent)) return "status";
@@ -348,8 +349,202 @@ function SyncHealthPanel({
   );
 }
 
+function PublicationOrchestrationPanel({
+  plan,
+  selectedMode,
+  onModeChange,
+  onApply,
+  busy,
+  busyAction,
+  feedback,
+}) {
+  if (!plan) return null;
+
+  const selected =
+    plan.modes?.find((mode) => mode.id === selectedMode) ||
+    plan.modes?.[0] ||
+    null;
+
+  const desiredLabel =
+    selected?.desiredLabel || "Select a publication mode";
+
+  return (
+    <CollapsibleSection
+      icon="product"
+      title="Storefront publication"
+      description="Coordinate Online Store availability for the entire release instead of publishing products one at a time."
+      summary={`${plan.summary?.linked || 0}/${plan.summary?.expected || 0} products linked`}
+      defaultOpen
+    >
+      <ActionFeedback feedback={feedback} />
+
+      <div className="rc-publication-summary">
+        <div>
+          <span>Published</span>
+          <strong>{plan.summary?.published || 0}</strong>
+        </div>
+        <div>
+          <span>Scheduled</span>
+          <strong>{plan.summary?.scheduled || 0}</strong>
+        </div>
+        <div>
+          <span>Active / hidden</span>
+          <strong>{plan.summary?.activeUnpublished || 0}</strong>
+        </div>
+        <div>
+          <span>Draft</span>
+          <strong>{plan.summary?.draft || 0}</strong>
+        </div>
+      </div>
+
+      <div className="rc-publication-mode-grid">
+        {plan.modes?.map((mode) => {
+          const active = mode.id === selectedMode;
+          const label =
+            mode.id === "SCHEDULE_RELEASE"
+              ? "Schedule for release timeline"
+              : mode.label;
+          return (
+            <button
+              key={mode.id}
+              type="button"
+              className={`rc-publication-mode${active ? " rc-publication-mode--active" : ""}`}
+              aria-pressed={active}
+              onClick={() => onModeChange(mode.id)}
+            >
+              <span className="rc-publication-mode__title">
+                {label}
+              </span>
+              <span className="rc-publication-mode__copy">
+                {mode.description}
+              </span>
+              {!mode.allowed && mode.blockers?.length ? (
+                <span className="rc-publication-mode__blocked">
+                  {mode.blockers[0]}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="rc-publication-timeline">
+        <div>
+          <span>Schedule basis</span>
+          <strong>
+            {plan.schedule?.basis === "PRE_ORDER"
+              ? "Pre-order window"
+              : "Release date"}
+          </strong>
+        </div>
+        <div>
+          <span>Effective storefront time</span>
+          <strong>
+            {plan.schedule?.available
+              ? plan.schedule.label
+              : "Schedule unavailable"}
+          </strong>
+        </div>
+        <div>
+          <span>Shop timezone</span>
+          <strong>{plan.schedule?.timeZone || "UTC"}</strong>
+        </div>
+      </div>
+
+      {plan.schedule?.warnings?.length ? (
+        <div className="rc-publication-notes">
+          {plan.schedule.warnings.map((warning, index) => (
+            <div key={`publication-note:${index}`}>
+              {warning}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="rc-publication-preview">
+        <div className="rc-publication-preview__header">
+          <div>
+            <strong>Publication preview</strong>
+            <span>
+              Nothing changes until you confirm the action below.
+            </span>
+          </div>
+          <span className="rc-publication-preview__desired">
+            Target · {desiredLabel}
+          </span>
+        </div>
+
+        <div className="rc-publication-preview__list">
+          {plan.targets?.map((target) => (
+            <div
+              className="rc-publication-preview__row"
+              key={`${target.kind}:${target.trackId || "release"}`}
+            >
+              <div>
+                <strong>{target.title}</strong>
+                <span>
+                  {target.kind === "RELEASE"
+                    ? "Album / EP parent"
+                    : "Track product"}
+                </span>
+              </div>
+              <div className="rc-publication-preview__state">
+                <span>{target.currentLabel}</span>
+                <span aria-hidden="true">→</span>
+                <strong>{desiredLabel}</strong>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {plan.missing?.length ? (
+        <div className="rc-notice rc-notice--info">
+          {plan.missing.length} expected Shopify product
+          {plan.missing.length === 1 ? " is" : "s are"} not linked yet.
+          Publish and Schedule remain blocked until the complete release
+          product set exists. Offline actions can still operate on linked
+          products.
+        </div>
+      ) : null}
+
+      <div className="rc-publication-footer">
+        <div>
+          <strong>{selected?.label || "Publication mode"}</strong>
+          <span>
+            {selected?.allowed
+              ? `${plan.summary?.linked || 0} linked product${plan.summary?.linked === 1 ? "" : "s"} will be evaluated.`
+              : selected?.blockers?.join(" ") || "This publication mode is not available yet."}
+          </span>
+        </div>
+        <button
+          type="button"
+          disabled={busy || !selected?.allowed}
+          className={
+            selectedMode === "UNPUBLISH_ALL"
+              ? "rc-button rc-button--danger"
+              : "rc-button rc-button--primary"
+          }
+          onClick={onApply}
+        >
+          {busyAction === "orchestrate-publication"
+            ? "Applying publication plan…"
+            : selectedMode === "UNPUBLISH_ALL"
+              ? "Unpublish complete release"
+              : "Apply publication plan"}
+        </button>
+      </div>
+    </CollapsibleSection>
+  );
+}
+
 export default function DistributionWorkspace() {
-  const { release, settings, syncHealth } = useLoaderData();
+  const {
+    release,
+    settings,
+    syncHealth,
+    publicationOrchestration,
+  } = useLoaderData();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
@@ -362,6 +557,9 @@ export default function DistributionWorkspace() {
   );
   const [releasePrice, setReleasePrice] = useState(
     String(settings?.defaultAlbumPrice ?? 9.99),
+  );
+  const [publicationMode, setPublicationMode] = useState(
+    publicationOrchestration?.defaultMode || "KEEP_UNPUBLISHED",
   );
   const createdCount = release.tracks.filter((t) => t.shopifyProductId).length;
   const isAlbumOrEp = ["ALBUM", "EP"].includes(String(release.type || "").toUpperCase());
@@ -426,6 +624,8 @@ export default function DistributionWorkspace() {
         "Generating MP3 previews… This may take a moment.",
       "retry-sync-health":
         "Retrying only the Shopify items that need recovery…",
+      "orchestrate-publication":
+        "Applying the release-level storefront publication plan…",
       "assign-upc": "Assigning UPC…",
       "assign-catalog": "Assigning catalog number…",
       "create-shopify-products": "Syncing Shopify products…",
@@ -496,6 +696,34 @@ export default function DistributionWorkspace() {
       "retryReleaseProduct",
       syncHealth?.retry?.releaseProduct ? "true" : "false",
     );
+    return mutate(f);
+  };
+  const applyPublicationPlan = () => {
+    const selected = publicationOrchestration?.modes?.find(
+      (mode) => mode.id === publicationMode,
+    );
+    if (!selected?.allowed) return;
+
+    const actionLabel =
+      publicationMode === "UNPUBLISH_ALL"
+        ? "take the complete release offline and return linked products to Draft"
+        : publicationMode === "KEEP_UNPUBLISHED"
+          ? "keep the complete release active in Shopify but unpublished"
+          : publicationMode === "SCHEDULE_RELEASE"
+            ? `schedule the complete release for ${publicationOrchestration?.schedule?.label || "the release timeline"}`
+            : "publish the complete release now";
+
+    if (
+      !window.confirm(
+        `ReleaseCore will ${actionLabel}. This applies to ${publicationOrchestration?.summary?.linked || 0} linked Shopify product${publicationOrchestration?.summary?.linked === 1 ? "" : "s"}. Continue?`,
+      )
+    ) {
+      return;
+    }
+
+    const f = new FormData();
+    f.set("intent", "orchestrate-publication");
+    f.set("mode", publicationMode);
     return mutate(f);
   };
   return (
@@ -969,29 +1197,12 @@ export default function DistributionWorkspace() {
                   {track.shopifyState?.templateSuffix ? ` · template ${track.shopifyState.templateSuffix}` : ""}
                 </div>
               </div>
-              <div className="rc-directory-row__aside" style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                {track.shopifyProductId ? (
-                  <>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      className="rc-button rc-button--tertiary"
-                      onClick={() => { const f = new FormData(); f.set("intent", "publish-shopify-product"); f.set("trackId", track.id); mutate(f); }}
-                    >Publish now</button>
-                    <button
-                      type="button"
-                      disabled={busy || !release.releaseDate}
-                      className="rc-button rc-button--tertiary"
-                      onClick={() => { const f = new FormData(); f.set("intent", "schedule-shopify-product"); f.set("trackId", track.id); mutate(f); }}
-                    >Schedule</button>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      className="rc-button rc-button--tertiary"
-                      onClick={() => { const f = new FormData(); f.set("intent", "unpublish-shopify-product"); f.set("trackId", track.id); mutate(f); }}
-                    >Unpublish</button>
-                  </>
-                ) : null}
+              <div className="rc-directory-row__aside">
+                <span style={styles.muted}>
+                  {track.shopifyProductId
+                    ? "Publication managed below"
+                    : "Create product first"}
+                </span>
               </div>
             </div>
           ))}
@@ -1065,30 +1276,23 @@ export default function DistributionWorkspace() {
               </div>
             ) : null}
             {release.shopifyReleaseProductId ? (
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
-                <button
-                  type="button"
-                  disabled={busy}
-                  className="rc-button rc-button--tertiary"
-                  onClick={() => { const f = new FormData(); f.set("intent", "publish-shopify-release-product"); mutate(f); }}
-                >Publish now</button>
-                <button
-                  type="button"
-                  disabled={busy || !release.releaseDate}
-                  className="rc-button rc-button--tertiary"
-                  onClick={() => { const f = new FormData(); f.set("intent", "schedule-shopify-release-product"); mutate(f); }}
-                >Schedule</button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  className="rc-button rc-button--tertiary"
-                  onClick={() => { const f = new FormData(); f.set("intent", "unpublish-shopify-release-product"); mutate(f); }}
-                >Unpublish</button>
+              <div style={{ ...styles.muted, marginTop: 10 }}>
+                Publication is coordinated with every track product in the Storefront publication section below.
               </div>
             ) : null}
           </div>
         ) : null}
       </CollapsibleSection>
+
+      <PublicationOrchestrationPanel
+        plan={publicationOrchestration}
+        selectedMode={publicationMode}
+        onModeChange={setPublicationMode}
+        onApply={applyPublicationPlan}
+        busy={busy}
+        busyAction={busyAction}
+        feedback={feedbackFor("publication")}
+      />
 
       <s-section heading="Distribution status">
         <ActionFeedback feedback={feedbackFor("status")} />
