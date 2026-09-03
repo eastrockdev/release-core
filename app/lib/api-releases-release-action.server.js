@@ -213,6 +213,8 @@ export const action = async ({ request, params }) => {
         shop: session.shop,
         releaseId: release.id,
         rows,
+        expectedReleaseUpdatedAt:
+          formData.get("expectedReleaseUpdatedAt"),
         actorLabel: "Shopify admin",
       });
 

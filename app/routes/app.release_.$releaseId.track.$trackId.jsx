@@ -34,6 +34,10 @@ import {
   StatusBadge,
 } from "../components/releasecore-ui";
 import { revalidateInPlace } from "../lib/revalidate-in-place";
+import {
+  editorSaveStateLabel,
+  useEditorDirtyState,
+} from "../lib/editor-dirty-state";
 
 export const loader = async ({ request, params }) => {
   const { session, admin } = await authenticate.admin(request);
@@ -196,6 +200,11 @@ export default function EditTrackInfo() {
   const [feedback, setFeedback] = useState(null);
   const [uploadState, setUploadState] = useState(null);
 
+  const editor = useEditorDirtyState({
+    message:
+      "You have unsaved track information. Leave this track and discard those changes?",
+  });
+
   const editable = releaseIsEditable(release.status);
   const creditSplitsEnabled =
     workflowSettings?.requirePublishing ?? true;
@@ -323,8 +332,21 @@ export default function EditTrackInfo() {
     const data = new FormData();
     data.set("intent", "bulk-update-tracks");
     data.set("tracks", JSON.stringify([row]));
+    data.set(
+      "expectedReleaseUpdatedAt",
+      String(release.updatedAt || ""),
+    );
 
-    await mutate(data, "Saving track information…");
+    editor.markSaving();
+    const result = await mutate(
+      data,
+      "Saving track information…",
+    );
+    if (result) {
+      editor.markSaved();
+    } else {
+      editor.markError();
+    }
   };
 
   const uploadMaster = async (file) => {
@@ -436,6 +458,7 @@ export default function EditTrackInfo() {
       shopify.toast.show(
         result.message || "Track deleted.",
       );
+      editor.discardChanges();
       navigate(`/app/release/${release.id}`, {
         replace: true,
       });
@@ -526,8 +549,9 @@ export default function EditTrackInfo() {
         defaultOpen
       >
         <form
-          key={`${track.id}:${release.updatedAt}`}
+          key={`${track.id}:${track.updatedAt}`}
           onSubmit={saveTrackInfo}
+          onChange={editor.markDirty}
         >
           <div className="rc-track-info-grid">
             <Field label="Track title">
@@ -636,15 +660,27 @@ export default function EditTrackInfo() {
                 together. ISRC corrections create a permanent
                 audit event.
               </span>
+              <div
+                className={`rc-editor-save-state rc-editor-save-state--${editor.saveState}`}
+                aria-live="polite"
+              >
+                <span
+                  className="rc-editor-save-state__dot"
+                  aria-hidden="true"
+                />
+                {editorSaveStateLabel(editor.saveState)}
+              </div>
             </div>
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || !editor.dirty}
               className="rc-button rc-button--primary"
             >
-              {busy
+              {editor.saveState === "saving"
                 ? "Saving track…"
-                : "Save track info"}
+                : editor.dirty
+                  ? "Save track info"
+                  : "No changes to save"}
             </button>
           </div>
         </form>
@@ -703,7 +739,7 @@ export default function EditTrackInfo() {
       <CollapsibleSection
         icon="artist"
         title="Track artists"
-        description="Primary and featured artist identities credited on this recording."
+        description="Primary and featured artist identities credited on this recording. Role changes save automatically."
         summary={`${track.artists.length} assigned`}
       >
         {track.artists.length ? (
@@ -848,8 +884,8 @@ export default function EditTrackInfo() {
         }
         description={
           creditSplitsEnabled
-            ? "Contributor roles and publishing ownership for this recording."
-            : "Contributor roles credited on this recording."
+            ? "Contributor roles and publishing ownership for this recording. Role and split changes save automatically."
+            : "Contributor roles credited on this recording. Role changes save automatically."
         }
         summary={
           creditSplitsEnabled

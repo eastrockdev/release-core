@@ -2073,3 +2073,34 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     justify-content: center;
   }
 }
+
+
+/* M16.3 — Editor save state and dirty-state feedback. */
+.rc-editor-save-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--p-color-text-secondary, #616161);
+}
+.rc-editor-save-state__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.7;
+}
+.rc-editor-save-state--dirty {
+  color: var(--p-color-text-caution, #7a4f01);
+}
+.rc-editor-save-state--saving {
+  color: var(--p-color-text-info, #005bd3);
+}
+.rc-editor-save-state--error {
+  color: var(--p-color-text-critical, #8e1f0b);
+}
+.rc-editor-save-state--saved {
+  color: var(--p-color-text-success, #29845a);
+}

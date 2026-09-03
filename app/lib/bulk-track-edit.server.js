@@ -29,6 +29,20 @@ function validIsrc(value, track) {
   }
 }
 
+function validExpectedReleaseUpdatedAt(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) {
+    throw publicError(
+      "This editor has stale version information. Reload the release before saving.",
+      { status: 409, code: "EDIT_CONFLICT" },
+    );
+  }
+  return date;
+}
+
 function validPosition(value, trackCount, track) {
   const position = Number(value ?? track.position);
   if (
@@ -48,6 +62,7 @@ export async function bulkUpdateReleaseTracks({
   shop,
   releaseId,
   rows,
+  expectedReleaseUpdatedAt = null,
   actorLabel = "Shopify admin",
 }) {
   if (!Array.isArray(rows) || !rows.length) {
@@ -61,6 +76,10 @@ export async function bulkUpdateReleaseTracks({
   if (!release) throw publicError("Release not found.", { status: 404 });
 
   const editable = releaseIsEditable(release.status);
+  const expectedUpdatedAt =
+    validExpectedReleaseUpdatedAt(
+      expectedReleaseUpdatedAt,
+    );
   const byId = new Map(release.tracks.map((track) => [track.id, track]));
   const seen = new Set();
 
@@ -201,6 +220,24 @@ export async function bulkUpdateReleaseTracks({
 
   const now = new Date();
   await db.$transaction(async (tx) => {
+    if (expectedUpdatedAt) {
+      const claimed = await tx.release.updateMany({
+        where: {
+          id: release.id,
+          shop,
+          updatedAt: expectedUpdatedAt,
+        },
+        data: { updatedAt: now },
+      });
+
+      if (claimed.count !== 1) {
+        throw publicError(
+          "This release changed in another session. Reload and review the latest values before saving again.",
+          { status: 409, code: "EDIT_CONFLICT" },
+        );
+      }
+    }
+
     // Move every row to a temporary negative position before applying a new
     // complete sequence. This keeps @@unique([releaseId, position]) valid
     // during swaps and arbitrary reorder operations.

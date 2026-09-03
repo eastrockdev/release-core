@@ -18,6 +18,10 @@ import {
   ReleaseHero,
 } from "../components/releasecore-ui";
 import { revalidateInPlace } from "../lib/revalidate-in-place";
+import {
+  editorSaveStateLabel,
+  useEditorDirtyState,
+} from "../lib/editor-dirty-state";
 
 export const loader = async ({ request, params }) => {
   const { session, admin } = await authenticate.admin(request);
@@ -58,6 +62,11 @@ export default function BulkEditTracks() {
 
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState(null);
+
+  const editor = useEditorDirtyState({
+    message:
+      "You have unsaved bulk track changes. Leave this editor and discard them?",
+  });
 
   const editable = releaseIsEditable(release.status);
   const trackCount = release.tracks.length;
@@ -103,7 +112,12 @@ export default function BulkEditTracks() {
     const data = new FormData();
     data.set("intent", "bulk-update-tracks");
     data.set("tracks", JSON.stringify(rows));
+    data.set(
+      "expectedReleaseUpdatedAt",
+      String(release.updatedAt || ""),
+    );
 
+    editor.markSaving();
     setBusy(true);
     setFeedback({
       tone: "info",
@@ -119,9 +133,11 @@ export default function BulkEditTracks() {
       const message =
         result.message || "Track changes saved.";
       setFeedback({ tone: "good", message });
+      editor.markSaved();
       shopify.toast.show(message);
       await revalidateInPlace(revalidator);
     } catch (error) {
+      editor.markError();
       setFeedback({
         tone: "bad",
         message:
@@ -222,8 +238,11 @@ export default function BulkEditTracks() {
         <ActionFeedback feedback={feedback} />
 
         <form
-          key={`${release.id}:${release.updatedAt}`}
+          key={`${release.id}:${release.tracks
+            .map((track) => `${track.id}:${track.updatedAt}`)
+            .join("|")}`}
           onSubmit={saveTracks}
+          onChange={editor.markDirty}
           className="rc-bulk-track-form"
         >
           <div className="rc-bulk-track-list">
@@ -363,15 +382,29 @@ export default function BulkEditTracks() {
                 Reordering is committed atomically so position
                 swaps cannot collide.
               </span>
+              <div
+                className={`rc-editor-save-state rc-editor-save-state--${editor.saveState}`}
+                aria-live="polite"
+              >
+                <span
+                  className="rc-editor-save-state__dot"
+                  aria-hidden="true"
+                />
+                {editorSaveStateLabel(editor.saveState)}
+              </div>
             </div>
             <button
               type="submit"
-              disabled={busy || !editable}
+              disabled={
+                busy || !editable || !editor.dirty
+              }
               className="rc-button rc-button--primary"
             >
-              {busy
+              {editor.saveState === "saving"
                 ? "Saving tracks…"
-                : "Save all track changes"}
+                : editor.dirty
+                  ? "Save all track changes"
+                  : "No changes to save"}
             </button>
           </div>
         </form>
