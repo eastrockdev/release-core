@@ -29,20 +29,6 @@ function validIsrc(value, track) {
   }
 }
 
-function validExpectedReleaseUpdatedAt(value) {
-  const raw = String(value ?? "").trim();
-  if (!raw) return null;
-
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) {
-    throw publicError(
-      "This editor has stale version information. Reload the release before saving.",
-      { status: 409, code: "EDIT_CONFLICT" },
-    );
-  }
-  return date;
-}
-
 function validExpectedTrackMetadataVersion(value) {
   const raw = String(value ?? "").trim();
   if (!raw) return null;
@@ -79,7 +65,6 @@ export async function bulkUpdateReleaseTracks({
   shop,
   releaseId,
   rows,
-  expectedReleaseUpdatedAt = null,
   expectedTrackMetadataVersion = null,
   actorLabel = "Shopify admin",
 }) {
@@ -94,10 +79,6 @@ export async function bulkUpdateReleaseTracks({
   if (!release) throw publicError("Release not found.", { status: 404 });
 
   const editable = releaseIsEditable(release.status);
-  const expectedUpdatedAt =
-    validExpectedReleaseUpdatedAt(
-      expectedReleaseUpdatedAt,
-    );
   const expectedTrackVersion =
     validExpectedTrackMetadataVersion(
       expectedTrackMetadataVersion,
@@ -133,6 +114,10 @@ export async function bulkUpdateReleaseTracks({
     const explicit = Boolean(row?.explicit);
     const lyrics = text(row?.lyrics);
     const isrc = validIsrc(row?.isrc, track);
+    const rowExpectedTrackMetadataVersion =
+      validExpectedTrackMetadataVersion(
+        row?.expectedTrackMetadataVersion,
+      );
 
     const metadataChanged =
       position !== track.position ||
@@ -162,6 +147,8 @@ export async function bulkUpdateReleaseTracks({
       explicit,
       lyrics,
       isrc,
+      expectedTrackMetadataVersion:
+        rowExpectedTrackMetadataVersion,
       metadataChanged,
       isrcChanged,
       positionChanged: position !== track.position,
@@ -170,14 +157,14 @@ export async function bulkUpdateReleaseTracks({
 
   const positionChanges = normalized.filter((row) => row.positionChanged);
   if (positionChanges.length) {
-    if (normalized.length !== release.tracks.length) {
-      throw publicError(
-        "Reordering requires every track on the release to be included in the Track editor save.",
-        { status: 400 },
-      );
+    const desiredPositionById = new Map(
+      release.tracks.map((track) => [track.id, track.position]),
+    );
+    for (const row of positionChanges) {
+      desiredPositionById.set(row.trackId, row.position);
     }
 
-    const desiredPositions = normalized.map((row) => row.position);
+    const desiredPositions = [...desiredPositionById.values()];
     if (new Set(desiredPositions).size !== desiredPositions.length) {
       throw publicError(
         "Every track must have a unique position.",
@@ -240,17 +227,47 @@ export async function bulkUpdateReleaseTracks({
     };
   }
 
+  const hasRowScopedConcurrency = normalized.some(
+    (row) => row.expectedTrackMetadataVersion !== null,
+  );
+  if (
+    hasRowScopedConcurrency &&
+    normalized.some(
+      (row) => row.expectedTrackMetadataVersion === null,
+    )
+  ) {
+    throw publicError(
+      "This bulk track editor has incomplete metadata version information. Reload the latest track values before saving again.",
+      { status: 409, code: "EDIT_CONFLICT" },
+    );
+  }
+
+  if (
+    normalized.length > 1 &&
+    !hasRowScopedConcurrency
+  ) {
+    throw publicError(
+      "This bulk track editor is using outdated concurrency information. Reload the latest track values before saving again.",
+      { status: 409, code: "EDIT_CONFLICT" },
+    );
+  }
+
   const now = new Date();
   await db.$transaction(async (tx) => {
-    if (
-      expectedTrackVersion !== null &&
-      normalized.length === 1
-    ) {
+    for (const row of changed) {
+      const expectedVersion =
+        row.expectedTrackMetadataVersion ??
+        (normalized.length === 1
+          ? expectedTrackVersion
+          : null);
+
+      if (expectedVersion === null) continue;
+
       const claimed = await tx.track.updateMany({
         where: {
-          id: normalized[0].trackId,
+          id: row.trackId,
           releaseId: release.id,
-          metadataVersion: expectedTrackVersion,
+          metadataVersion: expectedVersion,
         },
         data: {
           metadataVersion: { increment: 1 },
@@ -259,33 +276,17 @@ export async function bulkUpdateReleaseTracks({
 
       if (claimed.count !== 1) {
         throw publicError(
-          "This track information changed since this editor loaded. Reload and review the latest metadata before saving again.",
-          { status: 409, code: "EDIT_CONFLICT" },
-        );
-      }
-    } else if (expectedUpdatedAt) {
-      const claimed = await tx.release.updateMany({
-        where: {
-          id: release.id,
-          shop,
-          updatedAt: expectedUpdatedAt,
-        },
-        data: { updatedAt: now },
-      });
-
-      if (claimed.count !== 1) {
-        throw publicError(
-          "This release changed in another session. Reload and review the latest values before saving again.",
+          `Track ${row.track.position} information changed since this editor loaded. Reload and review the latest metadata before saving again.`,
           { status: 409, code: "EDIT_CONFLICT" },
         );
       }
     }
 
-    // Move every row to a temporary negative position before applying a new
-    // complete sequence. This keeps @@unique([releaseId, position]) valid
-    // during swaps and arbitrary reorder operations.
+    // Move only tracks whose order changed to temporary negative positions.
+    // This keeps @@unique([releaseId, position]) valid during swaps without
+    // touching tracks that were not part of the reorder.
     if (positionChanges.length) {
-      for (const [index, row] of normalized.entries()) {
+      for (const [index, row] of positionChanges.entries()) {
         await tx.track.update({
           where: { id: row.trackId },
           data: { position: -(index + 1) },
@@ -312,7 +313,7 @@ export async function bulkUpdateReleaseTracks({
         data.lyrics = row.lyrics;
       }
 
-      if (editable && positionChanges.length) {
+      if (editable && row.positionChanged) {
         data.position = row.position;
       }
 
