@@ -146,6 +146,60 @@ export function FilterBar({ items, active, hrefFor }) {
   );
 }
 
+export function PaginationBar({
+  page,
+  totalPages,
+  total,
+  hasPrevious,
+  hasNext,
+  hrefFor,
+  label = "items",
+}) {
+  if (!total) return null;
+
+  return (
+    <nav className="rc-pagination" aria-label={`${label} pagination`}>
+      <span className="rc-pagination__summary">
+        Page {page} of {totalPages} · {total} {label}
+      </span>
+      <span className="rc-pagination__actions">
+        {hasPrevious ? (
+          <Link
+            className="rc-button rc-button--secondary rc-button--compact"
+            to={hrefFor(page - 1)}
+            rel="prev"
+          >
+            ← Previous
+          </Link>
+        ) : (
+          <span
+            className="rc-button rc-button--secondary rc-button--compact rc-button--disabled"
+            aria-disabled="true"
+          >
+            ← Previous
+          </span>
+        )}
+        {hasNext ? (
+          <Link
+            className="rc-button rc-button--secondary rc-button--compact"
+            to={hrefFor(page + 1)}
+            rel="next"
+          >
+            Next →
+          </Link>
+        ) : (
+          <span
+            className="rc-button rc-button--secondary rc-button--compact rc-button--disabled"
+            aria-disabled="true"
+          >
+            Next →
+          </span>
+        )}
+      </span>
+    </nav>
+  );
+}
+
 export function ReleaseListItem({ release, href, badges = [], meta, aside, actionLabel = "Open release" }) {
   return (
     <Link to={href} className="rc-release-row">

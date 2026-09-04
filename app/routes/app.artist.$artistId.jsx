@@ -12,53 +12,104 @@ import { ArtistAvatar, CollapsibleSection, PageIntro } from "../components/relea
 
 export const loader = async ({ request, params }) => {
   const { admin, session } = await authenticate.admin(request);
+  const url = new URL(request.url);
+  const loadShopify =
+    url.searchParams.get("shopify") === "1";
+
   const [artist, contributors] = await Promise.all([
     db.artist.findFirst({
       where: { id: params.artistId, shop: session.shop },
-      include: { contributors: { include: { contributor: true }, orderBy: { createdAt: "asc" } }, _count: { select: { releases: true, tracks: true } } },
-    }),
-    db.contributor.findMany({ where: { shop: session.shop }, orderBy: { legalName: "asc" } }),
-  ]);
-  if (!artist) throw new Response("Artist not found.", { status: 404 });
-
-  const [shopifyCollection, collectionCandidates, linkedCollections] =
-    await Promise.all([
-      artist.shopifyCollectionId
-        ? getShopifyArtistCollection(admin, artist.shopifyCollectionId)
-        : Promise.resolve(null),
-      listShopifyArtistCollections(admin),
-      db.artist.findMany({
-        where: {
-          shop: session.shop,
-          shopifyCollectionId: { not: null },
-          id: { not: artist.id },
+      include: {
+        contributors: {
+          include: { contributor: true },
+          orderBy: { createdAt: "asc" },
         },
-        select: { shopifyCollectionId:true },
-      }),
-    ]);
+        _count: {
+          select: { releases: true, tracks: true },
+        },
+      },
+    }),
+    db.contributor.findMany({
+      where: { shop: session.shop },
+      orderBy: { legalName: "asc" },
+    }),
+  ]);
 
-  const linkedCollectionIds = new Set(
-    linkedCollections
-      .map((item) => item.shopifyCollectionId)
-      .filter(Boolean),
-  );
+  if (!artist) {
+    throw new Response("Artist not found.", {
+      status: 404,
+    });
+  }
+
+  const [
+    shopifyCollection,
+    collectionCandidates,
+  ] = loadShopify
+    ? await Promise.all([
+        artist.shopifyCollectionId
+          ? getShopifyArtistCollection(
+              admin,
+              artist.shopifyCollectionId,
+            )
+          : Promise.resolve(null),
+        Promise.all([
+          listShopifyArtistCollections(admin),
+          db.artist.findMany({
+            where: {
+              shop: session.shop,
+              shopifyCollectionId: { not: null },
+              id: { not: artist.id },
+            },
+            select: {
+              shopifyCollectionId: true,
+            },
+          }),
+        ]).then(([collections, linkedCollections]) => {
+          const linkedCollectionIds = new Set(
+            linkedCollections
+              .map(
+                (item) =>
+                  item.shopifyCollectionId,
+              )
+              .filter(Boolean),
+          );
+
+          return collections.filter(
+            (collection) =>
+              collection.id ===
+                artist.shopifyCollectionId ||
+              !linkedCollectionIds.has(
+                collection.id,
+              ),
+          );
+        }),
+      ])
+    : [
+        artist.shopifyCollectionId
+          ? {
+              id: artist.shopifyCollectionId,
+              title: artist.name,
+              handle:
+                artist.shopifyCollectionHandle ||
+                "",
+            }
+          : null,
+        [],
+      ];
 
   return {
     artist,
     contributors,
     shopifyCollection,
-    collectionCandidates: collectionCandidates.filter(
-      (collection) =>
-        collection.id === artist.shopifyCollectionId ||
-        !linkedCollectionIds.has(collection.id),
-    ),
+    collectionCandidates,
+    shopifyLoaded: loadShopify,
   };
 };
 
 const Field = ({ label, help, children }) => <label className="rc-field"><span className="rc-field__label">{label}</span>{children}{help ? <span className="rc-field__help">{help}</span> : null}</label>;
 
 export default function ArtistProfilePage() {
-  const { artist, contributors, shopifyCollection, collectionCandidates } = useLoaderData();
+  const { artist, contributors, shopifyCollection, collectionCandidates, shopifyLoaded } = useLoaderData();
   const shopify = useAppBridge();
   const revalidator = useRevalidator();
   const [busy, setBusy] = useState(false);
@@ -228,6 +279,23 @@ export default function ArtistProfilePage() {
 
         <p className="rc-field__help">
           ReleaseCore manages its own catalog membership. Products added manually in Shopify are preserved.
+        </p>
+        <p className="rc-field__help">
+          {shopifyLoaded
+            ? "Remote Shopify collection status and existing-collection choices are loaded."
+            : "Using ReleaseCore's cached Shopify collection link. Remote collection listing is skipped on normal profile loads."}
+          {" "}
+          <Link
+            to={
+              shopifyLoaded
+                ? `/app/artist/${artist.id}`
+                : `/app/artist/${artist.id}?shopify=1`
+            }
+          >
+            {shopifyLoaded
+              ? "Use faster cached view"
+              : "Load existing Shopify collections"}
+          </Link>
         </p>
       </div>
     </CollapsibleSection>

@@ -84,6 +84,9 @@ model Release {
   @@index([shop, distributionStatus])
   @@index([shop, ownerCustomerId])
   @@index([shop, createdAt])
+  @@index([shop, updatedAt])
+  @@index([shop, lastSubmittedAt])
+  @@index([shop, distributionUpdatedAt])
 }
 
 model Track {

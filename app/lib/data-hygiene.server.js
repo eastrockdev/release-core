@@ -33,79 +33,272 @@ const sameValue = (a, b, normalizer = normalizeIdentity) => {
 const confidence = (score) => (score >= 8 ? "HIGH" : "POSSIBLE");
 const contributorName = (item) => item.stageName || item.legalName;
 
-function duplicateArtists(artists) {
-  const results = [];
-  for (let i = 0; i < artists.length; i += 1) {
-    for (let j = i + 1; j < artists.length; j += 1) {
-      const a = artists[i];
-      const b = artists[j];
-      let score = 0;
-      const signals = [];
-      if (sameValue(a.spotifyUrl, b.spotifyUrl, normalizeUrl)) { score += 6; signals.push("Same Spotify profile"); }
-      if (sameValue(a.appleMusicUrl, b.appleMusicUrl, normalizeUrl)) { score += 6; signals.push("Same Apple Music profile"); }
-      if (sameValue(a.ipi, b.ipi)) { score += 6; signals.push("Same IPI"); }
-      if (sameValue(a.email, b.email)) { score += 5; signals.push("Same email"); }
-      if (sameValue(a.legalName, b.legalName)) { score += 3; signals.push("Same legal name"); }
-      if (sameValue(a.name, b.name)) { score += 2; signals.push("Same artist name"); }
-      if (score >= 5) {
-        results.push({
-          source: { id: a.id, name: a.name }, target: { id: b.id, name: b.name },
-          score, confidence: confidence(score), signals,
-        });
+function addBucket(map, key, id) {
+  if (!key) return;
+  const bucket = map.get(key) || [];
+  bucket.push(id);
+  map.set(key, bucket);
+}
+
+function addCandidate(set, a, b) {
+  if (!a || !b || a === b) return;
+  set.add(a < b ? `${a}:${b}` : `${b}:${a}`);
+}
+
+function candidatePairs(records, tokenBuilder) {
+  const buckets = new Map();
+  for (const record of records) {
+    for (const token of tokenBuilder(record)) {
+      addBucket(buckets, token, record.id);
+    }
+  }
+
+  const pairs = new Set();
+  for (const ids of buckets.values()) {
+    for (let i = 0; i < ids.length; i += 1) {
+      for (let j = i + 1; j < ids.length; j += 1) {
+        addCandidate(pairs, ids[i], ids[j]);
       }
     }
   }
-  return results.sort((a, b) => b.score - a.score).slice(0, 50);
+  return pairs;
+}
+
+function duplicateArtists(artists) {
+  const byId = new Map(
+    artists.map((artist) => [artist.id, artist]),
+  );
+  const pairs = candidatePairs(artists, (artist) => [
+    `spotify:${normalizeUrl(artist.spotifyUrl)}`,
+    `apple:${normalizeUrl(artist.appleMusicUrl)}`,
+    `ipi:${normalizeIdentity(artist.ipi)}`,
+    `email:${normalizeIdentity(artist.email)}`,
+    `legal:${normalizeIdentity(artist.legalName)}`,
+    `name:${normalizeIdentity(artist.name)}`,
+  ].filter((token) => !token.endsWith(":")));
+
+  const results = [];
+  for (const pair of pairs) {
+    const [aId, bId] = pair.split(":");
+    const a = byId.get(aId);
+    const b = byId.get(bId);
+    if (!a || !b) continue;
+
+    let score = 0;
+    const signals = [];
+    if (sameValue(a.spotifyUrl, b.spotifyUrl, normalizeUrl)) {
+      score += 6;
+      signals.push("Same Spotify profile");
+    }
+    if (sameValue(a.appleMusicUrl, b.appleMusicUrl, normalizeUrl)) {
+      score += 6;
+      signals.push("Same Apple Music profile");
+    }
+    if (sameValue(a.ipi, b.ipi)) {
+      score += 6;
+      signals.push("Same IPI");
+    }
+    if (sameValue(a.email, b.email)) {
+      score += 5;
+      signals.push("Same email");
+    }
+    if (sameValue(a.legalName, b.legalName)) {
+      score += 3;
+      signals.push("Same legal name");
+    }
+    if (sameValue(a.name, b.name)) {
+      score += 2;
+      signals.push("Same artist name");
+    }
+    if (score >= 5) {
+      results.push({
+        source: { id: a.id, name: a.name },
+        target: { id: b.id, name: b.name },
+        score,
+        confidence: confidence(score),
+        signals,
+      });
+    }
+  }
+
+  return results
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 50);
 }
 
 function duplicateContributors(contributors) {
+  const byId = new Map(
+    contributors.map((item) => [item.id, item]),
+  );
+  const pairs = candidatePairs(
+    contributors,
+    (contributor) => [
+      `ipi:${normalizeIdentity(contributor.ipi)}`,
+      `email:${normalizeIdentity(contributor.email)}`,
+      `legal:${normalizeIdentity(contributor.legalName)}`,
+      `stage:${normalizeIdentity(contributor.stageName)}`,
+    ].filter((token) => !token.endsWith(":")),
+  );
+
   const results = [];
-  for (let i = 0; i < contributors.length; i += 1) {
-    for (let j = i + 1; j < contributors.length; j += 1) {
-      const a = contributors[i];
-      const b = contributors[j];
-      let score = 0;
-      const signals = [];
-      if (sameValue(a.ipi, b.ipi)) { score += 6; signals.push("Same IPI"); }
-      if (sameValue(a.email, b.email)) { score += 5; signals.push("Same email"); }
-      if (sameValue(a.legalName, b.legalName)) { score += 3; signals.push("Same legal name"); }
-      if (sameValue(a.stageName, b.stageName)) { score += 3; signals.push("Same stage name"); }
-      if (score >= 5) {
-        results.push({
-          source: { id: a.id, name: contributorName(a) },
-          target: { id: b.id, name: contributorName(b) },
-          score, confidence: confidence(score), signals,
-        });
-      }
+  for (const pair of pairs) {
+    const [aId, bId] = pair.split(":");
+    const a = byId.get(aId);
+    const b = byId.get(bId);
+    if (!a || !b) continue;
+
+    let score = 0;
+    const signals = [];
+    if (sameValue(a.ipi, b.ipi)) {
+      score += 6;
+      signals.push("Same IPI");
+    }
+    if (sameValue(a.email, b.email)) {
+      score += 5;
+      signals.push("Same email");
+    }
+    if (sameValue(a.legalName, b.legalName)) {
+      score += 3;
+      signals.push("Same legal name");
+    }
+    if (sameValue(a.stageName, b.stageName)) {
+      score += 3;
+      signals.push("Same stage name");
+    }
+    if (score >= 5) {
+      results.push({
+        source: { id: a.id, name: contributorName(a) },
+        target: { id: b.id, name: contributorName(b) },
+        score,
+        confidence: confidence(score),
+        signals,
+      });
     }
   }
-  return results.sort((a, b) => b.score - a.score).slice(0, 50);
+
+  return results
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 50);
 }
 
-function identityCandidates(artists, contributors, existingLinks) {
-  const existing = new Map(existingLinks.map((row) => [`${row.artistId}:${row.contributorId}`, row.relationshipType]));
-  const results = [];
+function artistContributorCandidates(
+  artists,
+  contributors,
+) {
+  const indexes = {
+    ipi: new Map(),
+    email: new Map(),
+    legal: new Map(),
+    stage: new Map(),
+  };
+
+  for (const contributor of contributors) {
+    addBucket(
+      indexes.ipi,
+      normalizeIdentity(contributor.ipi),
+      contributor.id,
+    );
+    addBucket(
+      indexes.email,
+      normalizeIdentity(contributor.email),
+      contributor.id,
+    );
+    addBucket(
+      indexes.legal,
+      normalizeIdentity(contributor.legalName),
+      contributor.id,
+    );
+    addBucket(
+      indexes.stage,
+      normalizeIdentity(contributor.stageName),
+      contributor.id,
+    );
+  }
+
+  const pairs = new Set();
   for (const artist of artists) {
-    for (const contributor of contributors) {
-      const existingType = existing.get(`${artist.id}:${contributor.id}`);
-      if (existingType === "SAME_PERSON") continue;
-      let score = 0;
-      const signals = [];
-      if (sameValue(artist.ipi, contributor.ipi)) { score += 7; signals.push("Same IPI"); }
-      if (sameValue(artist.email, contributor.email)) { score += 6; signals.push("Same email"); }
-      if (sameValue(artist.legalName, contributor.legalName)) { score += 4; signals.push("Legal names match"); }
-      if (sameValue(artist.name, contributor.stageName)) { score += 4; signals.push("Stage names match"); }
-      if (score >= 6) {
-        results.push({
-          artist: { id: artist.id, name: artist.name },
-          contributor: { id: contributor.id, name: contributorName(contributor) },
-          alreadyLinked: existingType === "REGULAR",
-          score, confidence: confidence(score), signals,
-        });
-      }
+    const candidateIds = new Set([
+      ...(indexes.ipi.get(normalizeIdentity(artist.ipi)) || []),
+      ...(indexes.email.get(normalizeIdentity(artist.email)) || []),
+      ...(indexes.legal.get(normalizeIdentity(artist.legalName)) || []),
+      ...(indexes.stage.get(normalizeIdentity(artist.name)) || []),
+    ]);
+    for (const contributorId of candidateIds) {
+      pairs.add(`${artist.id}:${contributorId}`);
     }
   }
-  return results.sort((a, b) => b.score - a.score).slice(0, 50);
+
+  return pairs;
+}
+
+function identityCandidates(
+  artists,
+  contributors,
+  existingLinks,
+) {
+  const existing = new Map(
+    existingLinks.map((row) => [
+      `${row.artistId}:${row.contributorId}`,
+      row.relationshipType,
+    ]),
+  );
+  const artistsById = new Map(
+    artists.map((artist) => [artist.id, artist]),
+  );
+  const contributorsById = new Map(
+    contributors.map((item) => [item.id, item]),
+  );
+  const results = [];
+
+  for (const pair of artistContributorCandidates(
+    artists,
+    contributors,
+  )) {
+    const [artistId, contributorId] = pair.split(":");
+    const artist = artistsById.get(artistId);
+    const contributor = contributorsById.get(contributorId);
+    if (!artist || !contributor) continue;
+
+    const existingType = existing.get(pair);
+    if (existingType === "SAME_PERSON") continue;
+
+    let score = 0;
+    const signals = [];
+    if (sameValue(artist.ipi, contributor.ipi)) {
+      score += 7;
+      signals.push("Same IPI");
+    }
+    if (sameValue(artist.email, contributor.email)) {
+      score += 6;
+      signals.push("Same email");
+    }
+    if (sameValue(artist.legalName, contributor.legalName)) {
+      score += 4;
+      signals.push("Legal names match");
+    }
+    if (sameValue(artist.name, contributor.stageName)) {
+      score += 4;
+      signals.push("Stage names match");
+    }
+
+    if (score >= 6) {
+      results.push({
+        artist: { id: artist.id, name: artist.name },
+        contributor: {
+          id: contributor.id,
+          name: contributorName(contributor),
+        },
+        alreadyLinked: existingType === "REGULAR",
+        score,
+        confidence: confidence(score),
+        signals,
+      });
+    }
+  }
+
+  return results
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 50);
 }
 
 function expectedArtistName(release) {
