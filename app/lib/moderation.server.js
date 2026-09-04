@@ -5,35 +5,79 @@ import { publicError } from "./http-security.server";
 
 export const PORTAL_EDIT_LOCK_TYPE = "PORTAL_EDIT_LOCK";
 export const PORTAL_EDIT_LOCK_STATUS = "ACTIVE";
+export const RELEASE_CREATION_DISABLED_OPERATION =
+  "PORTAL_RELEASE_CREATION_DISABLED";
+export const RELEASE_CREATION_ENABLED_OPERATION =
+  "PORTAL_RELEASE_CREATION_ENABLED";
 
-export function releaseCreationDisabledTag() {
-  return deploymentProfileId() === "east-rock"
-    ? "RLIAB_RELEASE_CREATION_DISABLED"
-    : "RELEASECORE_RELEASE_CREATION_DISABLED";
+function normalizedCustomerId(customerId) {
+  return customerNumericId(customerId) || String(customerId || "").trim();
 }
 
-function normalizedTags(tags) {
-  return new Set(
-    (tags || [])
-      .map((tag) => String(tag || "").trim().toUpperCase())
-      .filter(Boolean),
+export function releaseCreationDisabledMessage(policy = null) {
+  return (
+    policy?.reason ||
+    "Release creation has been disabled for this account by a ReleaseCore administrator."
   );
 }
 
-export function customerReleaseCreationDisabled(tags) {
-  return normalizedTags(tags).has(
-    releaseCreationDisabledTag().toUpperCase(),
-  );
+export function releaseCreationPolicyFromEvent(event) {
+  if (!event) {
+    return {
+      disabled: false,
+      reason: null,
+      updatedAt: null,
+    };
+  }
+
+  const details =
+    event.details && typeof event.details === "object"
+      ? event.details
+      : {};
+  const disabled =
+    event.operation === RELEASE_CREATION_DISABLED_OPERATION;
+
+  return {
+    disabled,
+    reason: disabled
+      ? String(details.reason || event.summary || "").trim() || null
+      : null,
+    updatedAt: event.createdAt || null,
+  };
 }
 
-export function releaseCreationDisabledMessage() {
-  return "Release creation has been disabled for this account by a ReleaseCore administrator.";
+export async function getCustomerReleaseCreationPolicy({
+  shop,
+  customerId,
+}) {
+  const sourceId = normalizedCustomerId(customerId);
+  if (!sourceId) {
+    return releaseCreationPolicyFromEvent(null);
+  }
+
+  const event = await db.dataMaintenanceEvent.findFirst({
+    where: {
+      shop,
+      deploymentProfile: deploymentProfileId(),
+      entityType: "PORTAL_CUSTOMER",
+      sourceId,
+      operation: {
+        in: [
+          RELEASE_CREATION_DISABLED_OPERATION,
+          RELEASE_CREATION_ENABLED_OPERATION,
+        ],
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return releaseCreationPolicyFromEvent(event);
 }
 
-export function applyReleaseCreationModeration(access, tags) {
-  if (!customerReleaseCreationDisabled(tags)) return access;
+export function applyReleaseCreationModeration(access, policy) {
+  if (!policy?.disabled) return access;
 
-  const reason = releaseCreationDisabledMessage();
+  const reason = releaseCreationDisabledMessage(policy);
   const options = Object.fromEntries(
     Object.entries(access?.options || {}).map(([type, option]) => [
       type,
@@ -54,9 +98,9 @@ export function applyReleaseCreationModeration(access, tags) {
   };
 }
 
-export function assertCustomerCanCreateRelease(tags) {
-  if (!customerReleaseCreationDisabled(tags)) return;
-  throw publicError(releaseCreationDisabledMessage(), {
+export function assertCustomerCanCreateRelease(policy) {
+  if (!policy?.disabled) return;
+  throw publicError(releaseCreationDisabledMessage(policy), {
     status: 403,
     code: "RELEASE_CREATION_DISABLED",
   });
@@ -110,13 +154,14 @@ export async function setReleaseArtistEditLock({
 }) {
   const release = await db.release.findFirst({
     where: { id: releaseId, shop },
-    select: { id: true, title: true },
+    select: { id: true },
   });
   if (!release) {
     throw publicError("Release not found.", { status: 404 });
   }
 
-  const cleanReason = String(reason || "").trim() ||
+  const cleanReason =
+    String(reason || "").trim() ||
     "Artist editing disabled by a ReleaseCore administrator.";
   const now = new Date();
 
@@ -178,7 +223,8 @@ export async function setReleaseArtistEditLock({
         data: {
           status: "RESOLVED",
           completedAt: now,
-          resolutionNote: "Artist editing unlocked by a ReleaseCore administrator.",
+          resolutionNote:
+            "Artist editing unlocked by a ReleaseCore administrator.",
         },
       });
 
@@ -197,53 +243,46 @@ export async function setReleaseArtistEditLock({
 }
 
 export async function setCustomerReleaseCreationDisabled({
-  admin,
+  shop,
   customerId,
   disabled,
+  reason = null,
+  actorLabel = "Shopify admin",
 }) {
-  const numericId = customerNumericId(customerId);
-  if (!numericId) {
-    throw publicError("Choose a valid Shopify customer.", { status: 400 });
-  }
-
-  const tag = releaseCreationDisabledTag();
-  const mutation = disabled
-    ? `#graphql
-        mutation ReleaseCoreModerationTagsAdd($id: ID!, $tags: [String!]!) {
-          tagsAdd(id: $id, tags: $tags) {
-            node { id }
-            userErrors { field message }
-          }
-        }`
-    : `#graphql
-        mutation ReleaseCoreModerationTagsRemove($id: ID!, $tags: [String!]!) {
-          tagsRemove(id: $id, tags: $tags) {
-            node { id }
-            userErrors { field message }
-          }
-        }`;
-
-  const response = await admin.graphql(mutation, {
-    variables: {
-      id: `gid://shopify/Customer/${numericId}`,
-      tags: [tag],
-    },
-  });
-  const json = await response.json();
-  const payload = disabled ? json?.data?.tagsAdd : json?.data?.tagsRemove;
-  const errors = payload?.userErrors || [];
-  if (errors.length) {
-    throw publicError(errors.map((item) => item.message).join(" "), {
+  const sourceId = normalizedCustomerId(customerId);
+  if (!sourceId) {
+    throw publicError("Choose a valid Shopify customer.", {
       status: 400,
     });
   }
-  if (!payload?.node?.id) {
-    throw publicError("Shopify customer not found.", { status: 404 });
-  }
+
+  const cleanReason = String(reason || "").trim() || null;
+  const operation = disabled
+    ? RELEASE_CREATION_DISABLED_OPERATION
+    : RELEASE_CREATION_ENABLED_OPERATION;
+  const summary = disabled
+    ? "Release creation disabled for Artist Portal user."
+    : "Release creation restored for Artist Portal user.";
+
+  await db.dataMaintenanceEvent.create({
+    data: {
+      shop,
+      deploymentProfile: deploymentProfileId(),
+      operation,
+      entityType: "PORTAL_CUSTOMER",
+      sourceId,
+      summary,
+      details: {
+        disabled: Boolean(disabled),
+        reason: cleanReason,
+        actorLabel,
+      },
+    },
+  });
 
   return {
-    customerId: numericId,
+    customerId: sourceId,
     disabled: Boolean(disabled),
-    tag,
+    reason: cleanReason,
   };
 }
