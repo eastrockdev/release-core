@@ -1,0 +1,111 @@
+{% liquid
+  assign rc_menu_icon_title = title | default: '' | downcase | strip
+  assign rc_menu_icon = fallback | default: 'music'
+
+  if auto_match
+    if rc_menu_icon_title contains 'album art' or rc_menu_icon_title contains 'cover art' or rc_menu_icon_title contains 'artwork' or rc_menu_icon_title contains 'graphic' or rc_menu_icon_title contains 'design'
+      assign rc_menu_icon = 'artwork'
+    elsif rc_menu_icon_title contains 'beat' or rc_menu_icon_title contains 'instrumental' or rc_menu_icon_title contains 'mixing' or rc_menu_icon_title contains 'mastering' or rc_menu_icon_title contains 'audio'
+      assign rc_menu_icon = 'waveform'
+    elsif rc_menu_icon_title contains 'license' or rc_menu_icon_title contains 'licensing'
+      assign rc_menu_icon = 'license'
+    elsif rc_menu_icon_title contains 'agreement' or rc_menu_icon_title contains 'contract' or rc_menu_icon_title contains 'manager'
+      assign rc_menu_icon = 'contract'
+    elsif rc_menu_icon_title contains 'split' or rc_menu_icon_title contains 'percentage'
+      assign rc_menu_icon = 'split'
+    elsif rc_menu_icon_title contains 'promote' or rc_menu_icon_title contains 'promotion' or rc_menu_icon_title contains 'marketing' or rc_menu_icon_title contains 'campaign' or rc_menu_icon_title contains 'advertis'
+      assign rc_menu_icon = 'megaphone'
+    elsif rc_menu_icon_title contains 'rights' or rc_menu_icon_title contains 'copyright' or rc_menu_icon_title contains 'publishing' or rc_menu_icon_title contains 'registration'
+      assign rc_menu_icon = 'rights'
+    elsif rc_menu_icon_title contains 'royalt' or rc_menu_icon_title contains 'payout' or rc_menu_icon_title contains 'payment' or rc_menu_icon_title contains 'earning'
+      assign rc_menu_icon = 'royalties'
+    elsif rc_menu_icon_title contains 'distribution' or rc_menu_icon_title contains 'delivery' or rc_menu_icon_title contains 'dsp' or rc_menu_icon_title contains 'storefront'
+      assign rc_menu_icon = 'distribution'
+    elsif rc_menu_icon_title contains 'playlist'
+      assign rc_menu_icon = 'playlist'
+    elsif rc_menu_icon_title contains 'studio' or rc_menu_icon_title contains 'recording' or rc_menu_icon_title contains 'vocal' or rc_menu_icon_title contains 'microphone' or rc_menu_icon_title contains 'mic'
+      assign rc_menu_icon = 'microphone'
+    elsif rc_menu_icon_title contains 'video' or rc_menu_icon_title contains 'visual'
+      assign rc_menu_icon = 'video'
+    elsif rc_menu_icon_title contains 'merch' or rc_menu_icon_title contains 'shop' or rc_menu_icon_title contains 'store'
+      assign rc_menu_icon = 'merch'
+    elsif rc_menu_icon_title contains 'analytics' or rc_menu_icon_title contains 'stats' or rc_menu_icon_title contains 'report' or rc_menu_icon_title contains 'insight'
+      assign rc_menu_icon = 'analytics'
+    elsif rc_menu_icon_title contains 'calendar' or rc_menu_icon_title contains 'event' or rc_menu_icon_title contains 'tour' or rc_menu_icon_title contains 'booking'
+      assign rc_menu_icon = 'calendar'
+    elsif rc_menu_icon_title contains 'lyrics' or rc_menu_icon_title contains 'lyric'
+      assign rc_menu_icon = 'lyrics'
+    elsif rc_menu_icon_title contains 'blog' or rc_menu_icon_title contains 'news' or rc_menu_icon_title contains 'press' or rc_menu_icon_title contains 'article'
+      assign rc_menu_icon = 'article'
+    elsif rc_menu_icon_title contains 'support' or rc_menu_icon_title contains 'help' or rc_menu_icon_title contains 'contact'
+      assign rc_menu_icon = 'support'
+    elsif rc_menu_icon_title contains 'artist' or rc_menu_icon_title contains 'profile' or rc_menu_icon_title contains 'identity'
+      assign rc_menu_icon = 'artist'
+    elsif rc_menu_icon_title contains 'contributor' or rc_menu_icon_title contains 'team' or rc_menu_icon_title contains 'label' or rc_menu_icon_title contains 'roster' or rc_menu_icon_title contains 'collaborator'
+      assign rc_menu_icon = 'team'
+    elsif rc_menu_icon_title contains 'spotify' or rc_menu_icon_title contains 'apple music' or rc_menu_icon_title contains 'stream'
+      assign rc_menu_icon = 'headphones'
+    elsif rc_menu_icon_title contains 'social' or rc_menu_icon_title contains 'instagram' or rc_menu_icon_title contains 'tiktok' or rc_menu_icon_title contains 'youtube'
+      assign rc_menu_icon = 'social'
+    elsif rc_menu_icon_title contains 'settings' or rc_menu_icon_title contains 'preferences' or rc_menu_icon_title contains 'account'
+      assign rc_menu_icon = 'settings'
+    elsif rc_menu_icon_title contains 'release' or rc_menu_icon_title contains 'music' or rc_menu_icon_title contains 'catalog' or rc_menu_icon_title contains 'song' or rc_menu_icon_title contains 'track'
+      assign rc_menu_icon = 'music'
+    endif
+  endif
+%}
+
+{% case rc_menu_icon %}
+  {% when 'artwork' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="2.5" stroke="currentColor" stroke-width="1.7"/><circle cx="9" cy="9" r="1.8" stroke="currentColor" stroke-width="1.7"/><path d="m5.5 17 4.2-4 3.2 3 2.2-2.2 3.4 3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  {% when 'waveform' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h2l1.5-5 3 10 2.5-12 3 14 2.5-9 1.5 2H21" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  {% when 'license' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 3.5h7l4 4V20a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 20V5a1.5 1.5 0 0 1 1-1.5Z" stroke="currentColor" stroke-width="1.7"/><path d="M14 3.5V8h4M9 12h6M9 15h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="m13.8 18 1.2 1.2 2.4-2.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  {% when 'contract' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 3.5h9l3 3V20a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 5 20V5a1.5 1.5 0 0 1 1-1.5Z" stroke="currentColor" stroke-width="1.7"/><path d="M8.5 10h7M8.5 13.5h7M8.5 17h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+  {% when 'split' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 5h3c4 0 4 5 8 5h3M16 7l3 3-3 3M5 19h3c4 0 4-5 8-5h3M16 11l3 3-3 3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  {% when 'megaphone' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 13v-3a2 2 0 0 1 2-2h3l8-4v15l-8-4H6a2 2 0 0 1-2-2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m8 15 1 5h3l-1.5-4.2M19 8.5c1.2 1 1.2 6 0 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+  {% when 'rights' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.5 19 6v5.7c0 4.1-2.8 7.5-7 8.8-4.2-1.3-7-4.7-7-8.8V6l7-2.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.7"/><path d="M13.6 10.8a2 2 0 1 0 0 2.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  {% when 'royalties' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.7"/><path d="M15.2 8.8c-.7-.8-1.7-1.2-3-1.2-1.7 0-2.8.8-2.8 2 0 3.1 5.8 1.5 5.8 4.8 0 1.2-1.1 2-3 2-1.4 0-2.6-.5-3.4-1.4M12 6v12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+  {% when 'distribution' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="6" cy="12" r="2.5" stroke="currentColor" stroke-width="1.7"/><circle cx="18" cy="6" r="2.5" stroke="currentColor" stroke-width="1.7"/><circle cx="18" cy="18" r="2.5" stroke="currentColor" stroke-width="1.7"/><path d="m8.3 11 7.3-3.7M8.3 13l7.3 3.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+  {% when 'playlist' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h9M4 10h9M4 14h6M17 8v8.5M17 10l4-1v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="14.5" cy="17.5" r="2.5" stroke="currentColor" stroke-width="1.7"/><circle cx="18.5" cy="16" r="2.5" stroke="currentColor" stroke-width="1.7"/></svg>
+  {% when 'microphone' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="8.5" y="3" width="7" height="12" rx="3.5" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M9 21h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+  {% when 'video' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="5" width="13" height="14" rx="2.5" stroke="currentColor" stroke-width="1.7"/><path d="m16.5 10 4-2v8l-4-2v-4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+  {% when 'merch' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 5 4 7l2 4 2-1v9h8v-9l2 1 2-4-4-2c-.7 1.3-2.1 2-4 2s-3.3-.7-4-2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+  {% when 'analytics' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 19V9M10 19V5M15 19v-7M20 19V8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4 19.5h17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+  {% when 'calendar' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="15" rx="2.5" stroke="currentColor" stroke-width="1.7"/><path d="M8 3v5M16 3v5M3.5 10h17M8 14h2M13 14h3M8 17h2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+  {% when 'lyrics' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 5h10M7 9h7M7 13h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M15 13v5.5M15 15l4-1v3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="13" cy="19" r="2" stroke="currentColor" stroke-width="1.7"/><circle cx="17" cy="18" r="2" stroke="currentColor" stroke-width="1.7"/></svg>
+  {% when 'article' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 3.5h9l3 3V20a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 5 20V5a1.5 1.5 0 0 1 1-1.5Z" stroke="currentColor" stroke-width="1.7"/><path d="M8.5 10h7M8.5 13.5h7M8.5 17h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+  {% when 'support' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.7"/><path d="M9.6 9.3a2.7 2.7 0 1 1 4.6 2c-1.1 1-2.2 1.4-2.2 3M12 17.5h.01" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+  {% when 'artist' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.7"/><path d="M5 21a7 7 0 0 1 14 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+  {% when 'team' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.7"/><circle cx="17" cy="10" r="2.5" stroke="currentColor" stroke-width="1.7"/><path d="M3 20a5 5 0 0 1 10 0M13 20a4 4 0 0 1 8 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+  {% when 'headphones' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 13v-2a8 8 0 0 1 16 0v2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><rect x="3" y="12" width="4" height="7" rx="2" stroke="currentColor" stroke-width="1.7"/><rect x="17" y="12" width="4" height="7" rx="2" stroke="currentColor" stroke-width="1.7"/></svg>
+  {% when 'social' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="6" cy="12" r="2.5" stroke="currentColor" stroke-width="1.7"/><circle cx="18" cy="6" r="2.5" stroke="currentColor" stroke-width="1.7"/><circle cx="18" cy="18" r="2.5" stroke="currentColor" stroke-width="1.7"/><path d="m8.2 10.9 7.6-3.8M8.2 13.1l7.6 3.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+  {% when 'settings' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M12 3.5v2M12 18.5v2M20.5 12h-2M5.5 12h-2M18 6l-1.4 1.4M7.4 16.6 6 18M18 18l-1.4-1.4M7.4 7.4 6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+  {% when 'sparkles' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3c.8 4 2.7 5.9 6.7 6.7-4 .8-5.9 2.7-6.7 6.7-.8-4-2.7-5.9-6.7-6.7C9.3 8.9 11.2 7 12 3ZM19 15.5c.3 1.7 1.1 2.5 2.8 2.8-1.7.3-2.5 1.1-2.8 2.8-.3-1.7-1.1-2.5-2.8-2.8 1.7-.3 2.5-1.1 2.8-2.8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+  {% when 'arrow' %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  {% else %}
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 18V5l10-2v13M9 9l10-2M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm10-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+{% endcase %}
