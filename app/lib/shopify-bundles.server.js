@@ -1,5 +1,6 @@
 import { creditRoleLabel } from "./releasecore";
 import { shopifyMutationError } from "./operational-errors";
+import { buildEastRockReleaseProductMetafields } from "./east-rock-compatibility.server";
 import {
   applyDefaultAlbumPublication,
   DIGITAL_MUSIC_CATEGORY_ID,
@@ -166,6 +167,7 @@ export function buildReleaseProductMetafields({ release, settings }) {
     metafield("pre_save_url", "url", release.preSaveUrl),
     metafield("streaming_url", "url", release.streamingUrl),
     metafield("distribution_status", "single_line_text_field", release.distributionStatus),
+    ...buildEastRockReleaseProductMetafields({ release, settings }),
   ].filter(Boolean);
   return fields;
 }
