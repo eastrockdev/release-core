@@ -64,19 +64,11 @@ for (const [source, label] of [
     "editorSaveStateLabel",
     `${label} does not expose an explicit save state.`,
   );
-  if (label === "Edit Track Info") {
-    need(
-      source,
-      "expectedTrackMetadataVersion",
-      "Edit Track Info does not send track-metadata-scoped optimistic-concurrency state.",
-    );
-  } else {
-    need(
-      source,
-      "expectedReleaseUpdatedAt",
-      "Bulk Edit Tracks does not send release-scoped optimistic-concurrency state.",
-    );
-  }
+  need(
+    source,
+    "expectedTrackMetadataVersion",
+    `${label} does not send track-metadata-scoped optimistic-concurrency state.`,
+  );
   need(
     source,
     "editor.markSaving()",
@@ -106,17 +98,6 @@ for (const [source, label] of [
 
 need(
   trackInfo,
-  "expectedTrackMetadataVersion",
-  "Edit Track Info does not use track-metadata-scoped optimistic concurrency.",
-);
-need(
-  bulkEditor,
-  "expectedReleaseUpdatedAt",
-  "Bulk Edit Tracks does not retain release-scoped optimistic concurrency.",
-);
-
-need(
-  trackInfo,
   "track.metadataVersion",
   "Edit Track Info does not key the authoritative form to track metadata-version state.",
 );
@@ -138,8 +119,18 @@ need(
 
 need(
   bulkEditor,
-  ".map((track) => `${track.id}:${track.updatedAt}`)",
-  "Bulk editor does not build version-aware form identity.",
+  "track.metadataVersion ?? 0",
+  "Bulk editor does not build metadata-version-aware form identity.",
+);
+need(
+  bulkEditor,
+  "if (!changed) return null;",
+  "Bulk editor does not omit unchanged tracks from the save payload.",
+);
+need(
+  bulkEditor,
+  "Only changed tracks are submitted.",
+  "Bulk editor does not explain changed-track-only submission.",
 );
 need(
   bulkEditor,
@@ -149,29 +140,49 @@ need(
 
 need(
   releaseApi,
-  "expectedReleaseUpdatedAt:",
-  "Release API does not pass optimistic-concurrency state to the bulk track service.",
+  "expectedTrackMetadataVersion:",
+  "Release API does not preserve single-track metadata concurrency compatibility.",
 );
 need(
   bulkService,
-  "expectedReleaseUpdatedAt",
-  "Bulk track service does not accept optimistic-concurrency state.",
+  "expectedTrackMetadataVersion = null",
+  "Bulk track service does not accept track metadata concurrency state.",
+);
+need(
+  bulkService,
+  "row?.expectedTrackMetadataVersion",
+  "Bulk track service does not accept row-scoped metadata versions.",
+);
+need(
+  bulkService,
+  "tx.track.updateMany",
+  "Bulk track service does not atomically claim Track metadata versions.",
+);
+need(
+  bulkService,
+  "metadataVersion: expectedVersion",
+  "Bulk track service does not compare the expected Track metadata version.",
+);
+need(
+  bulkService,
+  "metadataVersion: { increment: 1 }",
+  "Bulk track service does not advance Track metadata versions.",
 );
 need(
   bulkService,
   "EDIT_CONFLICT",
   "Bulk track service does not expose a safe edit-conflict response.",
 );
-need(
-  bulkService,
-  "tx.release.updateMany",
-  "Bulk track service does not claim the expected release version atomically.",
-);
-need(
-  bulkService,
-  "updatedAt: expectedUpdatedAt",
-  "Bulk track service does not compare the expected release version.",
-);
+
+if (
+  bulkEditor.includes("expectedReleaseUpdatedAt") ||
+  bulkService.includes("validExpectedReleaseUpdatedAt") ||
+  bulkService.includes("tx.release.updateMany")
+) {
+  failures.push(
+    "Bulk Track editing still contains release-scoped optimistic concurrency.",
+  );
+}
 
 for (const marker of [
   ".rc-editor-save-state",
@@ -213,5 +224,5 @@ if (failures.length) {
 }
 
 console.log(
-  "ReleaseCore M16.3 save-state / dirty-state / optimistic-edit validation passed.",
+  "ReleaseCore M16.3 save-state / dirty-state / track-scoped optimistic-edit validation passed.",
 );

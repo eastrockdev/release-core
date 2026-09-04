@@ -54,6 +54,11 @@ function primaryArtist(track, release) {
   );
 }
 
+function cleanOptional(value) {
+  const clean = String(value ?? "").trim();
+  return clean || null;
+}
+
 export default function BulkEditTracks() {
   const { release } = useLoaderData();
   const shopify = useAppBridge();
@@ -77,51 +82,75 @@ export default function BulkEditTracks() {
 
     const raw = new FormData(event.currentTarget);
 
-    const rows = release.tracks.map((track) => ({
-      trackId: track.id,
-      position: Number(
-        raw.get(`position:${track.id}`) ??
-          track.position,
-      ),
-      title: String(
-        raw.get(`title:${track.id}`) ??
-          track.title ??
-          "",
-      ),
-      version: String(
-        raw.get(`version:${track.id}`) ??
-          track.version ??
-          "",
-      ),
-      language: String(
-        raw.get(`language:${track.id}`) ??
-          track.language ??
-          "",
-      ),
-      explicit:
-        String(
-          raw.get(`explicit:${track.id}`) ??
-            (track.explicit ? "true" : "false"),
-        ) === "true",
-      // Bulk editing intentionally does not expose identifiers,
-      // lyrics, audio, artists, or credits. Preserve those values.
-      isrc: track.isrc || "",
-      lyrics: track.lyrics || "",
-    }));
+    const rows = release.tracks
+      .map((track) => {
+        const position = Number(
+          raw.get(`position:${track.id}`) ??
+            track.position,
+        );
+        const title = String(
+          raw.get(`title:${track.id}`) ??
+            track.title ??
+            "",
+        ).trim() || "Untitled Track";
+        const version = cleanOptional(
+          raw.get(`version:${track.id}`) ??
+            track.version,
+        );
+        const language = cleanOptional(
+          raw.get(`language:${track.id}`) ??
+            track.language,
+        );
+        const explicit =
+          String(
+            raw.get(`explicit:${track.id}`) ??
+              (track.explicit ? "true" : "false"),
+          ) === "true";
+
+        const changed =
+          position !== track.position ||
+          title !== (track.title || "Untitled Track") ||
+          version !== (track.version || null) ||
+          language !== (track.language || null) ||
+          explicit !== Boolean(track.explicit);
+
+        if (!changed) return null;
+
+        return {
+          trackId: track.id,
+          position,
+          title,
+          version: version || "",
+          language: language || "",
+          explicit,
+          expectedTrackMetadataVersion:
+            track.metadataVersion ?? 0,
+          // Bulk editing intentionally does not expose identifiers,
+          // lyrics, audio, artists, or credits. Preserve those values.
+          isrc: track.isrc || "",
+          lyrics: track.lyrics || "",
+        };
+      })
+      .filter(Boolean);
+
+    if (!rows.length) {
+      editor.markSaved();
+      setFeedback({
+        tone: "info",
+        message: "No track changes to save.",
+      });
+      return;
+    }
 
     const data = new FormData();
     data.set("intent", "bulk-update-tracks");
     data.set("tracks", JSON.stringify(rows));
-    data.set(
-      "expectedReleaseUpdatedAt",
-      String(release.updatedAt || ""),
-    );
 
     editor.markSaving();
     setBusy(true);
     setFeedback({
       tone: "info",
-      message: `Saving ${trackCount} tracks…`,
+      message: `Saving ${rows.length} changed track${rows.length === 1 ? "" : "s"}…`,
     });
 
     try {
@@ -239,7 +268,10 @@ export default function BulkEditTracks() {
 
         <form
           key={`${release.id}:${release.tracks
-            .map((track) => `${track.id}:${track.updatedAt}`)
+            .map(
+              (track) =>
+                `${track.id}:${track.metadataVersion ?? 0}`,
+            )
             .join("|")}`}
           onSubmit={saveTracks}
           onChange={editor.markDirty}
@@ -379,8 +411,9 @@ export default function BulkEditTracks() {
             <div>
               <strong>Save bulk track changes</strong>
               <span>
-                Reordering is committed atomically so position
-                swaps cannot collide.
+                Only changed tracks are submitted. Reordering is
+                committed atomically so position swaps cannot
+                collide.
               </span>
               <div
                 className={`rc-editor-save-state rc-editor-save-state--${editor.saveState}`}
