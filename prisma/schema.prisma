@@ -77,6 +77,7 @@ model Release {
   reviewItems                 ReleaseReviewItem[]
   operationJobs              OperationJob[]
   systemIssues               SystemIssue[]
+  feedbackReports           FeedbackReport[]
 
   @@unique([shop, catalogNumber])
   @@index([shop, status])
@@ -105,6 +106,7 @@ model Track {
   credits              TrackCredit[]
   files                ReleaseFile[]
   reviewItems          ReleaseReviewItem[]
+  feedbackReports    FeedbackReport[]
 
   @@unique([releaseId, position])
   @@index([releaseId])
@@ -359,12 +361,40 @@ model SystemIssue {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   release           Release? @relation(fields: [releaseId], references: [id], onDelete: SetNull)
+  feedbackReports   FeedbackReport[]
 
   @@unique([shop, deploymentProfile, fingerprint])
   @@index([shop, deploymentProfile, status, lastSeenAt])
   @@index([shop, deploymentProfile, lastSeenAt])
   @@index([releaseId, lastSeenAt])
   @@index([operationJobId])
+}
+
+model FeedbackReport {
+  id                   String       @id @default(cuid())
+  shop                 String
+  deploymentProfile    String       @default("releasecore")
+  category             String
+  impact               String
+  status               String       @default("RECEIVED")
+  summary              String
+  message              String
+  pagePath             String?
+  releaseId            String?
+  trackId              String?
+  systemIssueId        String?
+  systemIssueRequestId String?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  release              Release?     @relation(fields: [releaseId], references: [id], onDelete: SetNull)
+  track                Track?       @relation(fields: [trackId], references: [id], onDelete: SetNull)
+  systemIssue          SystemIssue? @relation(fields: [systemIssueId], references: [id], onDelete: SetNull)
+
+  @@index([shop, deploymentProfile, createdAt])
+  @@index([shop, status, createdAt])
+  @@index([releaseId, createdAt])
+  @@index([trackId, createdAt])
+  @@index([systemIssueId, createdAt])
 }
 
 model OperationJob {

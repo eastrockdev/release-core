@@ -241,6 +241,12 @@ function SystemIssueCard({ issue }) {
             Open distribution
           </Link>
         ) : null}
+        <Link
+          to={`/app/feedback?from=%2Fapp%2Fsystem-issues&systemIssue=${issue.id}`}
+          className="rc-button rc-button--tertiary rc-button--compact"
+        >
+          Report this issue
+        </Link>
         {issue.status === "OPEN" ? (
           <Form method="post">
             <input

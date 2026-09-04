@@ -1,4 +1,9 @@
-import { Outlet, useLoaderData, useRouteError } from "react-router";
+import {
+  Outlet,
+  useLoaderData,
+  useLocation,
+  useRouteError,
+} from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
@@ -31,6 +36,13 @@ function NavLabel({ children, count }) {
 
 export default function App() {
   const { apiKey, navCounts } = useLoaderData();
+  const location = useLocation();
+  const feedbackHref =
+    location.pathname === "/app/feedback"
+      ? "/app/feedback"
+      : `/app/feedback?from=${encodeURIComponent(
+          location.pathname,
+        )}`;
 
   return (
     <AppProvider embedded apiKey={apiKey}>
@@ -38,6 +50,7 @@ export default function App() {
         <s-link href="/app">Home</s-link>
         <s-link href="/app/operations">Operations</s-link>
         <s-link href="/app/system-issues"><NavLabel count={navCounts.systemIssues}>System issues</NavLabel></s-link>
+        <s-link href={feedbackHref}>Feedback</s-link>
         <s-link href="/app/releases">Releases</s-link>
         <s-link href="/app/import">Import</s-link>
         <s-link href="/app/submissions"><NavLabel count={navCounts.submissions}>Submissions</NavLabel></s-link>
