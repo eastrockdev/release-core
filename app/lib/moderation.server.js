@@ -74,6 +74,43 @@ export async function getCustomerReleaseCreationPolicy({
   return releaseCreationPolicyFromEvent(event);
 }
 
+export async function listCustomerReleaseCreationPolicies({
+  shop,
+  customerIds,
+}) {
+  const sourceIds = [
+    ...new Set(
+      (customerIds || [])
+        .map(normalizedCustomerId)
+        .filter(Boolean),
+    ),
+  ];
+  if (!sourceIds.length) return new Map();
+
+  const events = await db.dataMaintenanceEvent.findMany({
+    where: {
+      shop,
+      deploymentProfile: deploymentProfileId(),
+      entityType: "PORTAL_CUSTOMER",
+      sourceId: { in: sourceIds },
+      operation: {
+        in: [
+          RELEASE_CREATION_DISABLED_OPERATION,
+          RELEASE_CREATION_ENABLED_OPERATION,
+        ],
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const policies = new Map();
+  for (const event of events) {
+    if (!event.sourceId || policies.has(event.sourceId)) continue;
+    policies.set(event.sourceId, releaseCreationPolicyFromEvent(event));
+  }
+  return policies;
+}
+
 export function applyReleaseCreationModeration(access, policy) {
   if (!policy?.disabled) return access;
 
