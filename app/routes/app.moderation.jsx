@@ -13,8 +13,7 @@ import { customerIsPortalMember } from "../lib/portal-access-rules.server";
 import {
   PORTAL_EDIT_LOCK_STATUS,
   PORTAL_EDIT_LOCK_TYPE,
-  customerReleaseCreationDisabled,
-  releaseCreationDisabledTag,
+  listCustomerReleaseCreationPolicies,
   setCustomerReleaseCreationDisabled,
   setReleaseArtistEditLock,
 } from "../lib/moderation.server";
@@ -74,9 +73,7 @@ export const loader = async ({ request }) => {
         title: true,
         type: true,
         status: true,
-        distributionStatus: true,
         ownerCustomerId: true,
-        updatedAt: true,
         artists: {
           where: { role: "PRIMARY" },
           orderBy: { position: "asc" },
@@ -102,29 +99,44 @@ export const loader = async ({ request }) => {
     }),
   ]);
 
-  const lockByRelease = new Map();
-  for (const lock of locks) {
-    if (!lockByRelease.has(lock.releaseId)) {
-      lockByRelease.set(lock.releaseId, lock);
-    }
-  }
+  const portalCustomers = shopifyCustomers.filter((customer) =>
+    customerIsPortalMember(customer.tags),
+  );
+  const customerPolicies = await listCustomerReleaseCreationPolicies({
+    shop: session.shop,
+    customerIds: portalCustomers.map((customer) => customer.id),
+  });
 
-  const customers = shopifyCustomers
-    .filter((customer) => customerIsPortalMember(customer.tags))
-    .map((customer) => ({
-      id: customer.id,
-      numericId: customerNumericId(customer.id),
-      displayName: customer.displayName,
-      email: customer.email,
-      tags: customer.tags || [],
-      releaseCreationDisabled: customerReleaseCreationDisabled(customer.tags),
-    }))
+  const customers = portalCustomers
+    .map((customer) => {
+      const numericId = customerNumericId(customer.id);
+      const policy = customerPolicies.get(numericId) || {
+        disabled: false,
+        reason: null,
+      };
+      return {
+        id: customer.id,
+        numericId,
+        displayName: customer.displayName,
+        email: customer.email,
+        tags: customer.tags || [],
+        releaseCreationDisabled: Boolean(policy.disabled),
+        releaseCreationDisabledReason: policy.reason || null,
+      };
+    })
     .filter((customer) =>
       includesQuery(
         [customer.displayName, customer.email, ...(customer.tags || [])],
         q,
       ),
     );
+
+  const lockByRelease = new Map();
+  for (const lock of locks) {
+    if (!lockByRelease.has(lock.releaseId)) {
+      lockByRelease.set(lock.releaseId, lock);
+    }
+  }
 
   const moderatedReleases = releases
     .map((release) => ({
@@ -137,6 +149,7 @@ export const loader = async ({ request }) => {
     .filter((release) =>
       includesQuery(
         [
+          release.id,
           release.title,
           release.type,
           release.status,
@@ -151,9 +164,9 @@ export const loader = async ({ request }) => {
     q,
     customers,
     releases: moderatedReleases,
-    restrictionTag: releaseCreationDisabledTag(),
     totals: {
-      usersBlocked: customers.filter((item) => item.releaseCreationDisabled).length,
+      usersBlocked: customers.filter((item) => item.releaseCreationDisabled)
+        .length,
       releasesLocked: moderatedReleases.filter((item) => item.lock).length,
     },
   };
@@ -161,16 +174,18 @@ export const loader = async ({ request }) => {
 
 export const action = async ({ request }) => {
   try {
-    const { admin, session } = await authenticate.admin(request);
+    const { session } = await authenticate.admin(request);
     const form = await request.formData();
     const intent = String(form.get("intent") || "");
 
     if (intent === "set-release-creation") {
       const disabled = String(form.get("disabled") || "false") === "true";
       const result = await setCustomerReleaseCreationDisabled({
-        admin,
+        shop: session.shop,
         customerId: form.get("customerId"),
         disabled,
+        reason: form.get("reason"),
+        actorLabel: "Shopify admin",
       });
       return {
         ok: true,
@@ -210,7 +225,9 @@ export const action = async ({ request }) => {
     const payload = await response.json().catch(() => ({}));
     return {
       ok: false,
-      message: payload.error || "ReleaseCore could not update moderation controls.",
+      message:
+        payload.error ||
+        "ReleaseCore could not update moderation controls.",
     };
   }
 };
@@ -226,18 +243,20 @@ export default function Moderation() {
       <s-section>
         <PageIntro
           eyebrow="Artist Portal controls"
-          title="Control release access without changing the catalog."
+          title="Control artist release access without changing the catalog."
         >
           Freeze artist editing on an individual release or stop a portal user
-          from creating new releases. These controls do not prevent Shopify
-          administrators from managing the catalog inside ReleaseCore.
+          from creating new releases. Shopify administrators keep full
+          ReleaseCore access in either state.
         </PageIntro>
       </s-section>
 
       {result?.message ? (
         <s-section>
           <div
-            className={`rc-notice ${result.ok ? "rc-notice--good" : "rc-notice--bad"}`}
+            className={`rc-notice ${
+              result.ok ? "rc-notice--good" : "rc-notice--bad"
+            }`}
             role="status"
           >
             {result.message}
@@ -268,8 +287,8 @@ export default function Moderation() {
         <div style={styles.sectionIntro}>
           <strong>{data.totals.usersBlocked} restricted</strong>
           <span>
-            Blocking a user adds the <code>{data.restrictionTag}</code> customer
-            tag and disables every release type in the Artist Portal.
+            Restrictions are stored and audited inside ReleaseCore. They do not
+            require changing Shopify customer tags or app permissions.
           </span>
         </div>
 
@@ -282,7 +301,9 @@ export default function Moderation() {
                     <strong style={styles.cardTitle}>
                       {customer.displayName || "Shopify customer"}
                     </strong>
-                    <span style={styles.meta}>{customer.email || customer.numericId}</span>
+                    <span style={styles.meta}>
+                      {customer.email || customer.numericId}
+                    </span>
                   </div>
                   <span
                     className={`rc-status-badge ${
@@ -291,24 +312,47 @@ export default function Moderation() {
                         : "rc-status-badge--good"
                     }`}
                   >
-                    {customer.releaseCreationDisabled ? "Creation disabled" : "Creation allowed"}
+                    {customer.releaseCreationDisabled
+                      ? "Creation disabled"
+                      : "Creation allowed"}
                   </span>
                 </div>
 
                 <p style={styles.copy}>
                   {customer.releaseCreationDisabled
-                    ? "This user can view and manage releases they already have access to, but cannot create another release."
+                    ? "This user can still view and manage releases they already have access to, but cannot create another release."
                     : "This user can create releases according to their normal ReleaseCore tier and release-type permissions."}
                 </p>
 
-                <Form method="post">
-                  <input type="hidden" name="intent" value="set-release-creation" />
-                  <input type="hidden" name="customerId" value={customer.id} />
+                {customer.releaseCreationDisabledReason ? (
+                  <div style={styles.reasonBox}>
+                    {customer.releaseCreationDisabledReason}
+                  </div>
+                ) : null}
+
+                <Form method="post" style={styles.customerAction}>
+                  <input
+                    type="hidden"
+                    name="intent"
+                    value="set-release-creation"
+                  />
+                  <input
+                    type="hidden"
+                    name="customerId"
+                    value={customer.id}
+                  />
                   <input
                     type="hidden"
                     name="disabled"
                     value={customer.releaseCreationDisabled ? "false" : "true"}
                   />
+                  {!customer.releaseCreationDisabled ? (
+                    <input
+                      className="rc-control"
+                      name="reason"
+                      placeholder="Optional moderation reason"
+                    />
+                  ) : null}
                   <button
                     type="submit"
                     disabled={busy}
@@ -327,7 +371,9 @@ export default function Moderation() {
             ))}
           </div>
         ) : (
-          <div style={styles.empty}>No eligible Artist Portal users match this filter.</div>
+          <div style={styles.empty}>
+            No eligible Artist Portal users match this filter.
+          </div>
         )}
       </s-section>
 
@@ -335,8 +381,9 @@ export default function Moderation() {
         <div style={styles.sectionIntro}>
           <strong>{data.totals.releasesLocked} locked</strong>
           <span>
-            A locked release stays visible to the artist, but its release fields,
-            tracks, credits and uploads become read only and portal mutations are rejected server-side.
+            A locked release stays visible to the artist, but release fields,
+            tracks, credits and uploads render read only and portal mutations
+            are rejected server-side.
           </span>
         </div>
 
@@ -346,22 +393,37 @@ export default function Moderation() {
               <article key={release.id} style={styles.releaseRow}>
                 <div style={styles.releaseIdentity}>
                   <div style={styles.releaseMark} aria-hidden="true">
-                    {release.lock ? "🔒" : "♪"}
+                    {release.lock ? "Locked" : "Open"}
                   </div>
                   <div style={{ minWidth: 0 }}>
-                    <strong style={styles.cardTitle}>{release.title || "Untitled Release"}</strong>
+                    <strong style={styles.cardTitle}>
+                      {release.title || "Untitled Release"}
+                    </strong>
                     <span style={styles.meta}>
-                      {typeLabel(release.type)} · {release.primaryArtists.join(", ") || "Artist not assigned"} · {String(release.status || "DRAFT").replaceAll("_", " ")}
+                      {typeLabel(release.type)} ·{" "}
+                      {release.primaryArtists.join(", ") ||
+                        "Artist not assigned"}{" "}
+                      · {String(release.status || "DRAFT").replaceAll("_", " ")}
                     </span>
                     {release.lock?.reason ? (
-                      <span style={styles.lockReason}>{release.lock.reason}</span>
+                      <span style={styles.lockReason}>
+                        {release.lock.reason}
+                      </span>
                     ) : null}
                   </div>
                 </div>
 
                 <Form method="post" style={styles.lockForm}>
-                  <input type="hidden" name="intent" value="set-release-lock" />
-                  <input type="hidden" name="releaseId" value={release.id} />
+                  <input
+                    type="hidden"
+                    name="intent"
+                    value="set-release-lock"
+                  />
+                  <input
+                    type="hidden"
+                    name="releaseId"
+                    value={release.id}
+                  />
                   {release.lock ? (
                     <>
                       <input type="hidden" name="locked" value="false" />
@@ -379,7 +441,7 @@ export default function Moderation() {
                       <input
                         className="rc-control"
                         name="reason"
-                        placeholder="Optional reason shown if a blocked save is attempted"
+                        placeholder="Optional reason shown on blocked changes"
                       />
                       <button
                         type="submit"
@@ -404,9 +466,9 @@ export default function Moderation() {
 
 const styles = {
   search: {
-    display: "grid",
-    gridTemplateColumns: "minmax(220px, 1fr) auto auto",
+    display: "flex",
     gap: 10,
+    flexWrap: "wrap",
     alignItems: "center",
   },
   sectionIntro: {
@@ -452,15 +514,31 @@ const styles = {
     lineHeight: 1.55,
     margin: "12px 0 14px",
   },
+  reasonBox: {
+    borderRadius: 10,
+    padding: "9px 10px",
+    marginBottom: 12,
+    background: "#fff4df",
+    color: "#765000",
+    fontSize: 12,
+    lineHeight: 1.45,
+  },
+  customerAction: {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+    alignItems: "center",
+  },
   releaseList: {
     display: "grid",
     gap: 10,
   },
   releaseRow: {
-    display: "grid",
-    gridTemplateColumns: "minmax(260px, 1fr) minmax(280px, 420px)",
+    display: "flex",
     gap: 16,
+    flexWrap: "wrap",
     alignItems: "center",
+    justifyContent: "space-between",
     border: "1px solid #e3e3e3",
     borderRadius: 14,
     padding: 14,
@@ -470,22 +548,29 @@ const styles = {
     display: "flex",
     gap: 12,
     alignItems: "center",
-    minWidth: 0,
+    minWidth: 260,
+    flex: "1 1 340px",
   },
   releaseMark: {
-    width: 40,
-    height: 40,
+    minWidth: 52,
+    height: 36,
+    padding: "0 9px",
     borderRadius: 10,
     display: "grid",
     placeItems: "center",
     background: "#f3f3f3",
+    color: "#555",
+    fontSize: 11,
+    fontWeight: 700,
     flex: "0 0 auto",
   },
   lockForm: {
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) auto",
+    display: "flex",
     gap: 8,
+    flexWrap: "wrap",
     alignItems: "center",
+    flex: "1 1 340px",
+    justifyContent: "flex-end",
   },
   lockReason: {
     display: "block",
