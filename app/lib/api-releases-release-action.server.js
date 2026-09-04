@@ -258,8 +258,8 @@ export const action = async ({ request, params }) => {
         rows,
         expectedReleaseUpdatedAt:
           formData.get("expectedReleaseUpdatedAt"),
-        expectedTrackUpdatedAt:
-          formData.get("expectedTrackUpdatedAt"),
+        expectedTrackMetadataVersion:
+          formData.get("expectedTrackMetadataVersion"),
         actorLabel: "Shopify admin",
       });
 

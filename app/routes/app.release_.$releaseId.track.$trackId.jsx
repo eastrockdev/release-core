@@ -339,8 +339,8 @@ export default function EditTrackInfo() {
     data.set("intent", "bulk-update-tracks");
     data.set("tracks", JSON.stringify([row]));
     data.set(
-      "expectedTrackUpdatedAt",
-      String(track.updatedAt || ""),
+      "expectedTrackMetadataVersion",
+      String(track.metadataVersion ?? 0),
     );
 
     editor.markSaving();
@@ -565,7 +565,7 @@ export default function EditTrackInfo() {
         defaultOpen
       >
         <form
-          key={`${track.id}:${track.updatedAt}`}
+          key={`${track.id}:${track.metadataVersion}`}
           onSubmit={saveTrackInfo}
           onChange={editor.markDirty}
         >

@@ -67,8 +67,8 @@ for (const [source, label] of [
   if (label === "Edit Track Info") {
     need(
       source,
-      "expectedTrackUpdatedAt",
-      "Edit Track Info does not send track-scoped optimistic-concurrency state.",
+      "expectedTrackMetadataVersion",
+      "Edit Track Info does not send track-metadata-scoped optimistic-concurrency state.",
     );
   } else {
     need(
@@ -106,8 +106,8 @@ for (const [source, label] of [
 
 need(
   trackInfo,
-  "expectedTrackUpdatedAt",
-  "Edit Track Info does not use track-scoped optimistic concurrency.",
+  "expectedTrackMetadataVersion",
+  "Edit Track Info does not use track-metadata-scoped optimistic concurrency.",
 );
 need(
   bulkEditor,
@@ -117,8 +117,8 @@ need(
 
 need(
   trackInfo,
-  "track.updatedAt",
-  "Edit Track Info does not key the authoritative form to track version state.",
+  "track.metadataVersion",
+  "Edit Track Info does not key the authoritative form to track metadata-version state.",
 );
 need(
   trackInfo,

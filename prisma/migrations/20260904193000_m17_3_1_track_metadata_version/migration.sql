@@ -1,0 +1,2 @@
+ALTER TABLE "Track"
+ADD COLUMN "metadataVersion" INTEGER NOT NULL DEFAULT 0;

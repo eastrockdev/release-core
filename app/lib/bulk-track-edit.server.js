@@ -43,18 +43,21 @@ function validExpectedReleaseUpdatedAt(value) {
   return date;
 }
 
-function validExpectedTrackUpdatedAt(value) {
+function validExpectedTrackMetadataVersion(value) {
   const raw = String(value ?? "").trim();
   if (!raw) return null;
 
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) {
+  const version = Number(raw);
+  if (
+    !Number.isInteger(version) ||
+    version < 0
+  ) {
     throw publicError(
-      "This track editor has stale version information. Reload the track before saving.",
+      "This track editor has invalid metadata version information. Reload the track before saving.",
       { status: 409, code: "EDIT_CONFLICT" },
     );
   }
-  return date;
+  return version;
 }
 
 function validPosition(value, trackCount, track) {
@@ -77,7 +80,7 @@ export async function bulkUpdateReleaseTracks({
   releaseId,
   rows,
   expectedReleaseUpdatedAt = null,
-  expectedTrackUpdatedAt = null,
+  expectedTrackMetadataVersion = null,
   actorLabel = "Shopify admin",
 }) {
   if (!Array.isArray(rows) || !rows.length) {
@@ -95,9 +98,9 @@ export async function bulkUpdateReleaseTracks({
     validExpectedReleaseUpdatedAt(
       expectedReleaseUpdatedAt,
     );
-  const expectedTrackAt =
-    validExpectedTrackUpdatedAt(
-      expectedTrackUpdatedAt,
+  const expectedTrackVersion =
+    validExpectedTrackMetadataVersion(
+      expectedTrackMetadataVersion,
     );
   const byId = new Map(release.tracks.map((track) => [track.id, track]));
   const seen = new Set();
@@ -239,19 +242,24 @@ export async function bulkUpdateReleaseTracks({
 
   const now = new Date();
   await db.$transaction(async (tx) => {
-    if (expectedTrackAt && normalized.length === 1) {
+    if (
+      expectedTrackVersion !== null &&
+      normalized.length === 1
+    ) {
       const claimed = await tx.track.updateMany({
         where: {
           id: normalized[0].trackId,
           releaseId: release.id,
-          updatedAt: expectedTrackAt,
+          metadataVersion: expectedTrackVersion,
         },
-        data: { updatedAt: now },
+        data: {
+          metadataVersion: { increment: 1 },
+        },
       });
 
       if (claimed.count !== 1) {
         throw publicError(
-          "This track changed since this editor loaded. Reload and review the latest track values before saving again.",
+          "This track information changed since this editor loaded. Reload and review the latest metadata before saving again.",
           { status: 409, code: "EDIT_CONFLICT" },
         );
       }

@@ -59,7 +59,7 @@ for (const marker of [
   'intent === "create-track-contributor-inline"',
   "createAndAssignTrackArtist",
   "createAndCreditTrackContributor",
-  "expectedTrackUpdatedAt",
+  "expectedTrackMetadataVersion",
 ]) {
   need(
     action,
@@ -77,8 +77,8 @@ for (const marker of [
   "create-track-contributor-inline",
   'name="artistName"',
   'name="contributorName"',
-  "expectedTrackUpdatedAt",
-  "track.updatedAt",
+  "expectedTrackMetadataVersion",
+  "track.metadataVersion",
 ]) {
   need(
     editor,
@@ -88,11 +88,12 @@ for (const marker of [
 }
 
 for (const marker of [
-  "expectedTrackUpdatedAt",
-  "validExpectedTrackUpdatedAt",
-  "This track changed since this editor loaded.",
+  "expectedTrackMetadataVersion",
+  "validExpectedTrackMetadataVersion",
+  "This track information changed since this editor loaded.",
   "expectedReleaseUpdatedAt",
-  "if (expectedTrackAt && normalized.length === 1)",
+  "expectedTrackVersion !== null",
+  "normalized.length === 1",
 ]) {
   need(
     bulk,

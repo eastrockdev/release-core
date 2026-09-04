@@ -122,6 +122,7 @@ export async function assignIsrcToTrack({ trackId, shop }) {
         data: {
           isrc: code,
           isrcAssignedAt: new Date(),
+          metadataVersion: { increment: 1 },
         },
       });
       await tx.submissionEvent.create({
@@ -215,7 +216,11 @@ export async function assignManualIsrcToTrack({
 
     const updated = await tx.track.updateMany({
       where: { id: track.id, isrc: null },
-      data: { isrc: code, isrcAssignedAt: new Date() },
+      data: {
+        isrc: code,
+        isrcAssignedAt: new Date(),
+        metadataVersion: { increment: 1 },
+      },
     });
     if (updated.count !== 1) {
       throw new Error(
@@ -273,7 +278,11 @@ export async function correctIsrcForTrack({
     const assignedAt = new Date();
     const updated = await tx.track.update({
       where: { id: track.id },
-      data: { isrc: code, isrcAssignedAt: assignedAt },
+      data: {
+        isrc: code,
+        isrcAssignedAt: assignedAt,
+        metadataVersion: { increment: 1 },
+      },
     });
 
     await tx.submissionEvent.create({
