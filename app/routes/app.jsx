@@ -27,8 +27,9 @@ export const loader = async ({ request }) => {
   };
 };
 
-function NavLabel({ children, count }) {
-  return <span className="rc-nav-label"><span>{children}</span>{count > 0 ? <span className="rc-nav-count" aria-label={`${count} items requiring attention`}>{count > 99 ? "99+" : count}</span> : null}</span>;
+function navLabel(label, count) {
+  if (!count) return label;
+  return `${label} (${count > 99 ? "99+" : count})`;
 }
 
 export default function App() {
@@ -40,8 +41,12 @@ export default function App() {
         <s-link href="/app">Home</s-link>
         <s-link href="/app/operations">Operations</s-link>
         <s-link href="/app/releases">Releases</s-link>
-        <s-link href="/app/submissions"><NavLabel count={navCounts.submissions}>Submissions</NavLabel></s-link>
-        <s-link href="/app/distribution"><NavLabel count={navCounts.distribution}>Distribution</NavLabel></s-link>
+        <s-link href="/app/submissions">
+          {navLabel("Submissions", navCounts.submissions)}
+        </s-link>
+        <s-link href="/app/distribution">
+          {navLabel("Distribution", navCounts.distribution)}
+        </s-link>
         <s-link href="/app/artists">Artists</s-link>
         <s-link href="/app/moderation">Moderation</s-link>
         <s-link href="/app/settings">Settings</s-link>
