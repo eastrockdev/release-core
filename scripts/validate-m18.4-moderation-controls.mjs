@@ -12,6 +12,11 @@ const moderation = read("app/lib/moderation.server.js");
 const admin = read("app/routes/app.moderation.jsx");
 const appNav = read("app/routes/app.jsx");
 const proxy = read("app/routes/releasecore-proxy.$.jsx");
+const dashboard = read("app/lib/portal-dashboard.server.js");
+const schema = read("prisma/schema.prisma");
+const migration = read(
+  "prisma/migrations/20260904224500_m18_4_1_portal_release_creation_policy/migration.sql",
+);
 const nativePortal = read(
   "extensions/releasecore-artist-portal/assets/releasecore-dashboard.js",
 );
@@ -34,9 +39,13 @@ for (const marker of [
   "assertReleaseArtistEditable",
   "setReleaseArtistEditLock",
   "setCustomerReleaseCreationDisabled",
-  "dataMaintenanceEvent.findFirst",
-  "dataMaintenanceEvent.findMany",
+  "portalCustomerPolicy.findUnique",
+  "portalCustomerPolicy.findMany",
+  "portalCustomerPolicy.upsert",
+  "releaseCreationDisabled: Boolean(disabled)",
+  "releaseCreationDisabledReason: disabled ? cleanReason : null",
   "dataMaintenanceEvent.create",
+  "MODERATION_STATE_NOT_SAVED",
   "releaseLifecycleRequest.findFirst",
   "releaseLifecycleRequest.create",
   'type: "PORTAL_EDIT_LOCKED"',
@@ -49,6 +58,21 @@ for (const marker of [
     marker,
     `Moderation service is missing ${marker}.`,
   );
+}
+
+for (const marker of [
+  "releaseCreationDisabled       Boolean  @default(false)",
+  "releaseCreationDisabledReason String?",
+]) {
+  need(schema, marker, `PortalCustomerPolicy schema is missing ${marker}.`);
+}
+
+for (const marker of [
+  'ALTER TABLE "PortalCustomerPolicy"',
+  'ADD COLUMN "releaseCreationDisabled" BOOLEAN NOT NULL DEFAULT false',
+  'ADD COLUMN "releaseCreationDisabledReason" TEXT',
+]) {
+  need(migration, marker, `Moderation migration is missing ${marker}.`);
 }
 
 for (const forbidden of ["tagsAdd", "tagsRemove", "write_customers"]) {
@@ -72,6 +96,8 @@ for (const marker of [
   "Optional moderation reason",
   "Lock artist editing",
   "Restore release creation",
+  "useFetcher",
+  "moderationFetcher.Form",
 ]) {
   need(
     admin,
@@ -85,6 +111,19 @@ need(
   '<s-link href="/app/moderation">Moderation</s-link>',
   "Shopify admin navigation does not expose Moderation.",
 );
+
+for (const marker of [
+  "getCustomerReleaseCreationPolicy",
+  "applyReleaseCreationModeration",
+  "const moderatedAccess",
+  "access: moderatedAccess",
+]) {
+  need(
+    dashboard,
+    marker,
+    `Portal dashboard does not consume moderation state: ${marker}.`,
+  );
+}
 
 for (const marker of [
   "applyReleaseCreationModeration",
@@ -149,5 +188,5 @@ if (failures.length) {
 }
 
 console.log(
-  "ReleaseCore M18.4 release lock / user moderation validation passed.",
+  "ReleaseCore M18.4 release lock / customer-policy moderation validation passed.",
 );
