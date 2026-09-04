@@ -1,6 +1,3 @@
-import { CORE_CREDIT_ROLES } from "./credit-types";
-export { configuredCreditRoles, isConfiguredCreditRole, normalizeCreditRole, parseAdditionalCreditRoles } from "./credit-types";
-
 export const RELEASE_TYPES = ["SINGLE", "EP", "ALBUM"];
 
 export const GENRES = [
@@ -73,7 +70,17 @@ export const LANGUAGES = [
 ];
 
 export const ARTIST_ROLES = ["PRIMARY", "FEATURED"];
-export const CREDIT_ROLES = CORE_CREDIT_ROLES;
+export const CREDIT_ROLES = [
+  "SONGWRITER",
+  "COMPOSER",
+  "PRODUCER",
+  "RECORDING_ENGINEER",
+  "MIXING_ENGINEER",
+  "MASTERING_ENGINEER",
+  "COVER_ART_PHOTOGRAPHER",
+  "COVER_ART_DESIGNER",
+  "OTHER",
+];
 
 export const PRO_OPTIONS = ["ASCAP", "BMI", "SESAC", "GMR", "SOCAN", "PRS", "APRA AMCOS", "SACEM", "Other"];
 

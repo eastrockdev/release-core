@@ -4,10 +4,7 @@ import {
   normalizeTemplateSuffix,
   resolveShopifyMusicGenreMetafield,
 } from "./shopify-catalog.server";
-import {
-  buildEastRockTrackProductMetafields,
-  eastRockCompatibilityEnabled,
-} from "./east-rock-compatibility.server";
+import { buildEastRockTrackProductMetafields } from "./east-rock-compatibility.server";
 import { shopifyMutationError } from "./operational-errors";
 
 const DEFINITIONS = [
@@ -387,77 +384,6 @@ export function buildTrackProductMetafields({ release, track, settings }) {
       settings,
     }),
   ].filter(Boolean);
-}
-
-
-export async function syncEastRockAssociatedAlbumReferences(admin, release) {
-  if (!eastRockCompatibilityEnabled()) {
-    return { updated: 0, parentProductId: null };
-  }
-
-  const releaseType = String(release?.type || "").toUpperCase();
-  if (!["ALBUM", "EP"].includes(releaseType)) {
-    return { updated: 0, parentProductId: null };
-  }
-
-  const parentProductId = String(release?.shopifyReleaseProductId || "");
-  if (!parentProductId.startsWith("gid://shopify/Product/")) {
-    throw new Error(
-      "ReleaseCore cannot link Album/EP tracks until the Shopify parent product is resolved.",
-    );
-  }
-
-  const productIds = [
-    ...new Set(
-      (release?.tracks || [])
-        .map((track) => String(track?.shopifyProductId || ""))
-        .filter((id) => id.startsWith("gid://shopify/Product/")),
-    ),
-  ];
-
-  for (let offset = 0; offset < productIds.length; offset += 25) {
-    const chunk = productIds.slice(offset, offset + 25);
-    const response = await admin.graphql(
-      `#graphql
-        mutation ReleaseCoreEastRockAssociatedAlbum($metafields: [MetafieldsSetInput!]!) {
-          metafieldsSet(metafields: $metafields) {
-            metafields { id namespace key value }
-            userErrors { field message code }
-          }
-        }`,
-      {
-        variables: {
-          metafields: chunk.map((ownerId) => ({
-            ownerId,
-            namespace: "custom",
-            key: "associated_album",
-            type: "product_reference",
-            value: parentProductId,
-          })),
-        },
-      },
-    );
-    const json = await response.json();
-    const errors = [
-      ...(json?.errors || [])
-        .map((error) => String(error?.message || "").trim())
-        .filter(Boolean),
-      ...(json?.data?.metafieldsSet?.userErrors || [])
-        .map((error) => String(error?.message || "").trim())
-        .filter(Boolean),
-    ];
-    if (errors.length) {
-      throw shopifyMutationError(
-        `Shopify could not link the Album/EP parent to its track products: ${errors.join(" ")}`,
-        json?.data?.metafieldsSet?.userErrors || [],
-      );
-    }
-  }
-
-  return {
-    updated: productIds.length,
-    parentProductId,
-  };
 }
 
 function trackVendor(release, track) {

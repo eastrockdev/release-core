@@ -1,7 +1,6 @@
 import { Readable } from "node:stream";
 import { authenticate } from "../shopify.server";
-import { GENRES, LANGUAGES, PRO_OPTIONS } from "../lib/releasecore";
-import { configuredCreditRoles } from "../lib/credit-types";
+import { CREDIT_ROLES, GENRES, LANGUAGES, PRO_OPTIONS } from "../lib/releasecore";
 import {
   addPortalCredit,
   addPortalTrack,
@@ -217,11 +216,10 @@ export const loader = async ({ request }) => {
     if (detailMatch) {
       const release = await portalReleaseDetail({ ...identity, admin: context.admin, releaseId: detailMatch[1] });
       if (!release) return Response.json({ ok: false, error: "Release not found." }, { status: 404 });
-      const portalSettings = await db.appSettings.findUnique({ where: { shop: identity.shop } });
       return Response.json({
         ok: true,
         release,
-        options: { genres: GENRES, languages: LANGUAGES, creditRoles: configuredCreditRoles(portalSettings), proOptions: PRO_OPTIONS },
+        options: { genres: GENRES, languages: LANGUAGES, creditRoles: CREDIT_ROLES, proOptions: PRO_OPTIONS },
       });
     }
 

@@ -1,9 +1,9 @@
 import db from "../db.server";
 import {
   ARTIST_ROLES,
+  CREDIT_ROLES,
   isPublishingRole,
 } from "./releasecore";
-import { configuredCreditRoles } from "./credit-types";
 import { publicError } from "./http-security.server";
 import { releaseIsEditable } from "./workflow";
 
@@ -188,11 +188,7 @@ export async function createAndCreditTrackContributor({
     role || "",
   ).toUpperCase();
 
-  const roleSettings = await db.appSettings.findUnique({
-    where: { shop },
-    select: { additionalCreditRoles: true },
-  });
-  if (!configuredCreditRoles(roleSettings).includes(creditRole)) {
+  if (!CREDIT_ROLES.includes(creditRole)) {
     throw publicError(
       "Choose a valid credit role.",
       { status: 400 },

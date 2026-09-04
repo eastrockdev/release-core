@@ -10,7 +10,6 @@ import {
   ensureReleaseCoreProductMetafields,
   syncProductMetafieldSafely,
   syncTrackProduct,
-  syncEastRockAssociatedAlbumReferences,
 } from "./shopify-products.server";
 import { findShopRelease } from "./tenant-db.server";
 import { isValidUpc } from "./upc";
@@ -701,10 +700,11 @@ export async function performDistributionAction({
           shop,
           release.id,
         );
-        await syncEastRockAssociatedAlbumReferences(
+        await repairAndSyncExistingProducts({
           admin,
-          refreshedRelease,
-        );
+          release: refreshedRelease,
+          settings,
+        });
       } catch (error) {
         associationWarning =
           " The Album/EP product is synchronized, but track associated-album reference sync was deferred. Retry failed items from Sync health.";

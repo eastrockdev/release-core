@@ -17,7 +17,6 @@ import {
   contributorDisplayName,
   isPublishingRole,
 } from "../lib/releasecore";
-import { configuredCreditRoles } from "../lib/credit-types";
 import {
   FILE_KINDS,
   formatBytes,
@@ -102,7 +101,6 @@ function RoleSelect({
 }
 
 function CreditRoleSelect({
-  roles = CREDIT_ROLES,
   defaultValue = "SONGWRITER",
   disabled = false,
   onChange,
@@ -115,7 +113,7 @@ function CreditRoleSelect({
       onChange={onChange}
       className="rc-control rc-control--compact"
     >
-      {roles.map((role) => (
+      {CREDIT_ROLES.map((role) => (
         <option key={role} value={role}>
           {creditRoleLabel(role)}
         </option>
@@ -216,7 +214,6 @@ export default function EditTrackInfo() {
   const editable = releaseIsEditable(release.status);
   const creditSplitsEnabled =
     workflowSettings?.requirePublishing ?? true;
-  const creditRoles = configuredCreditRoles(workflowSettings);
 
   const master = (track.files || []).find(
     (file) => file.kind === FILE_KINDS.MASTER_WAV,
@@ -1015,7 +1012,7 @@ export default function EditTrackInfo() {
                   </div>
                 </div>
 
-                <CreditRoleSelect roles={creditRoles}
+                <CreditRoleSelect
                   defaultValue={credit.role}
                   disabled={busy}
                   onChange={(event) =>
@@ -1215,7 +1212,7 @@ export default function EditTrackInfo() {
             </select>
           )}
 
-          <CreditRoleSelect roles={creditRoles}
+          <CreditRoleSelect
             disabled={busy || !editable}
           />
 

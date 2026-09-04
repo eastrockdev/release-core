@@ -1,7 +1,6 @@
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { ARTIST_ROLES, isPublishingRole } from "../lib/releasecore";
-import { configuredCreditRoles } from "./credit-types";
+import { ARTIST_ROLES, CREDIT_ROLES, isPublishingRole } from "../lib/releasecore";
 import {
   assignMissingIsrcsForRelease,
   correctIsrcForTrack,
@@ -102,7 +101,6 @@ export const action = async ({ request, params }) => {
       String(formData.get("trackId") || "").trim() ||
       null;
     const appSettings = await db.appSettings.findUnique({ where: { shop: session.shop } });
-    const creditRoles = configuredCreditRoles(appSettings);
 
     if (HIGH_IMPACT_RELEASE_INTENTS.has(intent)) {
       await claimHighImpactMutation({
@@ -539,7 +537,7 @@ export const action = async ({ request, params }) => {
     if (intent === "add-credit") {
       const contributorId=String(formData.get("contributorId")||"");
       const role=String(formData.get("role")||"").toUpperCase();
-      if (!creditRoles.includes(role)) return Response.json({ok:false,error:"Choose a valid credit role."},{status:400});
+      if (!CREDIT_ROLES.includes(role)) return Response.json({ok:false,error:"Choose a valid credit role."},{status:400});
       const contributor=await findShopContributor(session.shop, contributorId);
       if (!contributor) return Response.json({ok:false,error:"Contributor not found in this store."},{status:404});
       const creditSplitsEnabled = appSettings?.requirePublishing ?? true;
@@ -559,7 +557,7 @@ export const action = async ({ request, params }) => {
     if (intent === "update-credit") {
       const creditId=String(formData.get("creditId")||"");
       const role=String(formData.get("role")||"").toUpperCase();
-      if (!creditRoles.includes(role)) return Response.json({ok:false,error:"Choose a valid credit role."},{status:400});
+      if (!CREDIT_ROLES.includes(role)) return Response.json({ok:false,error:"Choose a valid credit role."},{status:400});
       const credit=await db.trackCredit.findFirst({where:{id:creditId,trackId:track.id}});
       if (!credit) return Response.json({ok:false,error:"Track credit not found."},{status:404});
       const creditSplitsEnabled = appSettings?.requirePublishing ?? true;

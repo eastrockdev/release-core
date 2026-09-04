@@ -626,7 +626,6 @@ model AppSettings {
   requirePublishing                      Boolean @default(true)
   requireSplitSheet                      Boolean @default(false)
   requireCredits                         Boolean @default(false)
-  additionalCreditRoles                  String?
   requireIsrc                            Boolean @default(true)
   requireTrackLanguage                   Boolean @default(true)
   releaseLeadTimeEnabled                 Boolean @default(false)
@@ -694,10 +693,6 @@ model AppSettings {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  // RELEASECORE_RESEND_API_V100: selectable email transport; secrets remain encrypted at rest.
-  emailDeliveryProvider String @default("SMTP")
-  resendApiKeyEncrypted String?
-
 }
 
 model IsrcSequence {

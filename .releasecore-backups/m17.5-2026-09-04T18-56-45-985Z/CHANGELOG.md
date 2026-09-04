@@ -1,8 +1,3 @@
-## ReleaseCore M17.5 — Configurable Credits + Album Associations
-
-- Added merchant-configurable contributor credit roles while preserving the standard ReleaseCore credit roles and publishing semantics.
-- Made East Rock Album/EP track products explicitly write `custom.associated_album` immediately after the Shopify parent product is resolved.
-
 # ReleaseCore changelog
 
 ## M12 — Shopify catalog publishing

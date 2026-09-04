@@ -4,11 +4,7 @@ import { useLoaderData, useRevalidator } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import { GENRES, LANGUAGES, creditRoleLabel } from "../lib/releasecore";
-import {
-  CORE_CREDIT_ROLES,
-  configuredCreditRoles,
-} from "../lib/credit-types";
+import { GENRES, LANGUAGES } from "../lib/releasecore";
 import {
   isrcAssignmentMode,
   isrcYearDigits,
@@ -115,9 +111,6 @@ export default function SettingsPage() {
   );
   const [requireCredits, setRequireCredits] = useState(
     s.requireCredits ?? false,
-  );
-  const [additionalCreditRoles, setAdditionalCreditRoles] = useState(
-    s.additionalCreditRoles || "",
   );
   const [requireTrackLanguage, setRequireTrackLanguage] = useState(
     s.requireTrackLanguage ?? true,
@@ -301,7 +294,6 @@ export default function SettingsPage() {
     if (requirePublishing) f.set("requirePublishing", "on");
     if (requireSplitSheet) f.set("requireSplitSheet", "on");
     if (requireCredits) f.set("requireCredits", "on");
-    f.set("additionalCreditRoles", additionalCreditRoles);
     if (requireTrackLanguage) f.set("requireTrackLanguage", "on");
     if (releaseLeadTimeEnabled) f.set("releaseLeadTimeEnabled", "on");
     f.set("releaseLeadTimeDays", releaseLeadTimeDays);
@@ -359,7 +351,6 @@ export default function SettingsPage() {
     );
     const pending = ({
       requirements: "Saving submission requirements…",
-      creditRoles: "Saving contributor credit types…",
       identity: "Saving identity protection…",
       isrc: "Saving ISRC settings…",
       upc: "Saving UPC settings…",
@@ -508,72 +499,6 @@ export default function SettingsPage() {
             className="rc-button rc-button--primary"
           >
             Save requirements
-          </button>
-        </div>
-      </CollapsibleSection>
-
-      <CollapsibleSection
-        icon="contributors"
-        title="Contributor credit types"
-        description="Keep ReleaseCore's standard music credits and add store-specific roles."
-        summary={`${configuredCreditRoles({ additionalCreditRoles }).length} available`}
-      >
-        <ActionFeedback feedback={feedbackFor("creditRoles")} />
-        <div style={styles.sectionIntro}>
-          Core roles remain available for compatibility with distribution,
-          publishing splits and Shopify metafields. Add any extra contributor
-          roles your organization needs. Additional roles are credits only;
-          Songwriter and Composer remain the publishing ownership roles.
-        </div>
-
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-          {CORE_CREDIT_ROLES.map((role) => (
-            <span
-              key={role}
-              style={{
-                border: "1px solid var(--p-color-border-secondary, #d8d8d8)",
-                borderRadius: 999,
-                padding: "6px 10px",
-                fontSize: 12,
-              }}
-            >
-              {creditRoleLabel(role)}
-            </span>
-          ))}
-        </div>
-
-        <Field
-          label="Additional contributor roles"
-          help="Enter one role per line. Examples: Vocal Producer, Music Supervisor, Session Musician. ReleaseCore normalizes each role to a stable internal key."
-        >
-          <textarea
-            rows={7}
-            value={additionalCreditRoles}
-            onChange={(event) => setAdditionalCreditRoles(event.target.value)}
-            className="rc-control"
-            placeholder={"Vocal Producer\nMusic Supervisor\nSession Musician"}
-          />
-        </Field>
-
-        {configuredCreditRoles({ additionalCreditRoles }).length >
-        CORE_CREDIT_ROLES.length ? (
-          <div style={{ ...styles.muted, marginTop: 10 }}>
-            Additional roles:{" "}
-            {configuredCreditRoles({ additionalCreditRoles })
-              .slice(CORE_CREDIT_ROLES.length)
-              .map(creditRoleLabel)
-              .join(", ")}
-          </div>
-        ) : null}
-
-        <div className="rc-form-actions" style={styles.actionRow}>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => save("creditRoles")}
-            className="rc-button rc-button--primary"
-          >
-            Save credit types
           </button>
         </div>
       </CollapsibleSection>

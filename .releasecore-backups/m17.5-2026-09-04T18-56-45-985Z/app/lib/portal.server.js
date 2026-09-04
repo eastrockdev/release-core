@@ -1,7 +1,6 @@
 import db from "../db.server";
 import { parseReleaseTimelineFormData } from "./release-timeline.server";
-import { isPublishingRole, isValidReleaseType, starterTitle, typeLabel } from "./releasecore";
-import { configuredCreditRoles } from "./credit-types";
+import { CREDIT_ROLES, isPublishingRole, isValidReleaseType, starterTitle, typeLabel } from "./releasecore";
 import { FILE_KINDS, fileContentTypeForKind, isReplaceableKind, stagedResourceForKind, validateUploadDescriptor } from "./releasecore-files";
 import { maybeAutoAssignIsrc } from "./isrc.server";
 import { isrcAssignmentMode } from "./isrc";
@@ -462,10 +461,10 @@ export async function addPortalCredit({ shop, customerId, releaseId, trackId, fo
   if (!releaseIsEditable(release.status)) throw publicError("This release is locked.");
   if (!release.tracks.some((track) => track.id === trackId)) throw publicError("Track not found.");
   const role = String(formData.get("role") || "").toUpperCase();
-  const settings = (await db.appSettings.findUnique({ where: { shop } })) || {};
-  if (!configuredCreditRoles(settings).includes(role)) throw publicError("Choose a valid credit role.");
+  if (!CREDIT_ROLES.includes(role)) throw publicError("Choose a valid credit role.");
   const legalName = String(formData.get("legalName") || "").trim();
   if (!legalName) throw publicError("Contributor legal name is required.");
+  const settings = (await db.appSettings.findUnique({ where: { shop } })) || {};
   const creditSplitsEnabled = settings.requirePublishing ?? true;
   const ownershipRaw = String(formData.get("ownershipPercent") || "").trim();
   let ownershipPercent =
@@ -539,8 +538,9 @@ export async function updatePortalCredit({
   if (!credit) throw publicError("Credit not found.");
 
   const role = String(formData.get("role") || credit.role || "").toUpperCase();
+  if (!CREDIT_ROLES.includes(role)) throw publicError("Choose a valid credit role.");
+
   const settings = (await db.appSettings.findUnique({ where: { shop } })) || {};
-  if (!configuredCreditRoles(settings).includes(role)) throw publicError("Choose a valid credit role.");
   const creditSplitsEnabled = settings.requirePublishing ?? true;
   const ownershipRaw = String(formData.get("ownershipPercent") || "").trim();
   let ownershipPercent =

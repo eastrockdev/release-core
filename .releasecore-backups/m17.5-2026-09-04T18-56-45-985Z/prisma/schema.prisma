@@ -626,7 +626,6 @@ model AppSettings {
   requirePublishing                      Boolean @default(true)
   requireSplitSheet                      Boolean @default(false)
   requireCredits                         Boolean @default(false)
-  additionalCreditRoles                  String?
   requireIsrc                            Boolean @default(true)
   requireTrackLanguage                   Boolean @default(true)
   releaseLeadTimeEnabled                 Boolean @default(false)
