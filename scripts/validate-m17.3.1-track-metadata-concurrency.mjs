@@ -68,16 +68,16 @@ for (const marker of [
 need(
   action,
   "expectedTrackMetadataVersion:",
-  "Release API does not forward the Track metadata version.",
+  "Release API does not forward the single-track metadata version.",
 );
 
 for (const marker of [
   "validExpectedTrackMetadataVersion",
   "expectedTrackMetadataVersion = null",
-  "metadataVersion: expectedTrackVersion",
+  "row?.expectedTrackMetadataVersion",
+  "metadataVersion: expectedVersion",
   "metadataVersion: { increment: 1 }",
-  "expectedTrackVersion !== null",
-  "normalized.length === 1",
+  "for (const row of changed)",
 ]) {
   need(
     bulk,
@@ -95,16 +95,29 @@ if (
   );
 }
 
-need(
-  bulkEditor,
-  '.map((track) => `${track.id}:${track.updatedAt}`)',
-  "Bulk editor form identity must remain Track.updatedAt-based.",
-);
-need(
-  bulkEditor,
-  "expectedReleaseUpdatedAt",
-  "Bulk editor must retain release-scoped optimistic concurrency.",
-);
+for (const marker of [
+  "track.metadataVersion ?? 0",
+  "expectedTrackMetadataVersion:",
+  "if (!changed) return null;",
+  "Only changed tracks are submitted.",
+]) {
+  need(
+    bulkEditor,
+    marker,
+    `Bulk editor is missing track-scoped concurrency behavior: ${marker}.`,
+  );
+}
+
+if (
+  bulkEditor.includes("expectedReleaseUpdatedAt") ||
+  bulkEditor.includes("track.updatedAt") ||
+  bulk.includes("validExpectedReleaseUpdatedAt") ||
+  bulk.includes("tx.release.updateMany")
+) {
+  failures.push(
+    "Bulk editor still relies on release/timestamp-scoped optimistic concurrency.",
+  );
+}
 
 for (const marker of [
   "metadataVersion: { increment: 1 }",
