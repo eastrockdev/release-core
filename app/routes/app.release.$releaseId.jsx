@@ -1403,6 +1403,16 @@ export default function ReleaseWorkspace() {
       >
         Catalog relationships
       </s-button>
+      <s-button
+        slot="secondary-actions"
+        onClick={() =>
+          navigate(
+            `/app/release/${release.id}/catalog-operations`,
+          )
+        }
+      >
+        Catalog operations
+      </s-button>
       {release.status === "APPROVED" ||
       (release.distributionStatus &&
         release.distributionStatus !== "NOT_QUEUED") ? (

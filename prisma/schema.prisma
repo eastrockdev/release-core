@@ -73,6 +73,7 @@ model Release {
   artists                     ReleaseArtist[]
   files                       ReleaseFile[]
   events                      SubmissionEvent[]
+  lifecycleRequests            ReleaseLifecycleRequest[]
   notifications               NotificationDelivery[]
   reviewItems                 ReleaseReviewItem[]
   operationJobs              OperationJob[]
@@ -115,6 +116,7 @@ model Track {
   credits              TrackCredit[]
   files                ReleaseFile[]
   reviewItems          ReleaseReviewItem[]
+  lifecycleRequests    ReleaseLifecycleRequest[]
   feedbackReports    FeedbackReport[]
   recordingRelationships TrackRelationship[] @relation("TrackRelationshipTrack")
   recordingBacklinks      TrackRelationship[] @relation("TrackRelationshipRelatedTrack")
@@ -345,6 +347,33 @@ model ReleaseReviewItem {
 
   @@index([releaseId, status])
   @@index([trackId])
+}
+
+
+model ReleaseLifecycleRequest {
+  id             String   @id @default(cuid())
+  shop           String
+  releaseId      String
+  trackId        String?
+  type           String
+  category       String
+  scope          String   @default("RELEASE")
+  status         String   @default("REQUESTED")
+  summary        String
+  reason         String
+  effectiveAt    DateTime?
+  resolutionNote String?
+  requestedBy    String?
+  completedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  release        Release  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  track          Track?   @relation(fields: [trackId], references: [id], onDelete: SetNull)
+
+  @@index([shop, releaseId, status, updatedAt])
+  @@index([releaseId, createdAt])
+  @@index([trackId])
+  @@index([shop, type, status, updatedAt])
 }
 
 model SystemIssue {
