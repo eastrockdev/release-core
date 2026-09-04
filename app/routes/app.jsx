@@ -42,6 +42,7 @@ export default function App() {
         <s-link href="/app/submissions"><NavLabel count={navCounts.submissions}>Submissions</NavLabel></s-link>
         <s-link href="/app/distribution"><NavLabel count={navCounts.distribution}>Distribution</NavLabel></s-link>
         <s-link href="/app/artists">Artists</s-link>
+        <s-link href="/app/moderation">Moderation</s-link>
         <s-link href="/app/settings">Settings</s-link>
       </s-app-nav>
       <Outlet />

@@ -33,6 +33,13 @@ import {
   completePortalMasterUpload,
 } from "../lib/portal.server";
 import { portalReleaseAccess } from "../lib/automations.server";
+import {
+  applyReleaseCreationModeration,
+  assertCustomerCanCreateRelease,
+  assertReleaseArtistEditable,
+  getCustomerReleaseCreationPolicy,
+  getReleaseArtistEditLock,
+} from "../lib/moderation.server";
 import db from "../db.server";
 import { deleteReleaseDraft } from "../lib/release-drafts.server";
 import {
@@ -63,6 +70,13 @@ function errorResponse(request, error) {
     context: "artist portal request",
     fallback: "ReleaseCore could not complete this request.",
   });
+}
+
+async function assertRequestReleaseArtistEditable(request, identity) {
+  const formData = await request.clone().formData();
+  const releaseId = String(formData.get("releaseId") || "");
+  if (!releaseId) return;
+  await assertReleaseArtistEditable({ shop: identity.shop, releaseId });
 }
 
 async function masterAudioResponse({ request, identity, fileId }) {
@@ -223,6 +237,11 @@ export const loader = async ({ request }) => {
       );
     }
 
+    const creationPolicy = await getCustomerReleaseCreationPolicy({
+      shop: identity.shop,
+      customerId: identity.customerId,
+    });
+
     if (path === "portal/dashboard") {
       const dashboard = await portalDashboardState({
         admin: context.admin,
@@ -230,6 +249,7 @@ export const loader = async ({ request }) => {
         customerId: identity.customerId,
         selectedArtistId: identity.url.searchParams.get("artist"),
       });
+      dashboard.access = applyReleaseCreationModeration(dashboard.access, creationPolicy);
       return Response.json({ ok: true, ...dashboard });
     }
 
@@ -250,18 +270,25 @@ export const loader = async ({ request }) => {
         limit,
         artistId,
       });
-      const access = await portalReleaseAccess({
+      const access = applyReleaseCreationModeration(await portalReleaseAccess({
         admin: context.admin,
         shop: identity.shop,
         customerId: identity.customerId,
-      });
+      }), creationPolicy);
       return Response.json({ ok: true, releases, access });
     }
 
     const detailMatch = path.match(/^portal\/releases\/([^/]+)$/);
     if (detailMatch) {
-      const release = await portalReleaseDetail({ ...identity, admin: context.admin, releaseId: detailMatch[1] });
-      if (!release) return Response.json({ ok: false, error: "Release not found." }, { status: 404 });
+      const releaseDetail = await portalReleaseDetail({ ...identity, admin: context.admin, releaseId: detailMatch[1] });
+      if (!releaseDetail) return Response.json({ ok: false, error: "Release not found." }, { status: 404 });
+      const lock = await getReleaseArtistEditLock({ shop: identity.shop, releaseId: detailMatch[1] });
+      const release = {
+        ...releaseDetail,
+        editable: Boolean(releaseDetail.editable) && !lock.locked,
+        artistEditLocked: lock.locked,
+        artistEditLockReason: lock.reason,
+      };
       const portalSettings = await db.appSettings.findUnique({ where: { shop: identity.shop } });
       const releaseAccess = await portalReleaseAccess({
         admin: context.admin,
@@ -313,7 +340,13 @@ export const action = async ({ request }) => {
       );
     }
 
+    const creationPolicy = await getCustomerReleaseCreationPolicy({
+      shop: identity.shop,
+      customerId: identity.customerId,
+    });
+
     if (path === "portal/uploads/master/stage") {
+      await assertRequestReleaseArtistEditable(request, identity);
       const target = await stagePortalMasterUpload({
         request,
         admin: context.admin,
@@ -323,6 +356,7 @@ export const action = async ({ request }) => {
     }
 
     if (path === "portal/uploads/master/complete") {
+      await assertRequestReleaseArtistEditable(request, identity);
       const file = await completePortalMasterUpload({
         request,
         admin: context.admin,
@@ -332,6 +366,10 @@ export const action = async ({ request }) => {
     }
 
     if (path === "portal/uploads/master") {
+      await assertReleaseArtistEditable({
+        shop: identity.shop,
+        releaseId: identity.url.searchParams.get("releaseId") || "",
+      });
       const file = await uploadPortalMaster({ request, admin: context.admin, ...identity, url: identity.url });
       return Response.json({ ok: true, file });
     }
@@ -350,6 +388,7 @@ export const action = async ({ request }) => {
         customerId: identity.customerId,
         selectedArtistId: artist.id,
       });
+      dashboard.access = applyReleaseCreationModeration(dashboard.access, creationPolicy);
       return Response.json({ ok: true, artist, ...dashboard });
     }
 
@@ -389,6 +428,7 @@ export const action = async ({ request }) => {
           customerId: identity.customerId,
           selectedArtistId: identity.url.searchParams.get("artist"),
         });
+        dashboard.access = applyReleaseCreationModeration(dashboard.access, creationPolicy);
         return Response.json({
           ok: true,
           label,
@@ -408,6 +448,7 @@ export const action = async ({ request }) => {
           customerId: identity.customerId,
           selectedArtistId: artist.id,
         });
+        dashboard.access = applyReleaseCreationModeration(dashboard.access, creationPolicy);
         return Response.json({
           ok: true,
           artist,
@@ -440,11 +481,13 @@ export const action = async ({ request }) => {
     }
 
     if (path === "portal/uploads/stage") {
+      await assertReleaseArtistEditable({ shop: identity.shop, releaseId: String(formData.get("releaseId") || "") });
       const target = await stagePortalUpload({ admin: context.admin, ...identity, formData });
       return Response.json({ ok: true, target });
     }
 
     if (path === "portal/uploads/complete") {
+      await assertReleaseArtistEditable({ shop: identity.shop, releaseId: String(formData.get("releaseId") || "") });
       const file = await completePortalUpload({ admin: context.admin, ...identity, formData });
       return Response.json({ ok: true, file });
     }
@@ -466,6 +509,7 @@ export const action = async ({ request }) => {
       return Response.json({ ok: true, artist });
     }
     if (intent === "create-release") {
+      assertCustomerCanCreateRelease(creationPolicy);
       const release = await createPortalRelease({
         admin: context.admin,
         ...identity,
@@ -475,6 +519,11 @@ export const action = async ({ request }) => {
       });
       return Response.json({ ok: true, releaseId: release.id });
     }
+
+    if (releaseId) {
+      await assertReleaseArtistEditable({ shop: identity.shop, releaseId });
+    }
+
     if (intent === "update-release") {
       await updatePortalRelease({
         admin: context.admin,
