@@ -212,14 +212,16 @@ model PortalArtistAccess {
 }
 
 model PortalCustomerPolicy {
-  id           String   @id @default(cuid())
-  shop         String
-  customerId   String
-  artistMode   String   @default("MULTI")
-  soloArtistId String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  soloArtist   Artist?  @relation(fields: [soloArtistId], references: [id], onDelete: SetNull)
+  id                            String   @id @default(cuid())
+  shop                          String
+  customerId                    String
+  artistMode                    String   @default("MULTI")
+  soloArtistId                  String?
+  releaseCreationDisabled       Boolean  @default(false)
+  releaseCreationDisabledReason String?
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  soloArtist                    Artist?  @relation(fields: [soloArtistId], references: [id], onDelete: SetNull)
 
   @@unique([shop, customerId])
   @@index([soloArtistId])
@@ -542,10 +544,10 @@ model ReleaseRelationship {
   releaseId        String
   relatedReleaseId String
   relationshipType String
-  notes            String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  release          Release  @relation("ReleaseRelationshipRelease", fields: [releaseId], references: [id], onDelete: Cascade)
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  release           Release  @relation("ReleaseRelationshipRelease", fields: [releaseId], references: [id], onDelete: Cascade)
   relatedRelease   Release  @relation("ReleaseRelationshipRelated", fields: [relatedReleaseId], references: [id], onDelete: Cascade)
   trackRelationships TrackRelationship[]
 
