@@ -24,19 +24,23 @@ const need = (source, marker, message) => {
 
 for (const marker of [
   'PORTAL_EDIT_LOCK_TYPE = "PORTAL_EDIT_LOCK"',
-  "releaseCreationDisabledTag",
-  "customerReleaseCreationDisabled",
+  'PORTAL_EDIT_LOCK_STATUS = "ACTIVE"',
+  "RELEASE_CREATION_DISABLED_OPERATION",
+  "RELEASE_CREATION_ENABLED_OPERATION",
+  "getCustomerReleaseCreationPolicy",
+  "listCustomerReleaseCreationPolicies",
   "applyReleaseCreationModeration",
   "assertCustomerCanCreateRelease",
   "assertReleaseArtistEditable",
   "setReleaseArtistEditLock",
   "setCustomerReleaseCreationDisabled",
+  "dataMaintenanceEvent.findFirst",
+  "dataMaintenanceEvent.findMany",
+  "dataMaintenanceEvent.create",
   "releaseLifecycleRequest.findFirst",
   "releaseLifecycleRequest.create",
   'type: "PORTAL_EDIT_LOCKED"',
   'type: "PORTAL_EDIT_UNLOCKED"',
-  "tagsAdd",
-  "tagsRemove",
   'code: "RELEASE_CREATION_DISABLED"',
   'code: "PORTAL_RELEASE_LOCKED"',
 ]) {
@@ -47,6 +51,14 @@ for (const marker of [
   );
 }
 
+for (const forbidden of ["tagsAdd", "tagsRemove", "write_customers"]) {
+  if (moderation.includes(forbidden)) {
+    failures.push(
+      `Moderation state must remain ReleaseCore-owned and must not require ${forbidden}.`,
+    );
+  }
+}
+
 for (const marker of [
   'heading="Moderation"',
   'heading="User release creation"',
@@ -54,9 +66,12 @@ for (const marker of [
   'value="set-release-creation"',
   'value="set-release-lock"',
   "customerIsPortalMember",
-  "releaseCreationDisabledTag",
+  "listCustomerReleaseCreationPolicies",
   "setCustomerReleaseCreationDisabled",
   "setReleaseArtistEditLock",
+  "Optional moderation reason",
+  "Lock artist editing",
+  "Restore release creation",
 ]) {
   need(
     admin,
@@ -76,10 +91,12 @@ for (const marker of [
   "assertCustomerCanCreateRelease",
   "assertReleaseArtistEditable",
   "assertRequestReleaseArtistEditable",
+  "getCustomerReleaseCreationPolicy",
   "getReleaseArtistEditLock",
   "artistEditLocked: lock.locked",
   "artistEditLockReason: lock.reason",
   "editable: Boolean(releaseDetail.editable) && !lock.locked",
+  "assertCustomerCanCreateRelease(creationPolicy)",
 ]) {
   need(
     proxy,
@@ -100,7 +117,6 @@ for (const marker of [
   'release.editable ? "" : "readonly"',
   'release.editable ? "" : "disabled"',
   'release.editable ? "Editable" : "Read only"',
-  "${release.editable ? `",
 ]) {
   need(
     nativePortal,
