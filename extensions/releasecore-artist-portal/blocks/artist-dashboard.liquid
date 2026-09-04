@@ -6,6 +6,24 @@
   endif
 %}
 
+<style>
+  [data-rc-artist-dashboard] .rc-app-sidebar__panel > .rc-app-nav,
+  [data-rc-artist-dashboard] .rc-app-sidebar__panel > .rc-app-menu-group {
+    margin-top: 6px;
+  }
+
+  [data-rc-artist-dashboard] .rc-app-sidebar__label + .rc-app-nav,
+  [data-rc-artist-dashboard] .rc-app-sidebar__label + .rc-app-menu-group {
+    margin-top: 0;
+  }
+
+  [data-rc-artist-dashboard] .rc-app-nav__icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+</style>
+
 <section
   class="rc-app-dashboard"
   data-rc-artist-dashboard
@@ -133,8 +151,8 @@
                   {% if link.links != blank %}
                     <details class="rc-app-menu-group">
                       <summary class="rc-app-nav">
-                        <span class="rc-app-nav__icon">
-                          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <span class="rc-app-nav__icon" aria-hidden="true">
+                          {% render 'releasecore-menu-icon', title: link.title, auto_match: block.settings.supplemental_auto_icons, fallback: block.settings.supplemental_fallback_icon %}
                         </span>
                         <span class="rc-app-nav__copy"><strong>{{ link.title | escape }}</strong></span>
                         <svg class="rc-app-menu-group__chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M7 5l5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -175,8 +193,8 @@
                     </details>
                   {% else %}
                     <a class="rc-app-nav" href="{{ link.url }}">
-                      <span class="rc-app-nav__icon">
-                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      <span class="rc-app-nav__icon" aria-hidden="true">
+                        {% render 'releasecore-menu-icon', title: link.title, auto_match: block.settings.supplemental_auto_icons, fallback: block.settings.supplemental_fallback_icon %}
                       </span>
                       <span class="rc-app-nav__copy"><strong>{{ link.title | escape }}</strong></span>
                     </a>
@@ -395,6 +413,9 @@
               {% if link.links != blank %}
                 <details class="rc-app-menu-group">
                   <summary class="rc-app-nav">
+                    <span class="rc-app-nav__icon" aria-hidden="true">
+                      {% render 'releasecore-menu-icon', title: link.title, auto_match: block.settings.supplemental_auto_icons, fallback: block.settings.supplemental_fallback_icon %}
+                    </span>
                     <span class="rc-app-nav__copy"><strong>{{ link.title | escape }}</strong></span>
                     <svg class="rc-app-menu-group__chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M7 5l5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
                   </summary>
@@ -425,7 +446,12 @@
                   </div>
                 </details>
               {% else %}
-                <a class="rc-app-nav" href="{{ link.url }}"><span class="rc-app-nav__copy"><strong>{{ link.title | escape }}</strong></span></a>
+                <a class="rc-app-nav" href="{{ link.url }}">
+                  <span class="rc-app-nav__icon" aria-hidden="true">
+                    {% render 'releasecore-menu-icon', title: link.title, auto_match: block.settings.supplemental_auto_icons, fallback: block.settings.supplemental_fallback_icon %}
+                  </span>
+                  <span class="rc-app-nav__copy"><strong>{{ link.title | escape }}</strong></span>
+                </a>
               {% endif %}
             {% endfor %}
           {% endif %}
@@ -506,6 +532,26 @@
       "id": "supplemental_menu",
       "label": "Additional dashboard menu",
       "info": "Choose a Shopify Navigation menu for Tools, Promote, Rights Management, Support or other merchant-owned dashboard pages. Nested Shopify menu levels are supported."
+    },
+    {
+      "type": "checkbox",
+      "id": "supplemental_auto_icons",
+      "label": "Automatically match menu icons",
+      "default": true,
+      "info": "Uses menu titles to choose music-business icons for artwork, beat licensing, agreements, split sheets, promotion, rights, royalties, distribution, studio tools, blog, support and more."
+    },
+    {
+      "type": "select",
+      "id": "supplemental_fallback_icon",
+      "label": "Fallback menu icon",
+      "options": [
+        { "value": "music", "label": "Music note" },
+        { "value": "headphones", "label": "Headphones" },
+        { "value": "sparkles", "label": "Sparkles" },
+        { "value": "arrow", "label": "Arrow" }
+      ],
+      "default": "music",
+      "info": "Used when a title does not match the automatic icon library, or for all items when automatic matching is disabled."
     },
     {
       "type": "text",
