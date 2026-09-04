@@ -62,9 +62,7 @@ import {
 
 function pathFromRequest(request) {
   const pathname = new URL(request.url).pathname;
-  return pathname
-    .replace(/^\/releasecore-proxy\/?/, "")
-    .replace(/^\/+|\/+$/g, "");
+  return pathname.replace(/^\/releasecore-proxy\/?/, "").replace(/^\/+|\/+$/g, "");
 }
 
 function errorResponse(request, error) {
@@ -78,28 +76,21 @@ async function assertRequestReleaseArtistEditable(request, identity) {
   const formData = await request.clone().formData();
   const releaseId = String(formData.get("releaseId") || "");
   if (!releaseId) return;
-  await assertReleaseArtistEditable({
-    shop: identity.shop,
-    releaseId,
-  });
+  await assertReleaseArtistEditable({ shop: identity.shop, releaseId });
 }
 
 async function masterAudioResponse({ request, identity, fileId }) {
   const file = await db.releaseFile.findFirst({
     where: { id: fileId, kind: "MASTER_WAV" },
   });
-  if (!file || !file.storageKey) {
-    return new Response("Audio not found.", { status: 404 });
-  }
+  if (!file || !file.storageKey) return new Response("Audio not found.", { status: 404 });
 
   const release = await getPortalRelease({
     shop: identity.shop,
     customerId: identity.customerId,
     releaseId: file.releaseId,
   });
-  if (!release) {
-    return new Response("Audio not found.", { status: 404 });
-  }
+  if (!release) return new Response("Audio not found.", { status: 404 });
 
   if (file.storageProvider === "R2") {
     const signedUrl = await getR2SignedReadUrl(file.storageKey, {
@@ -115,63 +106,27 @@ async function masterAudioResponse({ request, identity, fileId }) {
     });
   }
 
-  if (file.storageProvider !== "LOCAL_DEV") {
-    return new Response("Audio not found.", { status: 404 });
-  }
-  const info = localStorageStat(file.storageKey);
-  const resolvedInfo = await info;
-  const total = resolvedInfo.size;
+  if (file.storageProvider !== "LOCAL_DEV") return new Response("Audio not found.", { status: 404 });
+  const info = await localStorageStat(file.storageKey);
+  const total = info.size;
   const range = request.headers.get("range");
   const headers = {
     "Content-Type": file.mimeType || "audio/wav",
     "Accept-Ranges": "bytes",
     "Cache-Control": "private, no-store",
-    "Content-Disposition": `inline; filename="${String(
-      file.filename || "master.wav",
-    ).replace(/["\r\n]/g, "_")}"`,
+    "Content-Disposition": `inline; filename="${String(file.filename || "master.wav").replace(/["\r\n]/g, "_")}"`,
   };
   if (range) {
     const match = range.match(/bytes=(\d*)-(\d*)/);
-    if (!match) {
-      return new Response(null, {
-        status: 416,
-        headers: { "Content-Range": `bytes */${total}` },
-      });
-    }
+    if (!match) return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${total}` } });
     const start = match[1] ? Number(match[1]) : 0;
-    const end = match[2]
-      ? Math.min(Number(match[2]), total - 1)
-      : total - 1;
-    if (
-      !Number.isInteger(start) ||
-      !Number.isInteger(end) ||
-      start < 0 ||
-      start > end ||
-      start >= total
-    ) {
-      return new Response(null, {
-        status: 416,
-        headers: { "Content-Range": `bytes */${total}` },
-      });
-    }
+    const end = match[2] ? Math.min(Number(match[2]), total - 1) : total - 1;
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || start > end || start >= total) return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${total}` } });
     const stream = localStorageReadStream(file.storageKey, { start, end });
-    return new Response(Readable.toWeb(stream), {
-      status: 206,
-      headers: {
-        ...headers,
-        "Content-Length": String(end - start + 1),
-        "Content-Range": `bytes ${start}-${end}/${total}`,
-      },
-    });
+    return new Response(Readable.toWeb(stream), { status: 206, headers: { ...headers, "Content-Length": String(end - start + 1), "Content-Range": `bytes ${start}-${end}/${total}` } });
   }
   const stream = localStorageReadStream(file.storageKey);
-  return new Response(Readable.toWeb(stream), {
-    status: 200,
-    headers: {
-      ...headers,
-      "Content-Length": String(total),
-    },
-  });
+  return new Response(Readable.toWeb(stream), { status: 200, headers: { ...headers, "Content-Length": String(total) } });
 }
 
 async function commerceDownloadResponse({ identity, entitlementId }) {
@@ -276,9 +231,7 @@ export const loader = async ({ request }) => {
           ok: false,
           membershipRequired: true,
           membership,
-          error:
-            membership.message ||
-            "Your account does not have Artist Portal access.",
+          error: membership.message || "Your account does not have Artist Portal access.",
         },
         { status: 403 },
       );
@@ -296,21 +249,12 @@ export const loader = async ({ request }) => {
         customerId: identity.customerId,
         selectedArtistId: identity.url.searchParams.get("artist"),
       });
-      dashboard.access = applyReleaseCreationModeration(
-        dashboard.access,
-        creationPolicy,
-      );
+      dashboard.access = applyReleaseCreationModeration(dashboard.access, creationPolicy);
       return Response.json({ ok: true, ...dashboard });
     }
 
     const audioMatch = path.match(/^portal\/audio\/([^/]+)$/);
-    if (audioMatch) {
-      return masterAudioResponse({
-        request,
-        identity,
-        fileId: audioMatch[1],
-      });
-    }
+    if (audioMatch) return masterAudioResponse({ request, identity, fileId: audioMatch[1] });
 
     if (path === "portal/profile") {
       const profiles = await listPortalArtistProfiles(identity);
@@ -326,43 +270,26 @@ export const loader = async ({ request }) => {
         limit,
         artistId,
       });
-      const access = applyReleaseCreationModeration(
-        await portalReleaseAccess({
-          admin: context.admin,
-          shop: identity.shop,
-          customerId: identity.customerId,
-        }),
-        creationPolicy,
-      );
+      const access = applyReleaseCreationModeration(await portalReleaseAccess({
+        admin: context.admin,
+        shop: identity.shop,
+        customerId: identity.customerId,
+      }), creationPolicy);
       return Response.json({ ok: true, releases, access });
     }
 
     const detailMatch = path.match(/^portal\/releases\/([^/]+)$/);
     if (detailMatch) {
-      const releaseDetail = await portalReleaseDetail({
-        ...identity,
-        admin: context.admin,
-        releaseId: detailMatch[1],
-      });
-      if (!releaseDetail) {
-        return Response.json(
-          { ok: false, error: "Release not found." },
-          { status: 404 },
-        );
-      }
-      const lock = await getReleaseArtistEditLock({
-        shop: identity.shop,
-        releaseId: detailMatch[1],
-      });
+      const releaseDetail = await portalReleaseDetail({ ...identity, admin: context.admin, releaseId: detailMatch[1] });
+      if (!releaseDetail) return Response.json({ ok: false, error: "Release not found." }, { status: 404 });
+      const lock = await getReleaseArtistEditLock({ shop: identity.shop, releaseId: detailMatch[1] });
       const release = {
         ...releaseDetail,
         editable: Boolean(releaseDetail.editable) && !lock.locked,
         artistEditLocked: lock.locked,
         artistEditLockReason: lock.reason,
       };
-      const portalSettings = await db.appSettings.findUnique({
-        where: { shop: identity.shop },
-      });
+      const portalSettings = await db.appSettings.findUnique({ where: { shop: identity.shop } });
       const releaseAccess = await portalReleaseAccess({
         admin: context.admin,
         shop: identity.shop,
@@ -383,10 +310,7 @@ export const loader = async ({ request }) => {
       });
     }
 
-    return Response.json(
-      { ok: false, error: "Portal endpoint not found." },
-      { status: 404 },
-    );
+    return Response.json({ ok: false, error: "Portal endpoint not found." }, { status: 404 });
   } catch (error) {
     return errorResponse(request, error);
   }
@@ -410,9 +334,7 @@ export const action = async ({ request }) => {
           ok: false,
           membershipRequired: true,
           membership,
-          error:
-            membership.message ||
-            "Your account does not have Artist Portal access.",
+          error: membership.message || "Your account does not have Artist Portal access.",
         },
         { status: 403 },
       );
@@ -446,15 +368,9 @@ export const action = async ({ request }) => {
     if (path === "portal/uploads/master") {
       await assertReleaseArtistEditable({
         shop: identity.shop,
-        releaseId:
-          identity.url.searchParams.get("releaseId") || "",
+        releaseId: identity.url.searchParams.get("releaseId") || "",
       });
-      const file = await uploadPortalMaster({
-        request,
-        admin: context.admin,
-        ...identity,
-        url: identity.url,
-      });
+      const file = await uploadPortalMaster({ request, admin: context.admin, ...identity, url: identity.url });
       return Response.json({ ok: true, file });
     }
 
@@ -472,10 +388,7 @@ export const action = async ({ request }) => {
         customerId: identity.customerId,
         selectedArtistId: artist.id,
       });
-      dashboard.access = applyReleaseCreationModeration(
-        dashboard.access,
-        creationPolicy,
-      );
+      dashboard.access = applyReleaseCreationModeration(dashboard.access, creationPolicy);
       return Response.json({ ok: true, artist, ...dashboard });
     }
 
@@ -491,8 +404,7 @@ export const action = async ({ request }) => {
         return Response.json(
           {
             ok: false,
-            error:
-              "This account is not configured as a label/team account.",
+            error: "This account is not configured as a label/team account.",
           },
           { status: 403 },
         );
@@ -516,10 +428,7 @@ export const action = async ({ request }) => {
           customerId: identity.customerId,
           selectedArtistId: identity.url.searchParams.get("artist"),
         });
-        dashboard.access = applyReleaseCreationModeration(
-          dashboard.access,
-          creationPolicy,
-        );
+        dashboard.access = applyReleaseCreationModeration(dashboard.access, creationPolicy);
         return Response.json({
           ok: true,
           label,
@@ -539,10 +448,7 @@ export const action = async ({ request }) => {
           customerId: identity.customerId,
           selectedArtistId: artist.id,
         });
-        dashboard.access = applyReleaseCreationModeration(
-          dashboard.access,
-          creationPolicy,
-        );
+        dashboard.access = applyReleaseCreationModeration(dashboard.access, creationPolicy);
         return Response.json({
           ok: true,
           artist,
@@ -560,62 +466,34 @@ export const action = async ({ request }) => {
     }
 
     if (path === "portal/profile") {
-      const artist = await updatePortalArtistProfile({
-        ...identity,
-        formData,
-      });
+      const artist = await updatePortalArtistProfile({ ...identity, formData });
       return Response.json({ ok: true, artist });
     }
 
     if (path === "portal/profile/image/stage") {
-      const target = await stagePortalArtistImage({
-        admin: context.admin,
-        ...identity,
-        formData,
-      });
+      const target = await stagePortalArtistImage({ admin: context.admin, ...identity, formData });
       return Response.json({ ok: true, target });
     }
 
     if (path === "portal/profile/image/complete") {
-      const image = await completePortalArtistImage({
-        admin: context.admin,
-        ...identity,
-        formData,
-      });
+      const image = await completePortalArtistImage({ admin: context.admin, ...identity, formData });
       return Response.json({ ok: true, ...image });
     }
 
     if (path === "portal/uploads/stage") {
-      await assertReleaseArtistEditable({
-        shop: identity.shop,
-        releaseId: String(formData.get("releaseId") || ""),
-      });
-      const target = await stagePortalUpload({
-        admin: context.admin,
-        ...identity,
-        formData,
-      });
+      await assertReleaseArtistEditable({ shop: identity.shop, releaseId: String(formData.get("releaseId") || "") });
+      const target = await stagePortalUpload({ admin: context.admin, ...identity, formData });
       return Response.json({ ok: true, target });
     }
 
     if (path === "portal/uploads/complete") {
-      await assertReleaseArtistEditable({
-        shop: identity.shop,
-        releaseId: String(formData.get("releaseId") || ""),
-      });
-      const file = await completePortalUpload({
-        admin: context.admin,
-        ...identity,
-        formData,
-      });
+      await assertReleaseArtistEditable({ shop: identity.shop, releaseId: String(formData.get("releaseId") || "") });
+      const file = await completePortalUpload({ admin: context.admin, ...identity, formData });
       return Response.json({ ok: true, file });
     }
 
     if (path !== "portal/releases") {
-      return Response.json(
-        { ok: false, error: "Portal endpoint not found." },
-        { status: 404 },
-      );
+      return Response.json({ ok: false, error: "Portal endpoint not found." }, { status: 404 });
     }
 
     const intent = String(formData.get("intent") || "");
@@ -643,10 +521,7 @@ export const action = async ({ request }) => {
     }
 
     if (releaseId) {
-      await assertReleaseArtistEditable({
-        shop: identity.shop,
-        releaseId,
-      });
+      await assertReleaseArtistEditable({ shop: identity.shop, releaseId });
     }
 
     if (intent === "update-release") {
@@ -659,28 +534,15 @@ export const action = async ({ request }) => {
       return Response.json({ ok: true });
     }
     if (intent === "add-track") {
-      const track = await addPortalTrack({
-        ...identity,
-        releaseId,
-      });
+      const track = await addPortalTrack({ ...identity, releaseId });
       return Response.json({ ok: true, trackId: track.id });
     }
     if (intent === "update-track") {
-      await updatePortalTrack({
-        ...identity,
-        releaseId,
-        trackId,
-        formData,
-      });
+      await updatePortalTrack({ ...identity, releaseId, trackId, formData });
       return Response.json({ ok: true });
     }
     if (intent === "add-credit") {
-      await addPortalCredit({
-        ...identity,
-        releaseId,
-        trackId,
-        formData,
-      });
+      await addPortalCredit({ ...identity, releaseId, trackId, formData });
       return Response.json({ ok: true });
     }
     if (intent === "update-credit") {
@@ -694,12 +556,7 @@ export const action = async ({ request }) => {
       return Response.json({ ok: true });
     }
     if (intent === "remove-credit") {
-      await removePortalCredit({
-        ...identity,
-        releaseId,
-        trackId,
-        creditId: String(formData.get("creditId") || ""),
-      });
+      await removePortalCredit({ ...identity, releaseId, trackId, creditId: String(formData.get("creditId") || "") });
       return Response.json({ ok: true });
     }
     if (intent === "delete-draft") {
@@ -711,26 +568,15 @@ export const action = async ({ request }) => {
       return Response.json({ ok: true, deleted });
     }
     if (intent === "submit-release") {
-      await submitPortalRelease({
-        admin: context.admin,
-        ...identity,
-        releaseId,
-      });
+      await submitPortalRelease({ admin: context.admin, ...identity, releaseId });
       return Response.json({ ok: true });
     }
     if (intent === "resolve-review-item") {
-      await resolvePortalReviewItem({
-        ...identity,
-        releaseId,
-        reviewItemId: String(formData.get("reviewItemId") || ""),
-      });
+      await resolvePortalReviewItem({ ...identity, releaseId, reviewItemId: String(formData.get("reviewItemId") || "") });
       return Response.json({ ok: true });
     }
 
-    return Response.json(
-      { ok: false, error: "Unknown portal action." },
-      { status: 400 },
-    );
+    return Response.json({ ok: false, error: "Unknown portal action." }, { status: 400 });
   } catch (error) {
     return errorResponse(request, error);
   }
