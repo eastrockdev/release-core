@@ -3,10 +3,15 @@ import { AUTOMATION_EVENT_KEYS } from "./automations.server";
 import { publicError } from "./http-security.server";
 import {
   encryptSmtpPassword,
-  sendSmtpEmail,
   smtpEncryptionConfigured,
   verifySmtpConnection,
 } from "./smtp.server";
+import { encryptResendApiKey } from "./resend.server";
+import {
+  EMAIL_DELIVERY_PROVIDERS,
+  emailDeliveryProvider,
+  sendAutomationEmail,
+} from "./email-delivery.server";
 
 const text = (value) => {
   const normalized = String(value || "").trim();
@@ -60,18 +65,28 @@ export async function loadAutomationSettings(shop) {
     return {
       settings: null,
       smtpPasswordStored: false,
+      resendApiKeyStored: false,
       encryptionConfigured: smtpEncryptionConfigured(),
     };
   }
-  const { smtpPasswordEncrypted, ...settings } = stored;
+
+  const { smtpPasswordEncrypted, resendApiKeyEncrypted, ...settings } = stored;
   return {
     settings,
     smtpPasswordStored: Boolean(smtpPasswordEncrypted),
+    resendApiKeyStored: Boolean(resendApiKeyEncrypted),
     encryptionConfigured: smtpEncryptionConfigured(),
   };
 }
 
-// RELEASECORE_SMTP_HOTFIX_V101: SMTP save/test actions use one deterministic persistence path.
+// RELEASECORE_SMTP_HOTFIX_V101: deterministic save/test path preserved.
+// RELEASECORE_RESEND_API_V100: Resend HTTPS delivery joins Custom SMTP behind one provider dispatcher.
+function normalizeEmailDeliveryProvider(value) {
+  return String(value || "SMTP").toUpperCase() === "RESEND"
+    ? EMAIL_DELIVERY_PROVIDERS.RESEND
+    : EMAIL_DELIVERY_PROVIDERS.SMTP;
+}
+
 async function saveAutomationSettingsFromForm({ shop, form }) {
   const releaseTagMatchMode =
     String(form.get("releaseTagMatchMode") || "ANY").toUpperCase() === "ALL"
@@ -79,14 +94,26 @@ async function saveAutomationSettingsFromForm({ shop, form }) {
       : "ANY";
 
   const existing = await automationSettingsForShop(shop);
+
   const suppliedPassword = String(form.get("smtpPassword") || "");
   const clearPassword = form.get("clearSmtpPassword") === "on";
   let smtpPasswordEncrypted = existing?.smtpPasswordEncrypted || null;
-
   if (clearPassword) smtpPasswordEncrypted = null;
-  else if (suppliedPassword) {
-    smtpPasswordEncrypted = encryptSmtpPassword(suppliedPassword);
+  else if (suppliedPassword) smtpPasswordEncrypted = encryptSmtpPassword(suppliedPassword);
+
+  const suppliedResendApiKey = String(form.get("resendApiKey") || "").trim();
+  const clearResendApiKey = form.get("clearResendApiKey") === "on";
+  let resendApiKeyEncrypted = existing?.resendApiKeyEncrypted || null;
+  if (clearResendApiKey) resendApiKeyEncrypted = null;
+  else if (suppliedResendApiKey) {
+    resendApiKeyEncrypted = encryptResendApiKey(suppliedResendApiKey);
   }
+
+  const provider = normalizeEmailDeliveryProvider(
+    form.has("emailDeliveryProvider")
+      ? form.get("emailDeliveryProvider")
+      : existing?.emailDeliveryProvider,
+  );
 
   const data = {
     releaseSingleEnabled: form.get("releaseSingleEnabled") === "on",
@@ -106,6 +133,8 @@ async function saveAutomationSettingsFromForm({ shop, form }) {
     smtpSecurity: normalizeSmtpSecurity(form.get("smtpSecurity")),
     smtpUsername: text(form.get("smtpUsername")),
     smtpPasswordEncrypted,
+    emailDeliveryProvider: provider,
+    resendApiKeyEncrypted,
     emailSenderName: text(form.get("emailSenderName")),
     emailFromAddress: text(form.get("emailFromAddress")),
     emailReplyTo: text(form.get("emailReplyTo")),
@@ -122,41 +151,63 @@ async function saveAutomationSettingsFromForm({ shop, form }) {
   });
 }
 
-function requireEnabledSmtp(settings, message) {
+function requireEmailDelivery(settings, message) {
   if (!settings?.smtpEnabled) {
     throw publicError(message, { status: 400 });
   }
+
+  const provider = emailDeliveryProvider(settings);
+  if (provider === EMAIL_DELIVERY_PROVIDERS.RESEND) {
+    if (!settings.resendApiKeyEncrypted) {
+      throw publicError("Enter and save a Resend API key before testing email delivery.", { status: 400 });
+    }
+    if (!String(settings.emailFromAddress || "").trim()) {
+      throw publicError("Enter a From address on a verified Resend sending domain.", { status: 400 });
+    }
+    return provider;
+  }
+
   if (!String(settings.smtpHost || "").trim()) {
     throw publicError("Enter an SMTP host before testing email delivery.", { status: 400 });
   }
   if (String(settings.smtpUsername || "").trim() && !settings.smtpPasswordEncrypted) {
     throw publicError("Enter and save the SMTP password before testing email delivery.", { status: 400 });
   }
+  return provider;
 }
 
 export async function performAutomationSettingsAction({ shop, form }) {
   const intent = String(form.get("intent") || "");
 
   if (intent === "save-automation") {
-    await saveAutomationSettingsFromForm({ shop, form });
-    return { message: "Automation, access and SMTP settings saved." };
+    const settings = await saveAutomationSettingsFromForm({ shop, form });
+    const provider = emailDeliveryProvider(settings);
+    return {
+      message: "Automation, access and email delivery settings saved.",
+      provider,
+    };
   }
 
-  if (intent === "test-smtp") {
+  if (intent === "test-email-provider" || intent === "test-smtp") {
     const settings = form.get("smtpSettingsIncluded") === "on"
       ? await saveAutomationSettingsFromForm({ shop, form })
       : await automationSettingsForShop(shop);
 
     if (!settings) {
-      throw publicError("Save your SMTP settings before testing the connection.", {
-        status: 400,
-      });
+      throw publicError("Save your email delivery settings before testing.", { status: 400 });
     }
 
-    requireEnabledSmtp(
+    const provider = requireEmailDelivery(
       settings,
-      "Enable SMTP email delivery before testing the connection.",
+      "Enable email delivery before testing the provider.",
     );
+
+    if (provider === EMAIL_DELIVERY_PROVIDERS.RESEND) {
+      return {
+        message: "Resend API settings are saved. Use Send test email to validate the API key and verified sender domain.",
+        provider,
+      };
+    }
 
     try {
       await verifySmtpConnection(settings);
@@ -167,7 +218,7 @@ export async function performAutomationSettingsAction({ shop, form }) {
       );
     }
 
-    return { message: "SMTP connection and authentication succeeded." };
+    return { message: "SMTP connection and authentication succeeded.", provider };
   }
 
   if (intent === "send-test-email") {
@@ -176,15 +227,14 @@ export async function performAutomationSettingsAction({ shop, form }) {
       : await automationSettingsForShop(shop);
 
     if (!settings) {
-      throw publicError(
-        "Save your SMTP settings before sending a test email.",
-        { status: 400 },
-      );
+      throw publicError("Save your email delivery settings before sending a test email.", {
+        status: 400,
+      });
     }
 
-    requireEnabledSmtp(
+    const provider = requireEmailDelivery(
       settings,
-      "Enable SMTP email delivery before sending a test email.",
+      "Enable email delivery before sending a test email.",
     );
 
     const to =
@@ -201,21 +251,22 @@ export async function performAutomationSettingsAction({ shop, form }) {
 
     let messageId;
     try {
-      messageId = await sendSmtpEmail({
+      messageId = await sendAutomationEmail({
         settings,
         to,
-        subject: "ReleaseCore SMTP test",
-        html: '<div style="font-family:Arial,sans-serif;line-height:1.55"><h2>ReleaseCore SMTP is connected.</h2><p>This test message was sent through the SMTP server configured for this Shopify store.</p></div>',
-        text: "ReleaseCore SMTP is connected. This test message was sent through the SMTP server configured for this Shopify store.",
+        subject: "ReleaseCore email delivery test",
+        html: '<div style="font-family:Arial,sans-serif;line-height:1.55"><h2>ReleaseCore email delivery is connected.</h2><p>This test message was sent through the email provider configured for this Shopify store.</p></div>',
+        text: "ReleaseCore email delivery is connected. This test message was sent through the email provider configured for this Shopify store.",
       });
     } catch (error) {
+      const label = provider === EMAIL_DELIVERY_PROVIDERS.RESEND ? "Resend API" : "SMTP";
       throw publicError(
-        "SMTP test email failed: " + String(error?.message || error || "Unknown SMTP error").slice(0, 500),
+        label + " test email failed: " + String(error?.message || error || "Unknown email delivery error").slice(0, 500),
         { status: 400 },
       );
     }
 
-    return { message: "Test email sent to " + to + ".", messageId };
+    return { message: "Test email sent to " + to + ".", messageId, provider };
   }
 
   throw publicError("Unknown automation action.", { status: 400 });

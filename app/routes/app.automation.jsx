@@ -107,6 +107,12 @@ export default function AutomationPage() {
   );
 
   const [smtpEnabled, setSmtpEnabled] = useState(s.smtpEnabled ?? false);
+  // RELEASECORE_RESEND_API_V100: HTTPS email provider state.
+  const [emailDeliveryProvider, setEmailDeliveryProvider] = useState(
+    String(s.emailDeliveryProvider || "SMTP").toUpperCase() === "RESEND" ? "RESEND" : "SMTP",
+  );
+  const [resendApiKey, setResendApiKey] = useState("");
+  const [clearResendApiKey, setClearResendApiKey] = useState(false);
   const [smtpHost, setSmtpHost] = useState(s.smtpHost || "");
   const [smtpPort, setSmtpPort] = useState(String(s.smtpPort || 587));
   const [smtpSecurity, setSmtpSecurity] = useState(
@@ -155,6 +161,9 @@ export default function AutomationPage() {
     form.set("flowEvents", setCsv(flowEvents));
 
     if (smtpEnabled) form.set("smtpEnabled", "on");
+    form.set("emailDeliveryProvider", emailDeliveryProvider);
+    if (resendApiKey) form.set("resendApiKey", resendApiKey);
+    if (clearResendApiKey) form.set("clearResendApiKey", "on");
     form.set("smtpHost", smtpHost);
     form.set("smtpPort", smtpPort);
     form.set("smtpSecurity", smtpSecurity);
@@ -203,35 +212,35 @@ export default function AutomationPage() {
     }
   };
 
-  // RELEASECORE_SMTP_HOTFIX_V101: test actions persist the current SMTP form in the same request.
+  // RELEASECORE_RESEND_API_V100: provider-aware test preserves the SMTP v1.0.1 save-first behavior.
   const testConnection = async () => {
     if (busy) return;
     setBusy(true);
     setNotice({
       scope: "smtp",
       tone: "info",
-      message: "Saving SMTP settings and testing connection…",
+      message: emailDeliveryProvider === "RESEND"
+        ? "Saving Resend API settings…"
+        : "Saving SMTP settings and testing connection…",
     });
     try {
       const form = new FormData();
       appendCommonSettings(form);
-      form.set("intent", "test-smtp");
+      form.set("intent", "test-email-provider");
       form.set("smtpSettingsIncluded", "on");
-      const response = await authenticatedPost(
-        shopify,
-        "/api/automation",
-        form,
-      );
+      const response = await authenticatedPost(shopify, "/api/automation", form);
       setSmtpPassword("");
       setClearSmtpPassword(false);
+      setResendApiKey("");
+      setClearResendApiKey(false);
       setNotice({ scope: "smtp", tone: "good", message: response.message });
-      shopify.toast.show("SMTP connection succeeded");
+      shopify.toast.show(emailDeliveryProvider === "RESEND" ? "Resend settings saved" : "SMTP connection succeeded");
       await revalidateInPlace(revalidator);
     } catch (error) {
       setNotice({
         scope: "smtp",
         tone: "bad",
-        message: error.message || "SMTP connection failed.",
+        message: error.message || "Email provider test failed.",
       });
     } finally {
       setBusy(false);
@@ -244,7 +253,9 @@ export default function AutomationPage() {
     setNotice({
       scope: "smtp",
       tone: "info",
-      message: "Saving SMTP settings and sending test email…",
+      message: emailDeliveryProvider === "RESEND"
+        ? "Saving Resend settings and sending test email…"
+        : "Saving SMTP settings and sending test email…",
     });
     try {
       const form = new FormData();
@@ -252,13 +263,11 @@ export default function AutomationPage() {
       form.set("intent", "send-test-email");
       form.set("smtpSettingsIncluded", "on");
       form.set("testEmail", testEmail);
-      const response = await authenticatedPost(
-        shopify,
-        "/api/automation",
-        form,
-      );
+      const response = await authenticatedPost(shopify, "/api/automation", form);
       setSmtpPassword("");
       setClearSmtpPassword(false);
+      setResendApiKey("");
+      setClearResendApiKey(false);
       setNotice({ scope: "smtp", tone: "good", message: response.message });
       shopify.toast.show("Test email sent");
       await revalidateInPlace(revalidator);
@@ -385,10 +394,68 @@ export default function AutomationPage() {
         </div>
       </CollapsibleSection>
 
+            {/* RELEASECORE_RESEND_API_V100: Railway-friendly HTTPS email transport. */}
       <CollapsibleSection
+        icon="email"
+        title="Email delivery provider"
+        description="Choose how ReleaseCore sends artist and staff automation email. Resend uses HTTPS and works without Railway SMTP egress."
+        summary={smtpEnabled ? (emailDeliveryProvider === "RESEND" ? "Resend API" : "Custom SMTP") : "Disabled"}
+        defaultOpen
+      >
+        <div style={{ display: "grid", gap: 14 }}>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ fontWeight: 650 }}>Delivery provider</span>
+            <select
+              value={emailDeliveryProvider}
+              onChange={(event) => setEmailDeliveryProvider(event.currentTarget.value)}
+            >
+              <option value="RESEND">Resend API (recommended)</option>
+              <option value="SMTP">Custom SMTP</option>
+            </select>
+            <small>
+              Resend sends through HTTPS. Custom SMTP remains available for hosts that allow outbound SMTP.
+            </small>
+          </label>
+
+          {emailDeliveryProvider === "RESEND" ? (
+            <>
+              <label style={{ display: "grid", gap: 6 }}>
+                <span style={{ fontWeight: 650 }}>Resend API key</span>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={resendApiKey}
+                  onChange={(event) => setResendApiKey(event.currentTarget.value)}
+                  placeholder="re_…"
+                />
+                <small>
+                  Stored encrypted. Leave blank after saving to keep the existing key.
+                </small>
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={clearResendApiKey}
+                  onChange={(event) => setClearResendApiKey(event.currentTarget.checked)}
+                />
+                <span>Remove the stored Resend API key when settings are saved</span>
+              </label>
+              <div className="rc-notice rc-notice--info">
+                Verify your sending domain in Resend before sending from your East Rock address. Replies still go to the Reply-To mailbox configured below.
+              </div>
+            </>
+          ) : (
+            <div className="rc-notice rc-notice--info">
+              Custom SMTP remains available below. Railway plans that block SMTP will still time out even with correct credentials.
+            </div>
+          )}
+        </div>
+      </CollapsibleSection>
+
+<CollapsibleSection
         icon="files"
         title="Transactional email"
-        description="Send branded workflow email through your organization’s mail account."
+        description="Sender identity, test delivery, and optional Custom SMTP fallback settings."
         summary={smtpEnabled ? "Enabled" : "Disabled"}
       >
         <ActionFeedback feedback={feedbackFor("smtp")} />
@@ -401,7 +468,7 @@ export default function AutomationPage() {
           <Toggle
             checked={smtpEnabled}
             onChange={setSmtpEnabled}
-            title="Enable SMTP email delivery"
+            title="Enable email delivery"
             help="ReleaseCore sends through this store’s mail account. A delivery failure will not block the release workflow."
           />
           <div style={styles.grid}>

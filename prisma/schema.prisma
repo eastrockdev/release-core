@@ -693,6 +693,10 @@ model AppSettings {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  // RELEASECORE_RESEND_API_V100: selectable email transport; secrets remain encrypted at rest.
+  emailDeliveryProvider String @default("SMTP")
+  resendApiKeyEncrypted String?
+
 }
 
 model IsrcSequence {

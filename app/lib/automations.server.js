@@ -5,7 +5,7 @@ import {
 } from "./portal-access-rules.server";
 
 import { AUTOMATION_CHANNELS, parseEventList, normalizeEventKey } from "./automations";
-import { sendSmtpEmail } from "./smtp.server";
+import { sendAutomationEmail } from "./email-delivery.server";
 import { safeDiagnosticText } from "./http-security.server";
 
 import { customerNumericId } from "./automations";
@@ -257,10 +257,10 @@ export async function dispatchReleaseEvent({ admin, shop, eventId, forceChannels
   const results = [];
 
   if (parseEventList(settings.artistEmailEvents).has(eventKey) || force.has(AUTOMATION_CHANNELS.ARTIST_EMAIL)) {
-    results.push(await deliveryAttempt({ shop, releaseId: release.id, eventId, channel: AUTOMATION_CHANNELS.ARTIST_EMAIL, recipient: customer?.email || null, force: force.has(AUTOMATION_CHANNELS.ARTIST_EMAIL), runner: () => { if (!customer?.email) throw new Error("The release owner has no Shopify customer email address."); return sendSmtpEmail({ settings, to: customer.email, subject: copy.subject, html }); } }));
+    results.push(await deliveryAttempt({ shop, releaseId: release.id, eventId, channel: AUTOMATION_CHANNELS.ARTIST_EMAIL, recipient: customer?.email || null, force: force.has(AUTOMATION_CHANNELS.ARTIST_EMAIL), runner: () => { if (!customer?.email) throw new Error("The release owner has no Shopify customer email address."); return sendAutomationEmail({ settings, to: customer.email, subject: copy.subject, html }); } }));
   }
   if (parseEventList(settings.adminEmailEvents).has(eventKey) || force.has(AUTOMATION_CHANNELS.ADMIN_EMAIL)) {
-    results.push(await deliveryAttempt({ shop, releaseId: release.id, eventId, channel: AUTOMATION_CHANNELS.ADMIN_EMAIL, recipient: settings.adminNotificationEmail || null, force: force.has(AUTOMATION_CHANNELS.ADMIN_EMAIL), runner: () => { if (!settings.adminNotificationEmail) throw new Error("Internal notification email is not configured."); return sendSmtpEmail({ settings, to: settings.adminNotificationEmail, subject: `[Admin] ${copy.subject}`, html }); } }));
+    results.push(await deliveryAttempt({ shop, releaseId: release.id, eventId, channel: AUTOMATION_CHANNELS.ADMIN_EMAIL, recipient: settings.adminNotificationEmail || null, force: force.has(AUTOMATION_CHANNELS.ADMIN_EMAIL), runner: () => { if (!settings.adminNotificationEmail) throw new Error("Internal notification email is not configured."); return sendAutomationEmail({ settings, to: settings.adminNotificationEmail, subject: `[Admin] ${copy.subject}`, html }); } }));
   }
   if (parseEventList(settings.flowEvents).has(eventKey) || force.has(AUTOMATION_CHANNELS.SHOPIFY_FLOW)) {
     results.push(await deliveryAttempt({ shop, releaseId: release.id, eventId, channel: AUTOMATION_CHANNELS.SHOPIFY_FLOW, recipient: release.ownerCustomerId || null, force: force.has(AUTOMATION_CHANNELS.SHOPIFY_FLOW), runner: () => { if (!release.ownerCustomerId) throw new Error("Assign a Shopify customer owner before triggering Flow."); return sendFlowTrigger({ admin, release, customerId: release.ownerCustomerId, eventKey }); } }));
