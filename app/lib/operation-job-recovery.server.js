@@ -33,19 +33,13 @@ export function decorateRestartableOperationJobs(jobs, now = Date.now()) {
 
     const message =
       `This operation has been running for more than ${MANUAL_RESTART_AFTER_MINUTES} minutes and may be stalled. ` +
-      "Use Retry to restart it; the previous attempt will be abandoned and a fresh job will be queued.";
+      "You can restart it without waiting for the normal stale-lease recovery window.";
 
     return {
       ...job,
-      actualStatus: "RUNNING",
-      status: "FAILED",
       restartable: true,
+      restartReason: message,
       lastError: job.lastError ? `${message} ${job.lastError}` : message,
-      attemptLog: (job.attemptLog || []).map((attempt, index) =>
-        index === 0 && attempt.status === "RUNNING"
-          ? { ...attempt, status: "FAILED", error: message }
-          : attempt,
-      ),
     };
   });
 }
