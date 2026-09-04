@@ -21,7 +21,7 @@ export async function listPortalArtistProfiles({ shop, customerId }) {
     ids.length
       ? db.artist.findMany({
           where: { shop, id: { in: ids } }, orderBy: { name: "asc" },
-          select: { id: true, name: true, legalName: true, email: true, pro: true, ipi: true, imageUrl: true, biography: true, websiteUrl: true, spotifyUrl: true, appleMusicUrl: true, instagramUrl: true, facebookUrl: true, tiktokUrl: true, youtubeUrl: true, xUrl: true },
+          select: { id: true, name: true, legalName: true, email: true, pro: true, ipi: true, publisherName: true, publisherIpi: true, imageUrl: true, biography: true, websiteUrl: true, spotifyUrl: true, appleMusicUrl: true, instagramUrl: true, facebookUrl: true, tiktokUrl: true, youtubeUrl: true, xUrl: true },
         })
       : Promise.resolve([]),
     db.appSettings.findUnique({
@@ -58,7 +58,7 @@ export async function updatePortalArtistProfile({ shop, customerId, formData }) 
     where: { id: artist.id },
     data: {
       name,
-      legalName: clean(formData.get("legalName")), email: clean(formData.get("email")), pro: clean(formData.get("pro")), ipi: clean(formData.get("ipi")), biography: clean(formData.get("biography")), websiteUrl: clean(formData.get("websiteUrl")), spotifyUrl: clean(formData.get("spotifyUrl")), appleMusicUrl: clean(formData.get("appleMusicUrl")), instagramUrl: clean(formData.get("instagramUrl")), facebookUrl: clean(formData.get("facebookUrl")), tiktokUrl: clean(formData.get("tiktokUrl")), youtubeUrl: clean(formData.get("youtubeUrl")), xUrl: clean(formData.get("xUrl")),
+      legalName: clean(formData.get("legalName")), email: clean(formData.get("email")), pro: clean(formData.get("pro")), ipi: clean(formData.get("ipi")), publisherName: clean(formData.get("publisherName")), publisherIpi: clean(formData.get("publisherIpi")), biography: clean(formData.get("biography")), websiteUrl: clean(formData.get("websiteUrl")), spotifyUrl: clean(formData.get("spotifyUrl")), appleMusicUrl: clean(formData.get("appleMusicUrl")), instagramUrl: clean(formData.get("instagramUrl")), facebookUrl: clean(formData.get("facebookUrl")), tiktokUrl: clean(formData.get("tiktokUrl")), youtubeUrl: clean(formData.get("youtubeUrl")), xUrl: clean(formData.get("xUrl")),
     },
   });
   if (name !== artist.name) {

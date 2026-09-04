@@ -143,6 +143,8 @@ model Artist {
   biography          String?
   pro                String?
   ipi                String?
+  publisherName      String?
+  publisherIpi       String?
   instagramUrl       String?
   facebookUrl        String?
   tiktokUrl          String?

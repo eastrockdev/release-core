@@ -1,3 +1,8 @@
+import {
+  portalDashboardState,
+  portalMembership,
+  savePortalOnboarding,
+} from "../lib/portal-dashboard.server";
 import { Readable } from "node:stream";
 import { authenticate } from "../shopify.server";
 import { GENRES, LANGUAGES, PRO_OPTIONS } from "../lib/releasecore";
@@ -198,6 +203,33 @@ export const loader = async ({ request }) => {
 
     requirePortalCustomer(identity);
 
+    const membership = await portalMembership({
+      admin: context.admin,
+      shop: identity.shop,
+      customerId: identity.customerId,
+    });
+    if (!membership.allowed) {
+      return Response.json(
+        {
+          ok: false,
+          membershipRequired: true,
+          membership,
+          error: membership.message || "Your account does not have Artist Portal access.",
+        },
+        { status: 403 },
+      );
+    }
+
+    if (path === "portal/dashboard") {
+      const dashboard = await portalDashboardState({
+        admin: context.admin,
+        shop: identity.shop,
+        customerId: identity.customerId,
+        selectedArtistId: identity.url.searchParams.get("artist"),
+      });
+      return Response.json({ ok: true, ...dashboard });
+    }
+
     const audioMatch = path.match(/^portal\/audio\/([^/]+)$/);
     if (audioMatch) return masterAudioResponse({ request, identity, fileId: audioMatch[1] });
 
@@ -238,6 +270,23 @@ export const action = async ({ request }) => {
     requirePortalCustomer(identity);
     const path = pathFromRequest(request);
 
+    const membership = await portalMembership({
+      admin: context.admin,
+      shop: identity.shop,
+      customerId: identity.customerId,
+    });
+    if (!membership.allowed) {
+      return Response.json(
+        {
+          ok: false,
+          membershipRequired: true,
+          membership,
+          error: membership.message || "Your account does not have Artist Portal access.",
+        },
+        { status: 403 },
+      );
+    }
+
     if (path === "portal/uploads/master/stage") {
       const target = await stagePortalMasterUpload({
         request,
@@ -262,6 +311,21 @@ export const action = async ({ request }) => {
     }
 
     const formData = await request.formData();
+
+    if (path === "portal/onboarding") {
+      const artist = await savePortalOnboarding({
+        admin: context.admin,
+        ...identity,
+        formData,
+      });
+      const dashboard = await portalDashboardState({
+        admin: context.admin,
+        shop: identity.shop,
+        customerId: identity.customerId,
+        selectedArtistId: artist.id,
+      });
+      return Response.json({ ok: true, artist, ...dashboard });
+    }
 
     if (path === "portal/profile") {
       const artist = await updatePortalArtistProfile({ ...identity, formData });

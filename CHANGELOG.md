@@ -1,3 +1,9 @@
+## ReleaseCore M18.0 — Unified Artist Portal
+
+- Added the full Aura storefront artist dashboard with desktop/sidebar and mobile navigation.
+- Added ReleaseCore-enforced RLIAB membership authorization and first-time artist onboarding.
+- Added Artist publisher name / publisher IPI and read-only legacy customer-profile prefilling.
+
 ## ReleaseCore M17.5 — Configurable Credits + Album Associations
 
 - Added merchant-configurable contributor credit roles while preserving the standard ReleaseCore credit roles and publishing semantics.

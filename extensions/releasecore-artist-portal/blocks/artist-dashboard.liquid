@@ -1,0 +1,468 @@
+{% liquid
+  assign rc_design_mode = request.design_mode
+  assign rc_logged_in = false
+  if customer
+    assign rc_logged_in = true
+  endif
+%}
+
+<section
+  class="rc-app-dashboard"
+  data-rc-artist-dashboard
+  data-logged-in="{% if rc_logged_in %}true{% else %}false{% endif %}"
+  data-design-mode="{% if rc_design_mode %}true{% else %}false{% endif %}"
+  data-proxy-base="{{ block.settings.proxy_path | default: '/apps/releasecore' | escape }}"
+  data-login-url="{{ routes.account_login_url }}"
+  {{ block.shopify_attributes }}
+>
+  {% if customer or rc_design_mode %}
+    <div class="rc-app-dashboard__status" data-rc-app-status role="status" aria-live="polite">Loading your artist workspace…</div>
+
+    <div class="rc-app-dashboard__shell">
+      <div class="rc-app-membership-gate" data-rc-membership-gate hidden>
+        <span class="rc-app-eyebrow">Account access</span>
+        <h2>Your RLIAB access is being checked.</h2>
+        <p data-rc-membership-message>If you just subscribed, Shopify Flow may still be applying your membership tag.</p>
+        <button type="button" class="rc-app-primary" data-action="retry-membership">Check access again</button>
+      </div>
+
+      <div data-rc-dashboard-main>
+        <header class="rc-app-identity" aria-label="Artist account information">
+          <div class="rc-app-identity__artist">
+            <span class="rc-app-identity__avatar" data-rc-identity-avatar>A</span>
+            <div class="rc-app-identity__artist-copy">
+              <span class="rc-app-identity__eyebrow">Artist workspace</span>
+              <strong data-rc-identity-name>Loading artist…</strong>
+              <small><span data-rc-membership-label>Membership</span> · <span data-rc-account-status>Active</span></small>
+              <label class="rc-app-identity__picker-wrap" data-rc-identity-picker-wrap hidden>
+                <span class="rc-app-identity__eyebrow">Switch artist</span>
+                <select class="rc-app-identity__picker" data-rc-identity-picker aria-label="Switch artist"></select>
+              </label>
+            </div>
+          </div>
+
+          <div class="rc-app-identity__datum">
+            <span class="rc-app-identity__eyebrow">Legal name</span>
+            <strong data-rc-identity-legal>—</strong>
+          </div>
+          <div class="rc-app-identity__datum">
+            <span class="rc-app-identity__eyebrow">PRO</span>
+            <strong data-rc-identity-pro>—</strong>
+          </div>
+          <div class="rc-app-identity__datum">
+            <span class="rc-app-identity__eyebrow">IPI / CAE</span>
+            <strong data-rc-identity-ipi>—</strong>
+          </div>
+          <div class="rc-app-identity__datum" data-mobile-secondary="true">
+            <span class="rc-app-identity__eyebrow">Publisher</span>
+            <strong data-rc-identity-publisher>—</strong>
+          </div>
+          <div class="rc-app-identity__datum" data-mobile-secondary="true">
+            <span class="rc-app-identity__eyebrow">Publisher IPI</span>
+            <strong data-rc-identity-publisher-ipi>—</strong>
+          </div>
+          <div class="rc-app-identity__datum rc-app-identity__active" data-membership>
+            <span class="rc-app-identity__eyebrow">Account</span>
+            <strong>Active</strong>
+          </div>
+        </header>
+
+        <div class="rc-app-dashboard__layout">
+          <aside class="rc-app-sidebar" aria-label="Artist workspace navigation">
+            <div class="rc-app-sidebar__panel">
+              <span class="rc-app-sidebar__label">ReleaseCore</span>
+
+              <button type="button" class="rc-app-nav" data-rc-nav="dashboard" data-active="true">
+                <span class="rc-app-nav__icon">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.7"/><rect x="14" y="4" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.7"/><rect x="4" y="14" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.7"/><rect x="14" y="14" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.7"/></svg>
+                </span>
+                <span class="rc-app-nav__copy"><strong>Dashboard</strong><small>Overview</small></span>
+              </button>
+
+              <button type="button" class="rc-app-nav" data-rc-nav="releases">
+                <span class="rc-app-nav__icon">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 18V5l10-2v13M9 9l10-2M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm10-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <span class="rc-app-nav__copy"><strong>My Releases</strong><small>Catalog & distribution</small></span>
+              </button>
+
+              <button type="button" class="rc-app-nav rc-app-nav--primary" data-action="new-release">
+                <span class="rc-app-nav__icon">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+                </span>
+                <span class="rc-app-nav__copy"><strong>New Release</strong><small>Start a draft</small></span>
+              </button>
+
+              <button type="button" class="rc-app-nav" data-rc-nav="profile">
+                <span class="rc-app-nav__icon">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                </span>
+                <span class="rc-app-nav__copy"><strong>Artist Profile</strong><small>Identity & rights</small></span>
+              </button>
+
+              <button type="button" class="rc-app-nav" data-rc-nav="contributors">
+                <span class="rc-app-nav__icon">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8 2a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3 20a5 5 0 0 1 10 0m0 0a5 5 0 0 1 8 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                </span>
+                <span class="rc-app-nav__copy"><strong>Contributors</strong><small>Linked credits</small></span>
+              </button>
+            </div>
+
+            {% if block.settings.supplemental_menu != blank %}
+              <div class="rc-app-sidebar__panel">
+                <span class="rc-app-sidebar__label">{{ block.settings.supplemental_heading | default: 'East Rock' | escape }}</span>
+                {% for link in block.settings.supplemental_menu.links %}
+                  <a class="rc-app-nav" href="{{ link.url }}">
+                    <span class="rc-app-nav__icon">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </span>
+                    <span class="rc-app-nav__copy"><strong>{{ link.title | escape }}</strong></span>
+                  </a>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </aside>
+
+          <main class="rc-app-main" data-rc-dashboard-scroll>
+            <section class="rc-app-view" data-rc-view="dashboard">
+              <div class="rc-app-onboarding" data-rc-onboarding hidden>
+                <div class="rc-app-onboarding__head">
+                  <span class="rc-app-eyebrow">Finish account setup</span>
+                  <h2>Create your ReleaseCore artist profile.</h2>
+                  <p>Your Shopify account has RLIAB access, but it is not associated with an artist yet. Review the information below and save it once. From that point forward, ReleaseCore becomes the source of truth for your artist identity and releases.</p>
+                </div>
+
+                <div class="rc-app-onboarding__legacy" data-rc-legacy-prefill hidden>
+                  We found artist information on your existing Shopify customer profile and used it to prefill this form. Nothing is written back to those legacy customer metafields.
+                </div>
+
+                <form class="rc-app-onboarding__form" data-rc-onboarding-form>
+                  <label class="rc-app-field">
+                    <span>Artist / stage name *</span>
+                    <input name="name" required autocomplete="organization-title">
+                  </label>
+                  <label class="rc-app-field">
+                    <span>Legal name</span>
+                    <input name="legalName" autocomplete="name">
+                  </label>
+                  <label class="rc-app-field">
+                    <span>Contact email</span>
+                    <input name="email" type="email" autocomplete="email">
+                  </label>
+                  <label class="rc-app-field">
+                    <span>Performance rights organization (PRO)</span>
+                    <input name="pro" placeholder="BMI, ASCAP, SESAC…">
+                  </label>
+                  <label class="rc-app-field">
+                    <span>IPI / CAE</span>
+                    <input name="ipi" inputmode="numeric">
+                  </label>
+                  <label class="rc-app-field">
+                    <span>Publisher</span>
+                    <input name="publisherName">
+                  </label>
+                  <label class="rc-app-field">
+                    <span>Publisher IPI</span>
+                    <input name="publisherIpi" inputmode="numeric">
+                  </label>
+                  <label class="rc-app-field">
+                    <span>Website</span>
+                    <input name="websiteUrl" type="url" placeholder="https://">
+                  </label>
+                  <label class="rc-app-field">
+                    <span>Spotify artist URL</span>
+                    <input name="spotifyUrl" type="url" placeholder="https://open.spotify.com/artist/">
+                  </label>
+                  <label class="rc-app-field">
+                    <span>Apple Music artist URL</span>
+                    <input name="appleMusicUrl" type="url" placeholder="https://music.apple.com/artist/">
+                  </label>
+                  <div class="rc-app-onboarding__actions">
+                    <span class="rc-app-form-message" data-rc-onboarding-message hidden role="status" aria-live="polite"></span>
+                    <button type="submit" class="rc-app-primary">Save artist & open dashboard</button>
+                  </div>
+                </form>
+              </div>
+
+              <div class="rc-app-page-head">
+                <div>
+                  <span class="rc-app-eyebrow">ReleaseCore artist portal</span>
+                  <h1>Dashboard</h1>
+                  <p>Your music, artist identity and distribution activity in one workspace.</p>
+                </div>
+                <button type="button" class="rc-app-primary" data-action="new-release">+ New release</button>
+              </div>
+
+              <div class="rc-app-stats">
+                <article class="rc-app-stat"><span>Releases</span><strong data-stat="total">0</strong></article>
+                <article class="rc-app-stat"><span>Active</span><strong data-stat="active">0</strong></article>
+                <article class="rc-app-stat"><span>Upcoming</span><strong data-stat="upcoming">0</strong></article>
+                <article class="rc-app-stat"><span>Needs attention</span><strong data-stat="attention">0</strong></article>
+                <article class="rc-app-stat"><span>Live</span><strong data-stat="live">0</strong></article>
+              </div>
+
+              <div class="rc-app-dashboard-grid">
+                <article class="rc-app-card">
+                  <div class="rc-app-card__head">
+                    <div>
+                      <h2>Recent releases</h2>
+                      <p>Your latest ReleaseCore projects.</p>
+                    </div>
+                    <button type="button" data-rc-nav="releases">View all →</button>
+                  </div>
+                  <div class="rc-app-release-list" data-rc-recent-releases></div>
+                </article>
+
+                <div style="display:grid;gap:14px;align-content:start;">
+                  <article class="rc-app-card">
+                    <div class="rc-app-profile-health">
+                      <div class="rc-app-profile-health__top">
+                        <strong>Artist profile</strong>
+                        <span data-rc-profile-percent>0%</span>
+                      </div>
+                      <div class="rc-app-progress"><span data-rc-profile-progress></span></div>
+                      <p data-rc-profile-missing>Checking your artist information…</p>
+                      <button type="button" class="rc-app-secondary" data-action="open-profile">Review artist profile</button>
+                    </div>
+                  </article>
+
+                  <article class="rc-app-card">
+                    <div class="rc-app-card__head"><div><h2>Quick actions</h2><p>Common ReleaseCore tasks.</p></div></div>
+                    <div class="rc-app-quick">
+                      <button type="button" data-action="new-release"><span><strong>Create a release</strong><span>Single, EP or album</span></span></button>
+                      <button type="button" data-rc-nav="profile"><span><strong>Edit artist profile</strong><span>Rights, publisher and destinations</span></span></button>
+                      <button type="button" data-rc-nav="contributors"><span><strong>View contributors</strong><span>Reusable linked identities</span></span></button>
+                    </div>
+                  </article>
+                </div>
+              </div>
+            </section>
+
+            <section class="rc-app-view" data-rc-view="releases" hidden>
+              <div class="rc-app-page-head">
+                <div>
+                  <span class="rc-app-eyebrow">ReleaseCore</span>
+                  <h1>My Releases</h1>
+                  <p>Create, edit and follow every release through review and distribution.</p>
+                </div>
+                <button type="button" class="rc-app-primary" data-action="new-release">+ New release</button>
+              </div>
+
+              <div
+                class="rc-portal"
+                data-rc-portal
+                data-appearance="dark"
+                data-layout="contained"
+                data-accent="#9c7cff"
+                data-proxy-base="{{ block.settings.proxy_path | default: '/apps/releasecore' | escape }}"
+                data-logged-in="{% if customer %}true{% else %}false{% endif %}"
+                data-preview-all="{% if rc_design_mode %}true{% else %}false{% endif %}"
+                data-customer-name="{% if customer %}{{ customer.name | escape }}{% endif %}"
+                data-show-add="true"
+                style="--rc-accent:#9c7cff;"
+              >
+                <div class="rc-shell rc-library-shell">
+                  <div data-rc-portal-body></div>
+                  <div data-rc-modal-host></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="rc-app-view" data-rc-view="profile" hidden>
+              <div class="rc-app-page-head">
+                <div>
+                  <span class="rc-app-eyebrow">ReleaseCore identity</span>
+                  <h1>Artist Profile</h1>
+                  <p>This ReleaseCore artist record is now the authoritative source for the portal.</p>
+                </div>
+              </div>
+
+              <section
+                class="rc-artist-profile"
+                data-rc-artist-profile
+                data-appearance="dark"
+                data-design-mode="{% if rc_design_mode %}true{% else %}false{% endif %}"
+                data-endpoint="{{ block.settings.proxy_path | default: '/apps/releasecore' | escape }}/portal/profile"
+                data-saved-message="Artist profile saved."
+                data-image-saved-message="Artist photo saved."
+                data-error-message="ReleaseCore could not update the artist profile."
+                data-no-profile-message="Create your artist profile from Dashboard first."
+                data-saving-message="Saving artist profile…"
+                data-uploading-message="Uploading photo…"
+                data-complete-suffix="complete"
+                style="--rcp-accent:#9c7cff;"
+              >
+                <div class="rc-artist-profile__shell">
+                  <div class="rc-artist-profile__notice" data-profile-status role="status" aria-live="polite">Loading artist profile…</div>
+
+                  <form class="rc-artist-profile__form" data-profile-form hidden>
+                    <label class="rc-artist-profile__switcher" data-artist-picker hidden>
+                      <span><strong>Choose artist</strong><small>Switch between the artists this customer can manage.</small></span>
+                      <select data-profile-select aria-label="Choose artist"></select>
+                    </label>
+                    <input type="hidden" name="artistId">
+
+                    <div class="rc-artist-profile__layout">
+                      <aside class="rc-artist-profile__sidebar">
+                        <article class="rc-artist-profile__card rc-artist-profile__identity-card">
+                          <div class="rc-artist-profile__avatar" data-profile-avatar aria-hidden="true">A</div>
+                          <span class="rc-artist-profile__eyebrow">Public identity</span>
+                          <h3 data-profile-name>Artist</h3>
+                          <p data-profile-summary data-fallback="Add rights and identity information to strengthen this profile.">Add rights and identity information to strengthen this profile.</p>
+                          <label class="rc-artist-profile__button rc-artist-profile__button--secondary">
+                            <span data-profile-upload-label>Upload photo</span>
+                            <input type="file" accept="image/jpeg,image/png,image/webp" data-profile-image hidden>
+                          </label>
+                          <small class="rc-artist-profile__photo-help">JPG, PNG or WebP up to 10 MB.</small>
+                        </article>
+
+                        <article class="rc-artist-profile__card rc-artist-profile__progress-card">
+                          <div class="rc-artist-profile__card-heading"><div><h3>Profile strength</h3><p>Complete core identity and destination fields.</p></div></div>
+                          <div class="rc-artist-profile__progress"><span data-profile-progress></span></div>
+                          <strong class="rc-artist-profile__progress-label" data-profile-progress-label></strong>
+                          <span data-profile-completion hidden></span>
+                        </article>
+                      </aside>
+
+                      <div class="rc-artist-profile__main">
+                        <article class="rc-artist-profile__card">
+                          <div class="rc-artist-profile__card-heading"><div><h3>Identity & rights</h3><p>Artist, publishing and contact information.</p></div></div>
+                          <div class="rc-artist-profile__grid">
+                            <label class="rc-artist-profile__field"><span>Artist / stage name</span><input name="name" required readonly data-profile-name-input><small class="rc-artist-profile__field-help" data-profile-name-lock>Artist name changes may be locked by ReleaseCore settings.</small></label>
+                            <label class="rc-artist-profile__field"><span>Legal name</span><input name="legalName"></label>
+                            <label class="rc-artist-profile__field"><span>Email</span><input name="email" type="email"></label>
+                            <label class="rc-artist-profile__field"><span>PRO</span><input name="pro"></label>
+                            <label class="rc-artist-profile__field"><span>IPI / CAE</span><input name="ipi" inputmode="numeric"></label>
+                            <label class="rc-artist-profile__field"><span>Publisher</span><input name="publisherName"></label>
+                            <label class="rc-artist-profile__field"><span>Publisher IPI</span><input name="publisherIpi" inputmode="numeric"></label>
+                            <label class="rc-artist-profile__field"><span>Website</span><input name="websiteUrl" type="url" placeholder="https://"></label>
+                          </div>
+                        </article>
+
+                        <article class="rc-artist-profile__card">
+                          <div class="rc-artist-profile__card-heading"><div><h3>Biography</h3><p>Public-facing artist context.</p></div></div>
+                          <label class="rc-artist-profile__field rc-artist-profile__field--visually-labeled"><span>Biography</span><textarea name="biography" rows="7"></textarea></label>
+                        </article>
+
+                        <article class="rc-artist-profile__card">
+                          <div class="rc-artist-profile__card-heading"><div><h3>Music platforms</h3><p>Connect the artist's primary DSP profiles.</p></div></div>
+                          <div class="rc-artist-profile__grid">
+                            <label class="rc-artist-profile__field"><span>Spotify</span><input name="spotifyUrl" type="url" placeholder="https://open.spotify.com/artist/"></label>
+                            <label class="rc-artist-profile__field"><span>Apple Music</span><input name="appleMusicUrl" type="url" placeholder="https://music.apple.com/artist/"></label>
+                          </div>
+                        </article>
+
+                        <article class="rc-artist-profile__card">
+                          <div class="rc-artist-profile__card-heading"><div><h3>Social presence</h3><p>Optional public destinations.</p></div></div>
+                          <div class="rc-artist-profile__grid">
+                            <label class="rc-artist-profile__field"><span>Instagram</span><input name="instagramUrl" type="url"></label>
+                            <label class="rc-artist-profile__field"><span>Facebook</span><input name="facebookUrl" type="url"></label>
+                            <label class="rc-artist-profile__field"><span>TikTok</span><input name="tiktokUrl" type="url"></label>
+                            <label class="rc-artist-profile__field"><span>YouTube</span><input name="youtubeUrl" type="url"></label>
+                            <label class="rc-artist-profile__field rc-artist-profile__field--wide"><span>X</span><input name="xUrl" type="url"></label>
+                          </div>
+                        </article>
+                      </div>
+                    </div>
+
+                    <div class="rc-artist-profile__actions">
+                      <div><strong>ReleaseCore artist record</strong><span>Changes here are used throughout the artist portal.</span></div>
+                      <button class="rc-artist-profile__button" type="submit">Save artist profile</button>
+                    </div>
+                  </form>
+                </div>
+              </section>
+            </section>
+
+            <section class="rc-app-view" data-rc-view="contributors" hidden>
+              <div class="rc-app-page-head">
+                <div>
+                  <span class="rc-app-eyebrow">ReleaseCore identities</span>
+                  <h1>Contributors</h1>
+                  <p>Reusable contributor identities linked to the selected artist and their release credits.</p>
+                </div>
+              </div>
+              <div class="rc-app-contributors" data-rc-contributors></div>
+            </section>
+          </main>
+        </div>
+
+        <nav class="rc-app-mobile-nav" aria-label="Artist workspace">
+          <button type="button" data-rc-nav="dashboard" data-active="true" aria-label="Dashboard">
+            <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.7"/><rect x="14" y="4" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.7"/><rect x="4" y="14" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.7"/><rect x="14" y="14" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.7"/></svg>
+            <span>Home</span>
+          </button>
+          <button type="button" data-rc-nav="releases" aria-label="My releases">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M9 18V5l10-2v13M9 9l10-2M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm10-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.7"/></svg>
+            <span>Releases</span>
+          </button>
+          <button type="button" data-action="new-release" aria-label="New release"><span class="rc-app-mobile-nav__plus">+</span><span>New</span></button>
+          <button type="button" data-rc-nav="profile" aria-label="Artist profile">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0" stroke="currentColor" stroke-width="1.7"/></svg>
+            <span>Profile</span>
+          </button>
+          <button type="button" data-action="open-more" aria-label="More">
+            <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+            <span>More</span>
+          </button>
+        </nav>
+
+        <div class="rc-app-more-backdrop" data-rc-more-backdrop hidden></div>
+        <div class="rc-app-more-sheet" data-rc-more-sheet hidden>
+          <div class="rc-app-more-sheet__head"><strong>More</strong><button type="button" data-action="close-more" aria-label="Close">✕</button></div>
+          <button type="button" class="rc-app-nav" data-rc-nav="contributors"><span class="rc-app-nav__copy"><strong>Contributors</strong></span></button>
+          {% if block.settings.supplemental_menu != blank %}
+            {% for link in block.settings.supplemental_menu.links %}
+              <a class="rc-app-nav" href="{{ link.url }}"><span class="rc-app-nav__copy"><strong>{{ link.title | escape }}</strong></span></a>
+            {% endfor %}
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <div class="rc-app-dashboard__shell">
+      <div class="rc-app-membership-gate" style="display:block;">
+        <span class="rc-app-eyebrow">RLIAB artist portal</span>
+        <h2>Sign in to open your artist workspace.</h2>
+        <p>Your RLIAB subscription and artist access are connected to your Shopify customer account.</p>
+        <a class="rc-app-primary" style="display:inline-flex;align-items:center;text-decoration:none;" href="{{ routes.account_login_url }}">Sign in</a>
+      </div>
+    </div>
+  {% endif %}
+</section>
+
+{% # theme-check-disable AssetSizeJavaScript %}
+<link rel="stylesheet" href="{{ 'releasecore-portal.css' | asset_url }}">
+<link rel="stylesheet" href="{{ 'releasecore-artist-profile.css' | asset_url }}">
+<script src="{{ 'releasecore-portal.js' | asset_url }}" defer></script>
+<script src="{{ 'releasecore-artist-profile.js' | asset_url }}" defer></script>
+{% # theme-check-enable AssetSizeJavaScript %}
+
+{% schema %}
+{
+  "name": "Artist dashboard",
+  "target": "section",
+  "stylesheet": "releasecore-dashboard.css",
+  "javascript": "releasecore-dashboard.js",
+  "settings": [
+    {
+      "type": "link_list",
+      "id": "supplemental_menu",
+      "label": "Additional dashboard menu",
+      "info": "Choose a Shopify Navigation menu for Tools, Promote, Rights Management, Support or any other merchant-owned dashboard pages."
+    },
+    {
+      "type": "text",
+      "id": "supplemental_heading",
+      "label": "Additional menu heading",
+      "default": "East Rock"
+    },
+    {
+      "type": "text",
+      "id": "proxy_path",
+      "label": "ReleaseCore proxy path",
+      "default": "/apps/releasecore"
+    }
+  ]
+}
+{% endschema %}
