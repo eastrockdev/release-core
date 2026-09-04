@@ -97,6 +97,13 @@ const SETTINGS_GROUPS = [
       "Diagnostics, compliance, and tools you normally only need when something requires attention.",
     items: [
       {
+        title: "Data maintenance",
+        description:
+          "Find duplicate identities, merge artist or contributor records, repair catalog drift, and review safe cleanup opportunities.",
+        href: "/app/data-hygiene",
+        icon: "⌁",
+      },
+      {
         title: "System issues",
         description:
           "Inspect recent production errors, request references, retryability, and recommended resolutions.",

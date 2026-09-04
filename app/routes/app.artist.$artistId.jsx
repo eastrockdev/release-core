@@ -250,6 +250,17 @@ export default function ArtistProfilePage() {
       <div className="rc-relationship-list">{artist.contributors.map(({ contributor }) => <div key={contributor.id} className="rc-relationship-row"><div><Link to={`/app/contributor/${contributor.id}`}><strong>{contributorDisplayName(contributor)}</strong></Link><span>{contributor.legalName}{contributor.pro ? ` · ${contributor.pro}` : ""}</span></div><button className="rc-button rc-button--danger" type="button" disabled={busy} onClick={() => relationship("unlink-contributor", contributor.id)}>Unlink</button></div>)}</div>
       {available.length ? <div className="rc-relationship-add"><select className="rc-control" defaultValue="" aria-label="Contributor to link"><option value="">Choose contributor…</option>{available.map((contributor) => <option key={contributor.id} value={contributor.id}>{contributorDisplayName(contributor)} — {contributor.legalName}</option>)}</select><button type="button" className="rc-button rc-button--primary" disabled={busy} onClick={(event) => { const select = event.currentTarget.previousElementSibling; if (select.value) relationship("link-contributor", select.value); }}>Link contributor</button></div> : <p className="rc-section-copy">All contributors are already linked. <Link to="/app/contributors">Create another contributor</Link>.</p>}
     </CollapsibleSection>
+    <CollapsibleSection
+      icon="checklist"
+      title="Data maintenance"
+      description="Merge duplicate artist identities or review this artist in the catalog-integrity workspace."
+      summary="Admin only"
+    >
+      <p className="rc-section-copy">Merging keeps one artist record and moves compatible release, track, portal-access, contributor, and storefront relationships into it.</p>
+      <div className="rc-form-actions">
+        <Link className="rc-button rc-button--secondary" to={`/app/data-hygiene?artistSource=${artist.id}`}>Review merge / maintenance</Link>
+      </div>
+    </CollapsibleSection>
   </s-page>;
 }
 

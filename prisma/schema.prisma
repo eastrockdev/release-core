@@ -229,10 +229,11 @@ model Contributor {
 }
 
 model ArtistContributor {
-  id            String      @id @default(cuid())
-  artistId      String
-  contributorId String
-  createdAt     DateTime    @default(now())
+  id               String      @id @default(cuid())
+  artistId         String
+  contributorId    String
+  relationshipType String      @default("REGULAR")
+  createdAt        DateTime    @default(now())
   artist        Artist      @relation(fields: [artistId], references: [id], onDelete: Cascade)
   contributor   Contributor @relation(fields: [contributorId], references: [id], onDelete: Cascade)
 
@@ -440,6 +441,22 @@ model OperationJobAttempt {
 
   @@unique([jobId, attempt])
   @@index([jobId, startedAt])
+}
+
+model DataMaintenanceEvent {
+  id                String   @id @default(cuid())
+  shop              String
+  deploymentProfile String   @default("releasecore")
+  operation         String
+  entityType        String
+  sourceId          String?
+  targetId          String?
+  summary           String
+  details           Json?
+  createdAt         DateTime @default(now())
+
+  @@index([shop, deploymentProfile, createdAt])
+  @@index([shop, operation, createdAt])
 }
 
 model AppSettings {

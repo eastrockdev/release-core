@@ -40,6 +40,17 @@ export default function ContributorProfilePage() {
     <CollapsibleSection icon="artist" title="Linked artists" description="These relationships make this contributor easier to find on releases for the artist." summary={`${contributor.artists.length} linked`} defaultOpen>
       {contributor.artists.length ? <div className="rc-directory-list">{contributor.artists.map(({ artist }) => <Link className="rc-directory-row" key={artist.id} to={`/app/artist/${artist.id}`}><ArtistAvatar artist={artist} /><div><strong>{artist.name}</strong><div className="rc-directory-row__meta">Open the artist profile to manage this relationship.</div></div><span className="rc-directory-row__aside">Open artist →</span></Link>)}</div> : <p className="rc-section-copy">Not linked to an artist yet. Open an artist profile to add this contributor.</p>}
     </CollapsibleSection>
+    <CollapsibleSection
+      icon="checklist"
+      title="Data maintenance"
+      description="Merge duplicate contributor identities or review this contributor in the catalog-integrity workspace."
+      summary="Admin only"
+    >
+      <p className="rc-section-copy">Contributor merging keeps one identity and moves compatible track credits and artist relationships into it. Publishing conflicts must be resolved explicitly.</p>
+      <div className="rc-form-actions">
+        <Link className="rc-button rc-button--secondary" to={`/app/data-hygiene?contributorSource=${contributor.id}`}>Review merge / maintenance</Link>
+      </div>
+    </CollapsibleSection>
   </s-page>;
 }
 

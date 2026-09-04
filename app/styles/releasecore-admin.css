@@ -2428,3 +2428,18 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     transform: none;
   }
 }
+
+
+/* M16.6 — Data Maintenance. */
+.rc-hygiene-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.rc-hygiene-metric{display:grid;gap:4px;padding:14px;border:1px solid var(--p-color-border-secondary,#dedede);border-radius:14px;background:var(--p-color-bg-surface,#fff)}
+.rc-hygiene-metric strong{font-size:22px}.rc-hygiene-metric span,.rc-hygiene-signals{color:var(--p-color-text-secondary,#616161);font-size:12px}
+.rc-hygiene-merge-picker{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:12px;align-items:end;margin-top:14px}
+.rc-hygiene-preview{display:grid;gap:14px;margin-top:16px;padding:16px;border:1px solid var(--p-color-border-secondary,#dedede);border-radius:16px;background:var(--p-color-bg-surface-secondary,#f7f7f7)}
+.rc-hygiene-preview__title{display:flex;gap:10px;align-items:center;font-size:16px}.rc-hygiene-preview__counts{color:var(--p-color-text-secondary,#616161);font-size:13px;line-height:1.5}
+.rc-hygiene-conflicts{display:grid;gap:8px}.rc-hygiene-conflict-row,.rc-hygiene-credit-conflict,.rc-hygiene-cleanup-row,.rc-hygiene-panel__heading{display:grid;gap:10px;align-items:center}
+.rc-hygiene-conflict-row{grid-template-columns:minmax(0,1fr) minmax(0,2fr)}.rc-hygiene-credit-conflict{grid-template-columns:minmax(180px,1.2fr) minmax(180px,1fr) minmax(150px,.8fr);padding:10px 0;border-top:1px solid var(--p-color-border-secondary,#dedede)}
+.rc-hygiene-credit-conflict>div{display:grid;gap:3px}.rc-hygiene-credit-conflict>div span{color:var(--p-color-text-secondary,#616161);font-size:12px}
+.rc-hygiene-cleanup-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.rc-hygiene-panel{display:grid;gap:10px;padding:16px;border:1px solid var(--p-color-border-secondary,#dedede);border-radius:16px;background:var(--p-color-bg-surface,#fff)}
+.rc-hygiene-cleanup-row{grid-template-columns:minmax(0,1fr) auto}.rc-hygiene-panel__heading{grid-template-columns:minmax(0,1fr) auto}.rc-hygiene-panel__heading>div{display:grid;gap:4px}.rc-hygiene-panel__heading>div span{color:var(--p-color-text-secondary,#616161);font-size:12px}
+@media(max-width:900px){.rc-hygiene-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.rc-hygiene-merge-picker,.rc-hygiene-cleanup-grid,.rc-hygiene-credit-conflict{grid-template-columns:1fr}}
