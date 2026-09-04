@@ -120,8 +120,8 @@ if (exists("app/routes/releasecore-proxy.$.jsx")) {
   }
 }
 
-if (exists("app/routes/app.settings.jsx")) {
-  const source = read("app/routes/app.settings.jsx");
+if (exists("app/routes/app.settings_.preferences.jsx")) {
+  const source = read("app/routes/app.settings_.preferences.jsx");
   for (const marker of [
     'title="Customer download files"',
     "MP3 download bitrate",

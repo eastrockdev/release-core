@@ -5,7 +5,7 @@ function read(path) {
   return fs.readFileSync(path, "utf8");
 }
 
-const settings = read("app/routes/app.settings.jsx");
+const settings = read("app/routes/app.settings_.preferences.jsx");
 const action = read("app/lib/api-releases-release-action.server.js");
 const trackInfo = read(
   "app/routes/app.release_.$releaseId.track.$trackId.jsx",

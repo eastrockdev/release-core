@@ -37,6 +37,9 @@ const systemIssuesUi = read(
   "app/routes/app.system-issues.jsx",
 );
 const app = read("app/routes/app.jsx");
+const settingsHub = read(
+  "app/routes/app.settings.jsx",
+);
 const packageJson = JSON.parse(
   read("package.json"),
 );
@@ -197,14 +200,14 @@ if (systemIssuesUi.includes("technicalMessage")) {
 }
 
 need(
-  app,
-  'href="/app/system-issues"',
-  "Admin navigation does not expose System Issues.",
+  operationsUi,
+  "/app/system-issues",
+  "Operations does not link to System Issues.",
 );
 need(
-  app,
-  "countOpenSystemIssues",
-  "Admin navigation does not count open System Issues.",
+  settingsHub,
+  "/app/system-issues",
+  "Settings hub does not expose System Issues.",
 );
 
 if (

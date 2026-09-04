@@ -1,22 +1,19 @@
 import {
   Outlet,
   useLoaderData,
-  useLocation,
   useRouteError,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { countOpenSystemIssues } from "../lib/system-issues.server";
 import "../styles/releasecore-admin.css";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
-  const [submissions, distribution, systemIssues] = await Promise.all([
+  const [submissions, distribution] = await Promise.all([
     db.release.count({ where: { shop: session.shop, status: { in: ["SUBMITTED", "IN_REVIEW", "CHANGES_REQUESTED"] } } }),
     db.release.count({ where: { shop: session.shop, distributionStatus: { in: ["NOT_QUEUED", "READY", "PROCESSING", "RETURNED"] }, status: "APPROVED" } }),
-    countOpenSystemIssues({ shop: session.shop }),
   ]);
 
   return {
@@ -25,7 +22,6 @@ export const loader = async ({ request }) => {
     navCounts: {
       submissions,
       distribution,
-      systemIssues,
     },
   };
 };
@@ -36,33 +32,16 @@ function NavLabel({ children, count }) {
 
 export default function App() {
   const { apiKey, navCounts } = useLoaderData();
-  const location = useLocation();
-  const feedbackHref =
-    location.pathname === "/app/feedback"
-      ? "/app/feedback"
-      : `/app/feedback?from=${encodeURIComponent(
-          location.pathname,
-        )}`;
 
   return (
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
         <s-link href="/app">Home</s-link>
         <s-link href="/app/operations">Operations</s-link>
-        <s-link href="/app/system-issues"><NavLabel count={navCounts.systemIssues}>System issues</NavLabel></s-link>
-        <s-link href={feedbackHref}>Feedback</s-link>
         <s-link href="/app/releases">Releases</s-link>
-        <s-link href="/app/import">Import</s-link>
         <s-link href="/app/submissions"><NavLabel count={navCounts.submissions}>Submissions</NavLabel></s-link>
         <s-link href="/app/distribution"><NavLabel count={navCounts.distribution}>Distribution</NavLabel></s-link>
-        <s-link href="/app/purchases">Purchases</s-link>
         <s-link href="/app/artists">Artists</s-link>
-        <s-link href="/app/contributors">Contributors</s-link>
-        <s-link href="/app/portal-access">Portal access</s-link>
-        <s-link href="/app/storefront-setup">Storefront setup</s-link>
-        <s-link href="/app/automation">Automation</s-link>
-        <s-link href="/app/notifications">Notifications</s-link>
-        <s-link href="/app/privacy">Privacy</s-link>
         <s-link href="/app/settings">Settings</s-link>
       </s-app-nav>
       <Outlet />

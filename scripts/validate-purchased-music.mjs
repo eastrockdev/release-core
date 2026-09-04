@@ -117,7 +117,8 @@ if (exists("app/routes/customer-downloads.file.jsx")) {
 
 if (exists("app/routes/app.jsx")) {
   const source = read("app/routes/app.jsx");
-  if (!source.includes('href="/app/purchases"')) {
+const settingsHub = read("app/routes/app.settings.jsx");
+  if (!source.includes('href="/app/purchases"') && !settingsHub.includes("/app/purchases")) {
     fail("admin navigation is missing Purchases.");
   }
 }

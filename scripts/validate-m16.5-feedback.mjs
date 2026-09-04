@@ -19,6 +19,9 @@ const route = read(
   "app/routes/app.feedback.jsx",
 );
 const app = read("app/routes/app.jsx");
+const settingsHub = read(
+  "app/routes/app.settings.jsx",
+);
 const issues = read(
   "app/routes/app.system-issues.jsx",
 );
@@ -148,19 +151,9 @@ need(
 );
 
 need(
-  app,
-  "useLocation",
-  "Global Admin shell does not capture the current path for Feedback.",
-);
-need(
-  app,
-  "feedbackHref",
-  "Global Admin shell does not build the Feedback return context.",
-);
-need(
-  app,
-  ">Feedback</s-link>",
-  "Global Admin navigation is missing Feedback.",
+  settingsHub,
+  "/app/feedback?from=%2Fapp%2Fsettings",
+  "Settings hub does not expose Feedback.",
 );
 
 need(

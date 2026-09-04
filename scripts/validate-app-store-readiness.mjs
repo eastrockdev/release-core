@@ -81,7 +81,17 @@ for (const marker of ["addAppBlockId", "release-portal", "recent-releases", "art
 }
 
 const appNav = read("app/routes/app.jsx");
-if (!appNav.includes('/app/storefront-setup')) fail("merchant navigation is missing Storefront setup.");
+const settingsHub = read(
+  "app/routes/app.settings.jsx",
+);
+if (
+  !appNav.includes("/app/settings") ||
+  !settingsHub.includes("/app/storefront-setup")
+) {
+  fail(
+    "merchant navigation is missing a discoverable Storefront setup path.",
+  );
+}
 
 const home = read("app/routes/app._index.jsx");
 for (const marker of ["Getting started", "/app/settings", "/app/portal-access", "/app/storefront-setup"]) {

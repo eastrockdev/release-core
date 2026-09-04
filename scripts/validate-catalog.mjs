@@ -164,10 +164,10 @@ if (exists("extensions/releasecore-artist-portal/assets/releasecore-portal.js"))
   }
 }
 
-if (exists("app/routes/app.settings.jsx")) {
-  const source = read("app/routes/app.settings.jsx");
+if (exists("app/routes/app.settings_.preferences.jsx")) {
+  const source = read("app/routes/app.settings_.preferences.jsx");
   for (const marker of ["New track product default", "New Album / EP product default", "Single-track product template", "Album / EP product template", "Artist collection template", "Default Album / EP price"]) {
-    if (!source.includes(marker)) fail(`Settings is missing ${marker}.`);
+    if (!source.includes(marker)) fail(`Release Preferences is missing ${marker}.`);
   }
 }
 
