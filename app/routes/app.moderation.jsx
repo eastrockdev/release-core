@@ -1,22 +1,22 @@
+import { useState } from "react";
 import {
   Form,
-  useFetcher,
   useLoaderData,
+  useRevalidator,
   useRouteError,
 } from "react-router";
+import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { authenticatedPost } from "../lib/authenticated-post";
 import { customerNumericId } from "../lib/automations";
 import { customerIsPortalMember } from "../lib/portal-access-rules.server";
 import {
   PORTAL_EDIT_LOCK_STATUS,
   PORTAL_EDIT_LOCK_TYPE,
   listCustomerReleaseCreationPolicies,
-  setCustomerReleaseCreationDisabled,
-  setReleaseArtistEditLock,
 } from "../lib/moderation.server";
-import { apiErrorResponse } from "../lib/http-security.server";
 import { PageIntro } from "../components/releasecore-ui";
 import { typeLabel } from "../lib/releasecore";
 
@@ -171,76 +171,44 @@ export const loader = async ({ request }) => {
   };
 };
 
-export const action = async ({ request }) => {
-  try {
-    const { session } = await authenticate.admin(request);
-    const form = await request.formData();
-    const intent = String(form.get("intent") || "");
-
-    if (intent === "set-release-creation") {
-      const disabled = String(form.get("disabled") || "false") === "true";
-      const result = await setCustomerReleaseCreationDisabled({
-        shop: session.shop,
-        customerId: form.get("customerId"),
-        disabled,
-        reason: form.get("reason"),
-        actorLabel: "Shopify admin",
-      });
-      return {
-        ok: true,
-        message: disabled
-          ? `Release creation disabled for customer ${result.customerId}.`
-          : `Release creation restored for customer ${result.customerId}.`,
-      };
-    }
-
-    if (intent === "set-release-lock") {
-      const locked = String(form.get("locked") || "false") === "true";
-      const releaseId = String(form.get("releaseId") || "");
-      await setReleaseArtistEditLock({
-        shop: session.shop,
-        releaseId,
-        locked,
-        reason: form.get("reason"),
-        actorLabel: "Shopify admin",
-      });
-      return {
-        ok: true,
-        message: locked
-          ? "Artist editing locked for this release."
-          : "Artist editing unlocked for this release.",
-      };
-    }
-
-    return {
-      ok: false,
-      message: "Unknown moderation action.",
-    };
-  } catch (error) {
-    const response = apiErrorResponse(request, error, {
-      context: "moderation mutation",
-      fallback: "ReleaseCore could not update moderation controls.",
-    });
-    const payload = await response.json().catch(() => ({}));
-    const reference = payload.requestId
-      ? ` Reference: ${payload.requestId}.`
-      : "";
-    return {
-      ok: false,
-      message: `${
-        payload.error ||
-        "ReleaseCore could not update moderation controls."
-      }${reference}`,
-    };
-  }
-};
-
 export default function Moderation() {
   const data = useLoaderData();
-  const moderationFetcher = useFetcher();
-  const result = moderationFetcher.data;
-  const busy = moderationFetcher.state !== "idle";
-  const MutationForm = moderationFetcher.Form;
+  const shopify = useAppBridge();
+  const revalidator = useRevalidator();
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const postModeration = async (form) => {
+    if (busy) return;
+    setBusy(true);
+    setResult(null);
+
+    try {
+      const response = await authenticatedPost(
+        shopify,
+        "/api/moderation",
+        form,
+      );
+      setResult({ ok: true, message: response.message });
+      shopify.toast.show(response.message || "Moderation updated");
+      await revalidator.revalidate();
+    } catch (error) {
+      setResult({
+        ok: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "ReleaseCore could not update moderation controls.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitModeration = (event) => {
+    event.preventDefault();
+    void postModeration(new FormData(event.currentTarget));
+  };
 
   return (
     <s-page heading="Moderation">
@@ -334,7 +302,7 @@ export default function Moderation() {
                   </div>
                 ) : null}
 
-                <MutationForm method="post" style={styles.customerAction}>
+                <form onSubmit={submitModeration} style={styles.customerAction}>
                   <input
                     type="hidden"
                     name="intent"
@@ -370,7 +338,7 @@ export default function Moderation() {
                       ? "Restore release creation"
                       : "Disable release creation"}
                   </button>
-                </MutationForm>
+                </form>
               </article>
             ))}
           </div>
@@ -417,7 +385,7 @@ export default function Moderation() {
                   </div>
                 </div>
 
-                <MutationForm method="post" style={styles.lockForm}>
+                <form onSubmit={submitModeration} style={styles.lockForm}>
                   <input
                     type="hidden"
                     name="intent"
@@ -456,7 +424,7 @@ export default function Moderation() {
                       </button>
                     </>
                   )}
-                </MutationForm>
+                </form>
               </article>
             ))}
           </div>
