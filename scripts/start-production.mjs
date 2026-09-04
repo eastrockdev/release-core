@@ -1,7 +1,33 @@
 #!/usr/bin/env node
 import { randomBytes, randomUUID } from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import process from "node:process";
+
+if (process.env.NODE_ENV === "production") {
+  const profile = String(
+    process.env.RELEASECORE_DEPLOYMENT_PROFILE || "",
+  ).trim();
+
+  const validation = spawnSync(
+    process.execPath,
+    [
+      "scripts/validate-production-environment.mjs",
+      "--profile",
+      profile,
+    ],
+    {
+      env: process.env,
+      stdio: "inherit",
+    },
+  );
+
+  if (validation.status !== 0) {
+    console.error(
+      "ReleaseCore production supervisor refused to start because environment validation failed.",
+    );
+    process.exit(validation.status || 1);
+  }
+}
 
 const secret = randomBytes(32).toString("hex");
 const workerId = [

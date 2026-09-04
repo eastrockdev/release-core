@@ -19,6 +19,7 @@ import {
   formatBytes,
 } from "../lib/releasecore-files";
 import { authenticatedPost } from "../lib/authenticated-post";
+import { promptSafetyConfirmation } from "../lib/production-safety-client";
 import {
   uploadReleaseCoreFile,
   validateCoverArtworkDimensions,
@@ -902,7 +903,18 @@ function WorkflowPanel({ release, readiness, mutate, busy, feedback }) {
             <button
               type="button"
               disabled={busy}
-              onClick={() => send("reopen-draft")}
+              onClick={() => {
+                const safetyConfirmation =
+                  promptSafetyConfirmation({
+                    phrase: "REOPEN RELEASE",
+                    message:
+                      "Reopen this release as a draft? Review and distribution state will be reset.",
+                  });
+                if (!safetyConfirmation) return;
+                send("reopen-draft", {
+                  safetyConfirmation,
+                });
+              }}
               className="rc-button"
             >
               Reopen draft
@@ -917,8 +929,16 @@ function WorkflowPanel({ release, readiness, mutate, busy, feedback }) {
               type="button"
               disabled={busy}
               onClick={() => {
-                if (!window.confirm("Delete this draft permanently? This cannot be undone.")) return;
-                send("delete-draft");
+                const safetyConfirmation =
+                  promptSafetyConfirmation({
+                    phrase: "DELETE DRAFT",
+                    message:
+                      "Delete this draft permanently? This cannot be undone.",
+                  });
+                if (!safetyConfirmation) return;
+                send("delete-draft", {
+                  safetyConfirmation,
+                });
               }}
               className="rc-button rc-button--danger"
             >
@@ -1308,6 +1328,13 @@ export default function ReleaseWorkspace() {
 
   const removeFile = async (file) => {
     if (busy) return;
+    if (
+      !window.confirm(
+        `Remove ${file.filename || "this file"}? Stored master files and Shopify Files may be permanently deleted.`,
+      )
+    ) {
+      return;
+    }
     const scope = `upload:${file.kind}:${file.trackId || "release"}`;
     setBusy(true);
     setNotice({ scope, tone: "info", message: `Removing ${file.filename || "file"}…` });

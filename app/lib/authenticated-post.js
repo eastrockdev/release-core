@@ -2,12 +2,21 @@ export async function authenticatedPost(shopify, url, formData) {
   // Shopify App Bridge ID tokens are intentionally short lived. Fetch a fresh
   // token for every mutation and send it explicitly to our own backend.
   const idToken = await shopify.idToken();
+  const mutationId =
+    window.crypto?.randomUUID?.();
+
+  if (!mutationId) {
+    throw new Error(
+      "ReleaseCore could not create a secure mutation identifier. Refresh the app and try again.",
+    );
+  }
 
   const response = await fetch(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${idToken}`,
       Accept: "application/json",
+      "X-ReleaseCore-Mutation-Id": mutationId,
     },
     body: formData,
   });

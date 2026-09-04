@@ -23,6 +23,7 @@ import {
   formatBytes,
 } from "../lib/releasecore-files";
 import { authenticatedPost } from "../lib/authenticated-post";
+import { promptSafetyConfirmation } from "../lib/production-safety-client";
 import { uploadReleaseCoreFile } from "../lib/upload-file";
 import { releaseIsEditable } from "../lib/workflow";
 import { loadReleaseWorkspace } from "../lib/release-workspace.server";
@@ -405,6 +406,13 @@ export default function EditTrackInfo() {
 
   const removeMaster = async (file) => {
     if (busy || !editable) return;
+    if (
+      !window.confirm(
+        `Remove ${file.filename}? This can permanently delete the stored master.`,
+      )
+    ) {
+      return;
+    }
 
     setBusy(true);
     setResult("info", `Removing ${file.filename}…`);
@@ -433,17 +441,20 @@ export default function EditTrackInfo() {
   };
 
   const deleteTrack = async () => {
-    if (
-      !window.confirm(
-        `Delete Track ${track.position} permanently from this draft? This cannot be undone.`,
-      )
-    ) {
-      return;
-    }
+    const safetyConfirmation =
+      promptSafetyConfirmation({
+        phrase: "DELETE TRACK",
+        message: `Delete Track ${track.position} permanently from this draft? This cannot be undone.`,
+      });
+    if (!safetyConfirmation) return;
 
     const data = new FormData();
     data.set("intent", "delete-track");
     data.set("trackId", track.id);
+    data.set(
+      "safetyConfirmation",
+      safetyConfirmation,
+    );
 
     if (busy) return;
     setBusy(true);

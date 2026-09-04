@@ -168,7 +168,6 @@ const scripts = packageJson.scripts || {};
 
 for (const [name, expected] of [
   ["setup", "prisma generate && prisma migrate deploy"],
-  ["docker-start", "npm run setup && node scripts/start-production.mjs"],
   ["verify:production", "node scripts/verify-production.mjs"],
   [
     "verify:production:releasecore",
@@ -198,6 +197,17 @@ for (const [name, expected] of [
   if (scripts[name] !== expected) {
     fail(`package.json script ${name} must equal: ${expected}`);
   }
+}
+
+const allowedDockerStartScripts = new Set([
+  "npm run setup && node scripts/start-production.mjs",
+  "node scripts/validate-production-environment.mjs && npm run setup && node scripts/start-production.mjs",
+]);
+
+if (!allowedDockerStartScripts.has(scripts["docker-start"])) {
+  fail(
+    "package.json script docker-start must preserve the ReleaseCore production startup sequence: optional production-environment validation, then npm run setup, then node scripts/start-production.mjs.",
+  );
 }
 
 if (!String(scripts.check || "").includes("npm run check:m15.3")) {

@@ -462,6 +462,21 @@ model DataMaintenanceEvent {
   @@index([shop, operation, createdAt])
 }
 
+model ProductionMutation {
+  id                String   @id @default(cuid())
+  shop              String
+  deploymentProfile String   @default("releasecore")
+  requestId         String
+  operation         String
+  entityType        String?
+  entityId          String?
+  createdAt         DateTime @default(now())
+
+  @@unique([shop, deploymentProfile, requestId])
+  @@index([shop, deploymentProfile, createdAt])
+  @@index([shop, operation, createdAt])
+}
+
 model AppSettings {
   id                                     String  @id @default(cuid())
   shop                                   String  @unique

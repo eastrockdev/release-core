@@ -14,11 +14,20 @@ import { apiErrorResponse, publicError } from "./http-security.server";
 import { findShopArtist, findShopContributor, findShopRelease } from "./tenant-db.server";
 import { parseReleaseTimelineFormData } from "./release-timeline.server";
 import { deleteReleaseDraft } from "./release-drafts.server";
+import { claimHighImpactMutation } from "./production-safety.server";
 import {
   attachExistingSingleTrack,
   deleteDraftTrack,
 } from "./release-tracks.server";
 import { bulkUpdateReleaseTracks } from "./bulk-track-edit.server";
+
+const HIGH_IMPACT_RELEASE_INTENTS = new Map([
+  ["approve-release", null],
+  ["reject-release", null],
+  ["reopen-draft", "REOPEN RELEASE"],
+  ["delete-draft", "DELETE DRAFT"],
+  ["delete-track", "DELETE TRACK"],
+]);
 
 async function getOwnedRelease(id, shop, include = {}) {
   return findShopRelease(shop, id, { include });
@@ -88,6 +97,27 @@ export const action = async ({ request, params }) => {
       String(formData.get("trackId") || "").trim() ||
       null;
     const appSettings = await db.appSettings.findUnique({ where: { shop: session.shop } });
+
+    if (HIGH_IMPACT_RELEASE_INTENTS.has(intent)) {
+      await claimHighImpactMutation({
+        request,
+        shop: session.shop,
+        operation: intent,
+        entityType:
+          intent === "delete-track"
+            ? "TRACK"
+            : "RELEASE",
+        entityId:
+          intent === "delete-track"
+            ? String(formData.get("trackId") || "")
+            : release.id,
+        confirmation: String(
+          formData.get("safetyConfirmation") || "",
+        ),
+        expectedConfirmation:
+          HIGH_IMPACT_RELEASE_INTENTS.get(intent),
+      });
+    }
 
     if (intent === "submit-release") {
       if (!releaseIsEditable(release.status)) return Response.json({ ok: false, error: "This release is not currently editable or eligible for submission." }, { status: 409 });

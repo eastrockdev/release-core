@@ -8,6 +8,7 @@ import {
   repairArtistNameCaches,
 } from "../lib/data-hygiene.server";
 import { apiErrorResponse } from "../lib/http-security.server";
+import { claimHighImpactMutation } from "../lib/production-safety.server";
 
 const asBool = (value) => String(value || "") === "true";
 
@@ -23,9 +24,19 @@ export const action = async ({ request }) => {
     const shop = session.shop;
 
     if (intent === "merge-artist") {
+      const sourceId = String(data.get("sourceId") || "");
+      await claimHighImpactMutation({
+        request,
+        shop,
+        operation: intent,
+        entityType: "ARTIST",
+        entityId: sourceId,
+        confirmation: String(data.get("safetyConfirmation") || ""),
+        expectedConfirmation: "MERGE ARTIST",
+      });
       const result = await mergeArtistIntoArtist({
         shop,
-        sourceId: String(data.get("sourceId") || ""),
+        sourceId,
         targetId: String(data.get("targetId") || ""),
         collectionResolution: String(data.get("collectionResolution") || ""),
         confirmed: asBool(data.get("confirmed")),
@@ -34,6 +45,16 @@ export const action = async ({ request }) => {
     }
 
     if (intent === "merge-contributor") {
+      const contributorSourceId = String(data.get("sourceId") || "");
+      await claimHighImpactMutation({
+        request,
+        shop,
+        operation: intent,
+        entityType: "CONTRIBUTOR",
+        entityId: contributorSourceId,
+        confirmation: String(data.get("safetyConfirmation") || ""),
+        expectedConfirmation: "MERGE CONTRIBUTOR",
+      });
       const resolutions = {};
       const customValues = {};
       for (const [key, value] of data.entries()) {
@@ -42,7 +63,7 @@ export const action = async ({ request }) => {
       }
       const result = await mergeContributorIntoContributor({
         shop,
-        sourceId: String(data.get("sourceId") || ""),
+        sourceId: contributorSourceId,
         targetId: String(data.get("targetId") || ""),
         resolutions,
         customValues,
@@ -64,12 +85,32 @@ export const action = async ({ request }) => {
     }
 
     if (intent === "delete-unused-artist") {
-      const result = await deleteUnusedArtist({ shop, artistId: String(data.get("artistId") || "") });
+      const artistId = String(data.get("artistId") || "");
+      await claimHighImpactMutation({
+        request,
+        shop,
+        operation: intent,
+        entityType: "ARTIST",
+        entityId: artistId,
+        confirmation: String(data.get("safetyConfirmation") || ""),
+        expectedConfirmation: "DELETE ARTIST",
+      });
+      const result = await deleteUnusedArtist({ shop, artistId });
       return Response.json({ ok: true, ...result });
     }
 
     if (intent === "delete-unused-contributor") {
-      const result = await deleteUnusedContributor({ shop, contributorId: String(data.get("contributorId") || "") });
+      const contributorId = String(data.get("contributorId") || "");
+      await claimHighImpactMutation({
+        request,
+        shop,
+        operation: intent,
+        entityType: "CONTRIBUTOR",
+        entityId: contributorId,
+        confirmation: String(data.get("safetyConfirmation") || ""),
+        expectedConfirmation: "DELETE CONTRIBUTOR",
+      });
+      const result = await deleteUnusedContributor({ shop, contributorId });
       return Response.json({ ok: true, ...result });
     }
 

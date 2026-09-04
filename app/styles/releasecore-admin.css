@@ -2477,3 +2477,79 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     justify-content: space-between;
   }
 }
+
+
+/* M16.8 — Production Safety. */
+.rc-safety-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--p-color-border-secondary, #dedede);
+  border-radius: 16px;
+}
+.rc-safety-state > div {
+  display: grid;
+  gap: 4px;
+}
+.rc-safety-state > div span {
+  color: var(--p-color-text-secondary, #616161);
+  font-size: 13px;
+}
+.rc-safety-state--good {
+  background: rgba(0, 128, 0, .04);
+}
+.rc-safety-state--bad {
+  background: rgba(180, 0, 0, .05);
+}
+.rc-safety-checks {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.rc-safety-check {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--p-color-border-secondary, #dedede);
+  border-radius: 12px;
+  background: var(--p-color-bg-surface, #fff);
+}
+.rc-safety-check > div {
+  display: grid;
+  gap: 3px;
+}
+.rc-safety-check > div span {
+  color: var(--p-color-text-secondary, #616161);
+  font-size: 12px;
+}
+.rc-safety-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.rc-safety-card {
+  display: grid;
+  gap: 7px;
+  padding: 16px;
+  border: 1px solid var(--p-color-border-secondary, #dedede);
+  border-radius: 16px;
+  background: var(--p-color-bg-surface, #fff);
+}
+.rc-safety-card span {
+  color: var(--p-color-text-secondary, #616161);
+  font-size: 13px;
+  line-height: 1.5;
+}
+@media (max-width: 720px) {
+  .rc-safety-grid {
+    grid-template-columns: 1fr;
+  }
+  .rc-safety-state,
+  .rc-safety-check {
+    align-items: flex-start;
+  }
+}

@@ -104,6 +104,13 @@ const SETTINGS_GROUPS = [
         icon: "⌁",
       },
       {
+        title: "Production safety",
+        description:
+          "Verify deployment-profile guards, mutation replay protection, and recent protected administrative writes.",
+        href: "/app/production-safety",
+        icon: "⊙",
+      },
+      {
         title: "System issues",
         description:
           "Inspect recent production errors, request references, retryability, and recommended resolutions.",

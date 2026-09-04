@@ -5,6 +5,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { previewArtistMerge, previewContributorMerge, scanDataHygiene } from "../lib/data-hygiene.server";
 import { authenticatedPost } from "../lib/authenticated-post";
+import { promptSafetyConfirmation } from "../lib/production-safety-client";
 import { EmptyState, PageIntro } from "../components/releasecore-ui";
 
 export const loader = async ({ request }) => {
@@ -76,28 +77,66 @@ export default function DataHygienePage() {
 
   const mergeArtist = async (event) => {
     event.preventDefault();
-    if (!window.confirm(`Merge ${artistPreview.source.name} into ${artistPreview.target.name}? The source ReleaseCore artist record will be removed.`)) return;
+    const safetyConfirmation =
+      promptSafetyConfirmation({
+        phrase: "MERGE ARTIST",
+        message: `Merge ${artistPreview.source.name} into ${artistPreview.target.name}? The source ReleaseCore artist record will be removed.`,
+      });
+    if (!safetyConfirmation) return;
     const data = new FormData(event.currentTarget);
     data.set("intent", "merge-artist");
     data.set("confirmed", "true");
+    data.set("safetyConfirmation", safetyConfirmation);
     const result = await post(data);
     if (result?.targetId) navigate(`/app/artist/${result.targetId}`);
   };
 
   const mergeContributor = async (event) => {
     event.preventDefault();
-    if (!window.confirm(`Merge ${contributorName(contributorPreview.source)} into ${contributorName(contributorPreview.target)}? The source ReleaseCore contributor record will be removed.`)) return;
+    const safetyConfirmation =
+      promptSafetyConfirmation({
+        phrase: "MERGE CONTRIBUTOR",
+        message: `Merge ${contributorName(contributorPreview.source)} into ${contributorName(contributorPreview.target)}? The source ReleaseCore contributor record will be removed.`,
+      });
+    if (!safetyConfirmation) return;
     const data = new FormData(event.currentTarget);
     data.set("intent", "merge-contributor");
     data.set("confirmed", "true");
+    data.set("safetyConfirmation", safetyConfirmation);
     const result = await post(data);
     if (result?.targetId) navigate(`/app/contributor/${result.targetId}`);
   };
 
-  const quickAction = async (intent, fields = {}, confirmation = "") => {
-    if (confirmation && !window.confirm(confirmation)) return;
+  const quickAction = async (
+    intent,
+    fields = {},
+    confirmation = "",
+    safetyPhrase = "",
+  ) => {
+    let safetyConfirmation = "";
+    if (safetyPhrase) {
+      safetyConfirmation =
+        promptSafetyConfirmation({
+          phrase: safetyPhrase,
+          message:
+            confirmation ||
+            "Confirm this high-impact maintenance action.",
+        }) || "";
+      if (!safetyConfirmation) return;
+    } else if (
+      confirmation &&
+      !window.confirm(confirmation)
+    ) {
+      return;
+    }
     const data = new FormData();
     data.set("intent", intent);
+    if (safetyConfirmation) {
+      data.set(
+        "safetyConfirmation",
+        safetyConfirmation,
+      );
+    }
     for (const [key, value] of Object.entries(fields)) data.set(key, value);
     const result = await post(data);
     if (result) await revalidator.revalidate();
@@ -184,8 +223,8 @@ export default function DataHygienePage() {
     </s-section>
 
     <s-section heading="Safe cleanup"><div className="rc-hygiene-cleanup-grid">
-      <div className="rc-hygiene-panel"><strong>Unused artists ({scan.unusedArtists.length})</strong>{scan.unusedArtists.length ? scan.unusedArtists.map((artist) => <div key={artist.id} className="rc-hygiene-cleanup-row"><span>{artist.name}</span><button type="button" className="rc-button rc-button--danger" disabled={busy} onClick={() => quickAction("delete-unused-artist", { artistId: artist.id }, `Delete unused artist ${artist.name} from ReleaseCore? Shopify files will be left untouched.`)}>Delete</button></div>) : <span className="rc-field__help">No unused artists.</span>}</div>
-      <div className="rc-hygiene-panel"><strong>Unused contributors ({scan.unusedContributors.length})</strong>{scan.unusedContributors.length ? scan.unusedContributors.map((item) => <div key={item.id} className="rc-hygiene-cleanup-row"><span>{item.name}</span><button type="button" className="rc-button rc-button--danger" disabled={busy} onClick={() => quickAction("delete-unused-contributor", { contributorId: item.id }, `Delete unused contributor ${item.name} from ReleaseCore?`)}>Delete</button></div>) : <span className="rc-field__help">No unused contributors.</span>}</div>
+      <div className="rc-hygiene-panel"><strong>Unused artists ({scan.unusedArtists.length})</strong>{scan.unusedArtists.length ? scan.unusedArtists.map((artist) => <div key={artist.id} className="rc-hygiene-cleanup-row"><span>{artist.name}</span><button type="button" className="rc-button rc-button--danger" disabled={busy} onClick={() => quickAction("delete-unused-artist", { artistId: artist.id }, `Delete unused artist ${artist.name} from ReleaseCore? Shopify files will be left untouched.`, "DELETE ARTIST")}>Delete</button></div>) : <span className="rc-field__help">No unused artists.</span>}</div>
+      <div className="rc-hygiene-panel"><strong>Unused contributors ({scan.unusedContributors.length})</strong>{scan.unusedContributors.length ? scan.unusedContributors.map((item) => <div key={item.id} className="rc-hygiene-cleanup-row"><span>{item.name}</span><button type="button" className="rc-button rc-button--danger" disabled={busy} onClick={() => quickAction("delete-unused-contributor", { contributorId: item.id }, `Delete unused contributor ${item.name} from ReleaseCore?`, "DELETE CONTRIBUTOR")}>Delete</button></div>) : <span className="rc-field__help">No unused contributors.</span>}</div>
     </div></s-section>
 
     <s-section heading="Consistency checks">

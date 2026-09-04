@@ -4,6 +4,7 @@ import { deleteMasterStorageObject } from "../lib/storage.server";
 import { releaseIsEditable } from "../lib/workflow";
 import { apiErrorResponse, publicError } from "../lib/http-security.server";
 import { findShopReleaseFile } from "../lib/tenant-db.server";
+import { claimHighImpactMutation } from "../lib/production-safety.server";
 
 export const action = async ({ request, params }) => {
   if (request.method !== "POST") return Response.json({ ok: false, error: "Method not allowed." }, { status: 405 });
@@ -12,6 +13,14 @@ export const action = async ({ request, params }) => {
     const file = await findShopReleaseFile(session.shop, params.fileId, { include: { release: true } });
     if (!file) return Response.json({ ok: false, error: "File not found." }, { status: 404 });
     if (!releaseIsEditable(file.release.status)) return Response.json({ ok: false, error: "This release is locked while it is under review or finalized." }, { status: 409 });
+
+    await claimHighImpactMutation({
+      request,
+      shop: session.shop,
+      operation: "delete-file",
+      entityType: "RELEASE_FILE",
+      entityId: file.id,
+    });
 
     if (file.storageProvider === "SHOPIFY_FILES" && file.storageKey) {
       const response = await admin.graphql(

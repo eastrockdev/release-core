@@ -82,10 +82,26 @@ for (const [key, value] of Object.entries(expected)) {
 for (const key of [
   "SHOPIFY_API_SECRET",
   "DATABASE_URL",
+  "DIRECT_URL",
   "RELEASECORE_ENCRYPTION_KEY",
 ]) {
   if (!String(process.env[key] || "").trim()) {
     fail(`${key} is missing.`);
+  }
+}
+
+for (const key of [
+  "DATABASE_URL",
+  "DIRECT_URL",
+]) {
+  const value = String(process.env[key] || "");
+  if (
+    /(?:localhost|127\.0\.0\.1|::1)/i.test(value)
+  ) {
+    fail(
+      "Production database URLs must not use localhost, 127.0.0.1, or ::1.",
+    );
+    break;
   }
 }
 

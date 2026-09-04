@@ -286,12 +286,18 @@ if (
     "Full npm run check does not include M16.2.",
   );
 }
+const allowedSupervisedDockerStarts = new Set([
+  "npm run setup && node scripts/start-production.mjs",
+  "node scripts/validate-production-environment.mjs && npm run setup && node scripts/start-production.mjs",
+]);
+
 if (
-  packageJson?.scripts?.["docker-start"] !==
-  "npm run setup && node scripts/start-production.mjs"
+  !allowedSupervisedDockerStarts.has(
+    packageJson?.scripts?.["docker-start"],
+  )
 ) {
   failures.push(
-    "docker-start does not launch the supervised web + worker runtime.",
+    "docker-start does not preserve the supervised web + worker runtime.",
   );
 }
 
