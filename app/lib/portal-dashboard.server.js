@@ -9,6 +9,10 @@ import {
 } from "./automations.server";
 import { listPortalReleases } from "./portal.server";
 import { publicError } from "./http-security.server";
+import {
+  applyReleaseCreationModeration,
+  getCustomerReleaseCreationPolicy,
+} from "./moderation.server";
 
 const clean = (value) => String(value ?? "").trim() || null;
 
@@ -229,16 +233,21 @@ export async function portalDashboardState({
   customerId,
   selectedArtistId = null,
 }) {
-  const [membership, access, artists] = await Promise.all([
+  const [membership, access, artists, creationPolicy] = await Promise.all([
     portalMembership({ admin, shop, customerId }),
     portalReleaseAccess({ admin, shop, customerId }),
     fullPortalArtists({ shop, customerId }),
+    getCustomerReleaseCreationPolicy({ shop, customerId }),
   ]);
+  const moderatedAccess = applyReleaseCreationModeration(
+    access,
+    creationPolicy,
+  );
 
   if (!membership.allowed) {
     return {
       membership,
-      access,
+      access: moderatedAccess,
       artists: [],
       selectedArtist: null,
       releases: [],
@@ -276,7 +285,7 @@ export async function portalDashboardState({
 
   return {
     membership,
-    access,
+    access: moderatedAccess,
     artists,
     selectedArtist,
     releases,
@@ -284,7 +293,7 @@ export async function portalDashboardState({
     stats: releaseStats(releases),
     profileCompletion: profileCompletion(selectedArtist),
     contributors,
-    labelAccount: access.labelAccount || null,
+    labelAccount: moderatedAccess.labelAccount || null,
     onboarding: {
       required: artists.length === 0,
       legacyPrefill: artists.length ? null : legacyPrefill(customer),

@@ -14,6 +14,16 @@ function normalizedCustomerId(customerId) {
   return customerNumericId(customerId) || String(customerId || "").trim();
 }
 
+function releaseCreationPolicyFromRecord(record) {
+  return {
+    disabled: Boolean(record?.releaseCreationDisabled),
+    reason: record?.releaseCreationDisabled
+      ? String(record.releaseCreationDisabledReason || "").trim() || null
+      : null,
+    updatedAt: record?.updatedAt || null,
+  };
+}
+
 export function releaseCreationDisabledMessage(policy = null) {
   return (
     policy?.reason ||
@@ -21,57 +31,28 @@ export function releaseCreationDisabledMessage(policy = null) {
   );
 }
 
-export function releaseCreationPolicyFromEvent(event) {
-  if (!event) {
-    return {
-      disabled: false,
-      reason: null,
-      updatedAt: null,
-    };
-  }
-
-  const details =
-    event.details && typeof event.details === "object"
-      ? event.details
-      : {};
-  const disabled =
-    event.operation === RELEASE_CREATION_DISABLED_OPERATION;
-
-  return {
-    disabled,
-    reason: disabled
-      ? String(details.reason || event.summary || "").trim() || null
-      : null,
-    updatedAt: event.createdAt || null,
-  };
-}
-
 export async function getCustomerReleaseCreationPolicy({
   shop,
   customerId,
 }) {
   const sourceId = normalizedCustomerId(customerId);
-  if (!sourceId) {
-    return releaseCreationPolicyFromEvent(null);
-  }
+  if (!sourceId) return releaseCreationPolicyFromRecord(null);
 
-  const event = await db.dataMaintenanceEvent.findFirst({
+  const policy = await db.portalCustomerPolicy.findUnique({
     where: {
-      shop,
-      deploymentProfile: deploymentProfileId(),
-      entityType: "PORTAL_CUSTOMER",
-      sourceId,
-      operation: {
-        in: [
-          RELEASE_CREATION_DISABLED_OPERATION,
-          RELEASE_CREATION_ENABLED_OPERATION,
-        ],
+      shop_customerId: {
+        shop,
+        customerId: sourceId,
       },
     },
-    orderBy: { createdAt: "desc" },
+    select: {
+      releaseCreationDisabled: true,
+      releaseCreationDisabledReason: true,
+      updatedAt: true,
+    },
   });
 
-  return releaseCreationPolicyFromEvent(event);
+  return releaseCreationPolicyFromRecord(policy);
 }
 
 export async function listCustomerReleaseCreationPolicies({
@@ -87,28 +68,25 @@ export async function listCustomerReleaseCreationPolicies({
   ];
   if (!sourceIds.length) return new Map();
 
-  const events = await db.dataMaintenanceEvent.findMany({
+  const rows = await db.portalCustomerPolicy.findMany({
     where: {
       shop,
-      deploymentProfile: deploymentProfileId(),
-      entityType: "PORTAL_CUSTOMER",
-      sourceId: { in: sourceIds },
-      operation: {
-        in: [
-          RELEASE_CREATION_DISABLED_OPERATION,
-          RELEASE_CREATION_ENABLED_OPERATION,
-        ],
-      },
+      customerId: { in: sourceIds },
     },
-    orderBy: { createdAt: "desc" },
+    select: {
+      customerId: true,
+      releaseCreationDisabled: true,
+      releaseCreationDisabledReason: true,
+      updatedAt: true,
+    },
   });
 
-  const policies = new Map();
-  for (const event of events) {
-    if (!event.sourceId || policies.has(event.sourceId)) continue;
-    policies.set(event.sourceId, releaseCreationPolicyFromEvent(event));
-  }
-  return policies;
+  return new Map(
+    rows.map((row) => [
+      row.customerId,
+      releaseCreationPolicyFromRecord(row),
+    ]),
+  );
 }
 
 export function applyReleaseCreationModeration(access, policy) {
@@ -301,25 +279,57 @@ export async function setCustomerReleaseCreationDisabled({
     ? "Release creation disabled for Artist Portal user."
     : "Release creation restored for Artist Portal user.";
 
-  await db.dataMaintenanceEvent.create({
-    data: {
-      shop,
-      deploymentProfile: deploymentProfileId(),
-      operation,
-      entityType: "PORTAL_CUSTOMER",
-      sourceId,
-      summary,
-      details: {
-        disabled: Boolean(disabled),
-        reason: cleanReason,
-        actorLabel,
+  await db.$transaction(async (tx) => {
+    await tx.portalCustomerPolicy.upsert({
+      where: {
+        shop_customerId: {
+          shop,
+          customerId: sourceId,
+        },
       },
-    },
+      create: {
+        shop,
+        customerId: sourceId,
+        releaseCreationDisabled: Boolean(disabled),
+        releaseCreationDisabledReason: disabled ? cleanReason : null,
+      },
+      update: {
+        releaseCreationDisabled: Boolean(disabled),
+        releaseCreationDisabledReason: disabled ? cleanReason : null,
+      },
+    });
+
+    await tx.dataMaintenanceEvent.create({
+      data: {
+        shop,
+        deploymentProfile: deploymentProfileId(),
+        operation,
+        entityType: "PORTAL_CUSTOMER",
+        sourceId,
+        summary,
+        details: {
+          disabled: Boolean(disabled),
+          reason: disabled ? cleanReason : null,
+          actorLabel,
+        },
+      },
+    });
   });
+
+  const verified = await getCustomerReleaseCreationPolicy({
+    shop,
+    customerId: sourceId,
+  });
+  if (verified.disabled !== Boolean(disabled)) {
+    throw publicError(
+      "ReleaseCore could not verify the saved release-creation restriction. Retry the moderation action.",
+      { status: 500, code: "MODERATION_STATE_NOT_SAVED" },
+    );
+  }
 
   return {
     customerId: sourceId,
-    disabled: Boolean(disabled),
-    reason: cleanReason,
+    disabled: verified.disabled,
+    reason: verified.reason,
   };
 }

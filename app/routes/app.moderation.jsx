@@ -1,8 +1,7 @@
 import {
   Form,
-  useActionData,
+  useFetcher,
   useLoaderData,
-  useNavigation,
   useRouteError,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -223,20 +222,25 @@ export const action = async ({ request }) => {
       fallback: "ReleaseCore could not update moderation controls.",
     });
     const payload = await response.json().catch(() => ({}));
+    const reference = payload.requestId
+      ? ` Reference: ${payload.requestId}.`
+      : "";
     return {
       ok: false,
-      message:
+      message: `${
         payload.error ||
-        "ReleaseCore could not update moderation controls.",
+        "ReleaseCore could not update moderation controls."
+      }${reference}`,
     };
   }
 };
 
 export default function Moderation() {
   const data = useLoaderData();
-  const result = useActionData();
-  const navigation = useNavigation();
-  const busy = navigation.state !== "idle";
+  const moderationFetcher = useFetcher();
+  const result = moderationFetcher.data;
+  const busy = moderationFetcher.state !== "idle";
+  const MutationForm = moderationFetcher.Form;
 
   return (
     <s-page heading="Moderation">
@@ -287,8 +291,8 @@ export default function Moderation() {
         <div style={styles.sectionIntro}>
           <strong>{data.totals.usersBlocked} restricted</strong>
           <span>
-            Restrictions are stored and audited inside ReleaseCore. They do not
-            require changing Shopify customer tags or app permissions.
+            Restrictions are stored on the ReleaseCore customer policy and
+            audited separately. They do not change Shopify customer tags.
           </span>
         </div>
 
@@ -330,7 +334,7 @@ export default function Moderation() {
                   </div>
                 ) : null}
 
-                <Form method="post" style={styles.customerAction}>
+                <MutationForm method="post" style={styles.customerAction}>
                   <input
                     type="hidden"
                     name="intent"
@@ -366,7 +370,7 @@ export default function Moderation() {
                       ? "Restore release creation"
                       : "Disable release creation"}
                   </button>
-                </Form>
+                </MutationForm>
               </article>
             ))}
           </div>
@@ -413,7 +417,7 @@ export default function Moderation() {
                   </div>
                 </div>
 
-                <Form method="post" style={styles.lockForm}>
+                <MutationForm method="post" style={styles.lockForm}>
                   <input
                     type="hidden"
                     name="intent"
@@ -452,7 +456,7 @@ export default function Moderation() {
                       </button>
                     </>
                   )}
-                </Form>
+                </MutationForm>
               </article>
             ))}
           </div>
