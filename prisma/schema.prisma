@@ -86,6 +86,7 @@ model Release {
   @@index([shop, createdAt])
   @@index([shop, updatedAt])
   @@index([shop, lastSubmittedAt])
+  @@index([shop, decisionAt])
   @@index([shop, distributionUpdatedAt])
 }
 
@@ -298,6 +299,7 @@ model SubmissionEvent {
   deliveries NotificationDelivery[]
 
   @@index([releaseId, createdAt])
+  @@index([type, createdAt])
 }
 
 model NotificationDelivery {
@@ -370,6 +372,7 @@ model SystemIssue {
   @@unique([shop, deploymentProfile, fingerprint])
   @@index([shop, deploymentProfile, status, lastSeenAt])
   @@index([shop, deploymentProfile, lastSeenAt])
+  @@index([shop, deploymentProfile, firstSeenAt])
   @@index([releaseId, lastSeenAt])
   @@index([operationJobId])
 }
@@ -428,6 +431,8 @@ model OperationJob {
   @@unique([shop, idempotencyKey])
   @@index([deploymentProfile, status, availableAt])
   @@index([shop, releaseId, createdAt])
+  @@index([shop, deploymentProfile, createdAt])
+  @@index([shop, deploymentProfile, completedAt])
   @@index([shop, status, updatedAt])
 }
 

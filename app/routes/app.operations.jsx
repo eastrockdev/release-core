@@ -155,6 +155,13 @@ export default function Operations() {
               >
                 Distribution queue
               </s-button>
+              <s-button
+                onClick={() =>
+                  navigate("/app/operations/metrics")
+                }
+              >
+                Operational metrics
+              </s-button>
             </>
           }
         >
@@ -193,6 +200,7 @@ export default function Operations() {
             label="Background jobs"
             value={data.stats.activeBackgroundJobs}
             detail="Queued or currently running"
+            href="/app/operations/metrics"
           />
           <MetricCard
             label="System issues"
