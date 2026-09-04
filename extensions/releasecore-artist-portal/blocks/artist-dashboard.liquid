@@ -112,12 +112,57 @@
               <div class="rc-app-sidebar__panel">
                 <span class="rc-app-sidebar__label">{{ block.settings.supplemental_heading | default: 'East Rock' | escape }}</span>
                 {% for link in block.settings.supplemental_menu.links %}
-                  <a class="rc-app-nav" href="{{ link.url }}">
-                    <span class="rc-app-nav__icon">
-                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    </span>
-                    <span class="rc-app-nav__copy"><strong>{{ link.title | escape }}</strong></span>
-                  </a>
+                  {% if link.links != blank %}
+                    <details class="rc-app-menu-group">
+                      <summary class="rc-app-nav">
+                        <span class="rc-app-nav__icon">
+                          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </span>
+                        <span class="rc-app-nav__copy"><strong>{{ link.title | escape }}</strong></span>
+                        <svg class="rc-app-menu-group__chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M7 5l5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      </summary>
+                      <div class="rc-app-menu-children">
+                        {% if link.url != blank and link.url != '#' %}
+                          <a class="rc-app-nav rc-app-menu-overview" href="{{ link.url }}">
+                            <span class="rc-app-nav__copy"><strong>Open {{ link.title | escape }}</strong></span>
+                          </a>
+                        {% endif %}
+                        {% for child in link.links %}
+                          {% if child.links != blank %}
+                            <details class="rc-app-menu-group">
+                              <summary class="rc-app-nav">
+                                <span class="rc-app-nav__copy"><strong>{{ child.title | escape }}</strong></span>
+                                <svg class="rc-app-menu-group__chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M7 5l5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                              </summary>
+                              <div class="rc-app-menu-children rc-app-menu-children--level-3">
+                                {% if child.url != blank and child.url != '#' %}
+                                  <a class="rc-app-nav rc-app-menu-overview" href="{{ child.url }}">
+                                    <span class="rc-app-nav__copy"><strong>Open {{ child.title | escape }}</strong></span>
+                                  </a>
+                                {% endif %}
+                                {% for grandchild in child.links %}
+                                  <a class="rc-app-nav" href="{{ grandchild.url }}">
+                                    <span class="rc-app-nav__copy"><strong>{{ grandchild.title | escape }}</strong></span>
+                                  </a>
+                                {% endfor %}
+                              </div>
+                            </details>
+                          {% else %}
+                            <a class="rc-app-nav" href="{{ child.url }}">
+                              <span class="rc-app-nav__copy"><strong>{{ child.title | escape }}</strong></span>
+                            </a>
+                          {% endif %}
+                        {% endfor %}
+                      </div>
+                    </details>
+                  {% else %}
+                    <a class="rc-app-nav" href="{{ link.url }}">
+                      <span class="rc-app-nav__icon">
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      </span>
+                      <span class="rc-app-nav__copy"><strong>{{ link.title | escape }}</strong></span>
+                    </a>
+                  {% endif %}
                 {% endfor %}
               </div>
             {% endif %}
@@ -413,7 +458,41 @@
           <button type="button" class="rc-app-nav" data-rc-nav="contributors"><span class="rc-app-nav__copy"><strong>Contributors</strong></span></button>
           {% if block.settings.supplemental_menu != blank %}
             {% for link in block.settings.supplemental_menu.links %}
-              <a class="rc-app-nav" href="{{ link.url }}"><span class="rc-app-nav__copy"><strong>{{ link.title | escape }}</strong></span></a>
+              {% if link.links != blank %}
+                <details class="rc-app-menu-group">
+                  <summary class="rc-app-nav">
+                    <span class="rc-app-nav__copy"><strong>{{ link.title | escape }}</strong></span>
+                    <svg class="rc-app-menu-group__chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M7 5l5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </summary>
+                  <div class="rc-app-menu-children">
+                    {% if link.url != blank and link.url != '#' %}
+                      <a class="rc-app-nav rc-app-menu-overview" href="{{ link.url }}"><span class="rc-app-nav__copy"><strong>Open {{ link.title | escape }}</strong></span></a>
+                    {% endif %}
+                    {% for child in link.links %}
+                      {% if child.links != blank %}
+                        <details class="rc-app-menu-group">
+                          <summary class="rc-app-nav">
+                            <span class="rc-app-nav__copy"><strong>{{ child.title | escape }}</strong></span>
+                            <svg class="rc-app-menu-group__chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M7 5l5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                          </summary>
+                          <div class="rc-app-menu-children rc-app-menu-children--level-3">
+                            {% if child.url != blank and child.url != '#' %}
+                              <a class="rc-app-nav rc-app-menu-overview" href="{{ child.url }}"><span class="rc-app-nav__copy"><strong>Open {{ child.title | escape }}</strong></span></a>
+                            {% endif %}
+                            {% for grandchild in child.links %}
+                              <a class="rc-app-nav" href="{{ grandchild.url }}"><span class="rc-app-nav__copy"><strong>{{ grandchild.title | escape }}</strong></span></a>
+                            {% endfor %}
+                          </div>
+                        </details>
+                      {% else %}
+                        <a class="rc-app-nav" href="{{ child.url }}"><span class="rc-app-nav__copy"><strong>{{ child.title | escape }}</strong></span></a>
+                      {% endif %}
+                    {% endfor %}
+                  </div>
+                </details>
+              {% else %}
+                <a class="rc-app-nav" href="{{ link.url }}"><span class="rc-app-nav__copy"><strong>{{ link.title | escape }}</strong></span></a>
+              {% endif %}
             {% endfor %}
           {% endif %}
         </div>
@@ -449,7 +528,7 @@
       "type": "link_list",
       "id": "supplemental_menu",
       "label": "Additional dashboard menu",
-      "info": "Choose a Shopify Navigation menu for Tools, Promote, Rights Management, Support or any other merchant-owned dashboard pages."
+      "info": "Choose a Shopify Navigation menu for Tools, Promote, Rights Management, Support or other merchant-owned dashboard pages. Nested Shopify menu levels are supported."
     },
     {
       "type": "text",

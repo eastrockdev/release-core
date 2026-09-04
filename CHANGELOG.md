@@ -1,3 +1,9 @@
+## ReleaseCore M18.1 — Aura Artist Portal Refinement
+
+- Refined the unified Artist Portal with compact identity presentation, Safari-safe controls, stronger containment, and smoother responsive behavior.
+- Added cover-art-reactive Aura treatment to release cards and selected-artist ambience.
+- Added three-level Shopify Navigation support to desktop supplemental navigation and the mobile More sheet.
+
 ## ReleaseCore M18.0 — Unified Artist Portal
 
 - Added the full Aura storefront artist dashboard with desktop/sidebar and mobile navigation.

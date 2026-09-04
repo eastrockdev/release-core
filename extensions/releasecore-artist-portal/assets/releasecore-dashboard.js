@@ -485,3 +485,207 @@
     load();
   });
 })();
+
+/* RELEASECORE_M18_1_AURA_REFINEMENT */
+(() => {
+  const roots = document.querySelectorAll("[data-rc-artist-dashboard]");
+  const reducedMotion =
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+
+  const fallbackRgb = [156, 124, 255];
+
+  const parseCssUrl = (value) => {
+    const match = String(value || "").match(/url\((['"]?)(.*?)\1\)/i);
+    return match?.[2] || "";
+  };
+
+  const rgbString = (rgb) => rgb.map((value) =>
+    Math.max(0, Math.min(255, Math.round(value))),
+  ).join(", ");
+
+  const averageImageColor = (src) =>
+    new Promise((resolve) => {
+      if (!src) {
+        resolve(fallbackRgb);
+        return;
+      }
+
+      const image = new Image();
+      image.crossOrigin = "anonymous";
+      image.decoding = "async";
+
+      image.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = 18;
+          canvas.height = 18;
+          const context = canvas.getContext("2d", {
+            willReadFrequently: true,
+          });
+          if (!context) throw new Error("Canvas unavailable");
+
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          const { data } = context.getImageData(
+            0,
+            0,
+            canvas.width,
+            canvas.height,
+          );
+
+          let r = 0;
+          let g = 0;
+          let b = 0;
+          let weight = 0;
+
+          for (let index = 0; index < data.length; index += 4) {
+            const alpha = data[index + 3] / 255;
+            if (alpha < .3) continue;
+
+            const rr = data[index];
+            const gg = data[index + 1];
+            const bb = data[index + 2];
+
+            const max = Math.max(rr, gg, bb);
+            const min = Math.min(rr, gg, bb);
+            const saturation = max - min;
+            const brightness = (rr + gg + bb) / 3;
+
+            // Ignore nearly black/white pixels and favor distinctive artwork color.
+            if (brightness < 24 || brightness > 238) continue;
+            const pixelWeight = alpha * (1 + saturation / 110);
+
+            r += rr * pixelWeight;
+            g += gg * pixelWeight;
+            b += bb * pixelWeight;
+            weight += pixelWeight;
+          }
+
+          if (!weight) {
+            resolve(fallbackRgb);
+            return;
+          }
+
+          let result = [r / weight, g / weight, b / weight];
+
+          // Keep Aura readable on dark glass: gently increase saturation/value.
+          const max = Math.max(...result);
+          const min = Math.min(...result);
+          if (max - min < 28) {
+            result = result.map((channel, i) =>
+              i === 0 ? Math.min(255, channel + 20) : channel,
+            );
+          }
+
+          resolve(result);
+        } catch {
+          resolve(fallbackRgb);
+        }
+      };
+
+      image.onerror = () => resolve(fallbackRgb);
+      image.src = src;
+    });
+
+  const applyAuraToCard = async (card) => {
+    const image = card.querySelector("img");
+    const src = image?.currentSrc || image?.src || "";
+    if (!src || card.dataset.rcAuraSource === src) return;
+
+    card.dataset.rcAuraSource = src;
+    card.style.setProperty(
+      "--rc-aura-image",
+      `url("${src.replace(/["\\]/g, "\\$&")}")`,
+    );
+
+    const rgb = await averageImageColor(src);
+    if (card.dataset.rcAuraSource !== src) return;
+    card.style.setProperty("--rc-cover-rgb", rgbString(rgb));
+    card.dataset.rcAuraReady = "true";
+  };
+
+  const applyArtistAura = async (root) => {
+    const avatar = root.querySelector("[data-rc-identity-avatar]");
+    if (!avatar) return;
+
+    const src = parseCssUrl(avatar.style.backgroundImage);
+    if (!src || root.dataset.rcArtistAuraSource === src) return;
+
+    root.dataset.rcArtistAuraSource = src;
+    const rgb = await averageImageColor(src);
+    if (root.dataset.rcArtistAuraSource !== src) return;
+    root.style.setProperty("--rc-aura-violet", rgbString(rgb));
+  };
+
+  const scan = (root) => {
+    root
+      .querySelectorAll(".rc-app-release-card, .rc-dashboard-release")
+      .forEach((card) => {
+        void applyAuraToCard(card);
+      });
+    void applyArtistAura(root);
+  };
+
+  const animateVisibleView = (root) => {
+    if (reducedMotion) return;
+    const visible = [...root.querySelectorAll(".rc-app-view")].find(
+      (view) => !view.hidden,
+    );
+    if (!visible) return;
+
+    visible.classList.remove("rc-app-view--enter");
+    requestAnimationFrame(() => {
+      visible.classList.add("rc-app-view--enter");
+    });
+  };
+
+  roots.forEach((root) => {
+    if (root.dataset.rcAuraEnhancementReady === "true") return;
+    root.dataset.rcAuraEnhancementReady = "true";
+
+    let queued = false;
+    const queueScan = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        scan(root);
+      });
+    };
+
+    queueScan();
+    animateVisibleView(root);
+
+    const observer = new MutationObserver((mutations) => {
+      let shouldScan = false;
+      let viewChanged = false;
+
+      for (const mutation of mutations) {
+        if (
+          mutation.type === "childList" ||
+          (mutation.type === "attributes" &&
+            ["src", "style"].includes(mutation.attributeName))
+        ) {
+          shouldScan = true;
+        }
+
+        if (
+          mutation.type === "attributes" &&
+          mutation.attributeName === "hidden" &&
+          mutation.target?.classList?.contains("rc-app-view")
+        ) {
+          viewChanged = true;
+        }
+      }
+
+      if (shouldScan) queueScan();
+      if (viewChanged) animateVisibleView(root);
+    });
+
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["src", "style", "hidden"],
+    });
+  });
+})();

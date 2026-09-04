@@ -911,3 +911,554 @@
     animation: none !important;
   }
 }
+
+/* RELEASECORE_M18_1_AURA_REFINEMENT
+   M18.1 — Aura UX refinement for the unified Artist Portal.
+*/
+.rc-app-dashboard {
+  --rc-aura-violet: 156 124 255;
+  --rc-aura-lime: 200 255 61;
+  --rc-app-panel: rgba(18, 18, 23, .74);
+  --rc-app-panel-2: rgba(13, 13, 17, .78);
+  --rc-app-border: rgba(255, 255, 255, .095);
+  --rc-app-border-strong: rgba(255, 255, 255, .15);
+  --rc-app-shadow: 0 22px 60px rgba(0, 0, 0, .22);
+  overflow: clip;
+}
+
+.rc-app-dashboard::before,
+.rc-app-dashboard::after {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 999px;
+  filter: blur(90px) saturate(125%);
+  opacity: .42;
+  transition: opacity .6s ease, transform .9s cubic-bezier(.2,.8,.2,1), background .6s ease;
+}
+.rc-app-dashboard::before {
+  width: min(48vw, 720px);
+  height: min(48vw, 720px);
+  left: -16vw;
+  top: 6vh;
+  background: rgba(var(--rc-aura-violet), .16);
+}
+.rc-app-dashboard::after {
+  width: min(40vw, 620px);
+  height: min(40vw, 620px);
+  right: -12vw;
+  top: 20vh;
+  background: rgba(var(--rc-aura-lime), .07);
+}
+
+.rc-app-dashboard__shell {
+  max-width: 1480px;
+  padding-top: 24px;
+}
+
+.rc-app-dashboard__status {
+  max-width: 1480px;
+}
+
+/* Compact artist identity header: 1 artist column + 3 metadata columns over two rows. */
+.rc-app-identity {
+  grid-template-columns: minmax(260px, 1.18fr) repeat(3, minmax(132px, 1fr));
+  max-width: 1180px;
+  margin: 0 auto;
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(var(--rc-aura-violet), .045), transparent 42%),
+    rgba(12, 12, 16, .73);
+  box-shadow: var(--rc-app-shadow);
+}
+.rc-app-identity__artist {
+  grid-row: 1 / span 2;
+  min-height: 116px;
+  padding: 16px 17px;
+}
+.rc-app-identity__datum {
+  min-height: 58px;
+  padding: 12px 14px;
+  border-left: 1px solid rgba(255,255,255,.07);
+  border-bottom: 1px solid rgba(255,255,255,.055);
+}
+.rc-app-identity__datum:nth-last-child(-n + 3) {
+  border-bottom: 0;
+}
+.rc-app-identity__avatar {
+  width: 48px;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.07),
+    0 14px 35px rgba(var(--rc-aura-violet), .14);
+}
+.rc-app-identity__artist strong {
+  font-size: 16px;
+}
+
+/* Safari-safe select controls. */
+.rc-app-dashboard select,
+.rc-app-dashboard .rc-select,
+.rc-app-dashboard .rc-artist-profile select {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  color-scheme: dark;
+  color: var(--rc-app-text, #f7f7f8);
+  -webkit-text-fill-color: currentColor;
+  background-color: rgba(255,255,255,.055);
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(255,255,255,.7) 50%),
+    linear-gradient(135deg, rgba(255,255,255,.7) 50%, transparent 50%);
+  background-position:
+    calc(100% - 15px) 50%,
+    calc(100% - 10px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 34px !important;
+}
+.rc-app-dashboard select::-ms-expand { display: none; }
+.rc-app-identity__picker-wrap {
+  position: relative;
+  margin-top: 8px;
+}
+.rc-app-identity__picker {
+  min-height: 36px;
+  height: 36px;
+  padding: 6px 34px 6px 10px;
+  border-radius: 10px;
+  background-color: rgba(255,255,255,.06);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.025);
+}
+.rc-app-identity__picker:focus-visible,
+.rc-app-dashboard select:focus-visible {
+  outline: 2px solid rgba(var(--rc-aura-lime), .7);
+  outline-offset: 2px;
+  border-color: rgba(var(--rc-aura-lime), .45);
+}
+
+/* Better shell rhythm and stronger visual hierarchy. */
+.rc-app-dashboard__layout {
+  grid-template-columns: 216px minmax(0, 1fr);
+  gap: 20px;
+  margin-top: 22px;
+}
+.rc-app-sidebar {
+  gap: 12px;
+}
+.rc-app-sidebar__panel,
+.rc-app-card,
+.rc-app-stat,
+.rc-app-onboarding,
+.rc-app-membership-gate {
+  border-color: var(--rc-app-border);
+  box-shadow: var(--rc-app-shadow);
+  backdrop-filter: blur(22px) saturate(120%);
+  -webkit-backdrop-filter: blur(22px) saturate(120%);
+}
+.rc-app-sidebar__panel {
+  border-radius: 16px;
+  padding: 8px;
+}
+.rc-app-nav {
+  min-height: 42px;
+  border-radius: 10px;
+}
+.rc-app-nav:hover {
+  transform: translateX(2px);
+}
+.rc-app-nav[data-active="true"] {
+  background:
+    radial-gradient(circle at 8% 50%, rgba(var(--rc-aura-violet), .17), transparent 55%),
+    rgba(255,255,255,.052);
+}
+.rc-app-nav--primary {
+  background:
+    linear-gradient(90deg, rgba(var(--rc-aura-lime), .10), rgba(var(--rc-aura-lime), .04));
+}
+.rc-app-page-head {
+  margin-bottom: 17px;
+  align-items: center;
+}
+.rc-app-page-head h1 {
+  font-size: clamp(30px, 2.65vw, 42px);
+}
+.rc-app-page-head p {
+  margin-top: 6px;
+}
+
+.rc-app-primary,
+.rc-app-secondary {
+  transition:
+    transform .18s cubic-bezier(.2,.8,.2,1),
+    box-shadow .18s ease,
+    border-color .18s ease,
+    background .18s ease;
+}
+.rc-app-primary:hover,
+.rc-app-secondary:hover {
+  transform: translateY(-1px);
+}
+.rc-app-primary:hover {
+  box-shadow: 0 10px 30px rgba(255,255,255,.11);
+}
+
+.rc-app-stats {
+  gap: 9px;
+}
+.rc-app-stat {
+  padding: 15px 16px;
+  border-radius: 15px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.025), transparent 48%),
+    var(--rc-app-panel-2);
+  transition: transform .2s ease, border-color .2s ease, background .2s ease;
+}
+.rc-app-stat:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255,255,255,.14);
+}
+.rc-app-stat strong {
+  font-size: 26px;
+}
+
+.rc-app-dashboard-grid {
+  grid-template-columns: minmax(0, 1.45fr) minmax(250px, .55fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+.rc-app-card {
+  border-radius: 17px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.018), transparent 44%),
+    var(--rc-app-panel);
+}
+
+/* Release-card Aura. JS sets --rc-aura-image and --rc-cover-rgb. */
+.rc-app-release-card,
+.rc-app-dashboard .rc-dashboard-release {
+  --rc-cover-rgb: 156, 124, 255;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  transition:
+    transform .24s cubic-bezier(.2,.8,.2,1),
+    border-color .24s ease,
+    box-shadow .24s ease,
+    background .24s ease;
+}
+.rc-app-release-card::before,
+.rc-app-dashboard .rc-dashboard-release::before {
+  content: "";
+  position: absolute;
+  z-index: -2;
+  inset: -34%;
+  pointer-events: none;
+  background-image: var(--rc-aura-image, none);
+  background-size: cover;
+  background-position: center;
+  filter: blur(42px) saturate(1.35);
+  opacity: .10;
+  transform: scale(1.08);
+}
+.rc-app-release-card::after,
+.rc-app-dashboard .rc-dashboard-release::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(var(--rc-cover-rgb), .14), transparent 56%),
+    linear-gradient(150deg, rgba(var(--rc-cover-rgb), .045), rgba(12,12,16,.12) 62%);
+}
+.rc-app-release-card:hover,
+.rc-app-dashboard .rc-dashboard-release:hover {
+  transform: translateY(-3px);
+  border-color: rgba(var(--rc-cover-rgb), .28) !important;
+  box-shadow:
+    0 18px 44px rgba(0,0,0,.28),
+    0 0 0 1px rgba(var(--rc-cover-rgb), .08);
+}
+.rc-app-release-card:hover::before,
+.rc-app-dashboard .rc-dashboard-release:hover::before {
+  opacity: .16;
+}
+
+.rc-app-release-art,
+.rc-app-dashboard .rc-dashboard-cover {
+  box-shadow: 0 12px 30px rgba(var(--rc-cover-rgb), .11);
+}
+
+/* Embedded release library should feel native to the M18 shell. */
+.rc-app-view[data-rc-view="releases"] .rc-portal,
+.rc-app-view[data-rc-view="releases"] .rc-shell {
+  width: 100%;
+  max-width: none;
+}
+.rc-app-view[data-rc-view="releases"] .rc-shell {
+  padding: 0;
+}
+.rc-app-view[data-rc-view="releases"] .rc-library-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.rc-app-view[data-rc-view="releases"] .rc-dashboard-release,
+.rc-app-view[data-rc-view="releases"] .rc-dashboard-add {
+  border-radius: 16px;
+}
+
+/* Embedded artist profile: cancel its standalone 100vw breakout.
+   This is the main overlap fix inside the unified dashboard. */
+.rc-app-dashboard .rc-artist-profile {
+  left: auto !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: visible;
+  background: transparent;
+  isolation: auto;
+}
+.rc-app-dashboard .rc-artist-profile__shell {
+  width: 100%;
+  max-width: none;
+  padding: 0;
+}
+.rc-app-dashboard .rc-artist-profile__form {
+  margin-top: 0;
+}
+.rc-app-dashboard .rc-artist-profile__switcher {
+  margin-bottom: 14px;
+  padding: 13px 15px;
+  background: rgba(24,24,30,.72);
+  border-radius: 15px;
+  box-shadow: none;
+  position: relative;
+  z-index: 2;
+}
+.rc-app-dashboard .rc-artist-profile__layout {
+  grid-template-columns: minmax(210px, 255px) minmax(0, 1fr);
+  gap: 14px;
+}
+.rc-app-dashboard .rc-artist-profile__sidebar,
+.rc-app-dashboard .rc-artist-profile__main {
+  gap: 14px;
+  min-width: 0;
+}
+.rc-app-dashboard .rc-artist-profile__sidebar {
+  top: 14px;
+}
+.rc-app-dashboard .rc-artist-profile__card,
+.rc-app-dashboard .rc-artist-profile__actions {
+  border-radius: 17px;
+  box-shadow: none;
+  background:
+    linear-gradient(145deg, rgba(var(--rc-aura-violet), .025), transparent 50%),
+    rgba(24,24,30,.72);
+}
+.rc-app-dashboard .rc-artist-profile__card {
+  padding: clamp(18px, 2vw, 24px);
+}
+.rc-app-dashboard .rc-artist-profile__grid {
+  gap: 14px;
+}
+.rc-app-dashboard .rc-artist-profile input,
+.rc-app-dashboard .rc-artist-profile select,
+.rc-app-dashboard .rc-artist-profile textarea {
+  background-color: rgba(255,255,255,.055);
+  border-color: rgba(255,255,255,.095);
+}
+.rc-app-dashboard .rc-artist-profile__actions {
+  margin-top: 14px;
+  padding: 16px 18px;
+}
+
+/* Nested Shopify menu support. */
+.rc-app-menu-group {
+  margin: 0;
+}
+.rc-app-menu-group > summary {
+  list-style: none;
+}
+.rc-app-menu-group > summary::-webkit-details-marker {
+  display: none;
+}
+.rc-app-menu-group__chevron {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  opacity: .5;
+  transition: transform .2s cubic-bezier(.2,.8,.2,1), opacity .2s ease;
+}
+.rc-app-menu-group[open] > summary .rc-app-menu-group__chevron {
+  transform: rotate(90deg);
+  opacity: .9;
+}
+.rc-app-menu-children {
+  display: grid;
+  gap: 2px;
+  margin: 2px 0 6px 21px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(255,255,255,.08);
+  animation: rcAuraMenuIn .2s cubic-bezier(.2,.8,.2,1) both;
+}
+.rc-app-menu-children .rc-app-nav {
+  min-height: 36px;
+  padding: 7px 9px;
+}
+.rc-app-menu-children .rc-app-nav__copy strong {
+  font-size: 11px;
+}
+.rc-app-menu-children--level-3 {
+  margin-left: 15px;
+}
+.rc-app-menu-overview {
+  color: rgba(255,255,255,.5);
+}
+@keyframes rcAuraMenuIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* View transitions. */
+.rc-app-view.rc-app-view--enter {
+  animation: rcAuraViewIn .34s cubic-bezier(.2,.8,.2,1) both;
+}
+@keyframes rcAuraViewIn {
+  from { opacity: 0; transform: translateY(8px) scale(.997); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.rc-app-card,
+.rc-app-stat,
+.rc-app-release-card {
+  animation: rcAuraRise .4s cubic-bezier(.2,.8,.2,1) both;
+}
+@keyframes rcAuraRise {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* More sheet nested menu polish. */
+.rc-app-more-sheet {
+  border-top: 1px solid rgba(255,255,255,.11);
+  background:
+    radial-gradient(circle at 80% 0%, rgba(var(--rc-aura-violet), .12), transparent 45%),
+    rgba(15,15,20,.96);
+  backdrop-filter: blur(30px) saturate(125%);
+  -webkit-backdrop-filter: blur(30px) saturate(125%);
+}
+.rc-app-more-sheet .rc-app-menu-children {
+  margin-left: 16px;
+}
+
+/* Better containment at laptop widths. */
+@media (max-width: 1280px) {
+  .rc-app-dashboard__shell {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+  .rc-app-identity {
+    max-width: 1080px;
+    grid-template-columns: minmax(245px, 1.1fr) repeat(3, minmax(118px, 1fr));
+  }
+  .rc-app-dashboard__layout {
+    grid-template-columns: 205px minmax(0,1fr);
+    gap: 16px;
+  }
+}
+
+@media (max-width: 980px) {
+  .rc-app-identity {
+    max-width: none;
+    grid-template-columns: minmax(250px, 1.15fr) repeat(2, minmax(130px, 1fr));
+  }
+  .rc-app-identity__artist {
+    grid-row: 1 / span 3;
+  }
+  .rc-app-identity__datum {
+    min-height: 54px;
+  }
+  .rc-app-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  .rc-app-stats {
+    grid-template-columns: repeat(3, minmax(0,1fr));
+  }
+  .rc-app-dashboard .rc-artist-profile__layout {
+    grid-template-columns: 1fr;
+  }
+  .rc-app-dashboard .rc-artist-profile__sidebar {
+    position: static;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .rc-app-dashboard__shell {
+    padding: 14px 12px calc(92px + env(safe-area-inset-bottom));
+  }
+  .rc-app-identity {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    border-radius: 16px;
+  }
+  .rc-app-identity__artist {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    min-height: auto;
+    border-bottom: 1px solid rgba(255,255,255,.065);
+  }
+  .rc-app-identity__datum {
+    min-height: 58px;
+    border-left: 0;
+    border-right: 1px solid rgba(255,255,255,.055);
+  }
+  .rc-app-identity__datum:nth-of-type(even) {
+    border-right: 0;
+  }
+  .rc-app-page-head {
+    align-items: flex-start;
+  }
+  .rc-app-page-head .rc-app-primary {
+    min-height: 38px;
+    padding: 8px 12px;
+  }
+  .rc-app-stats {
+    grid-template-columns: repeat(2, minmax(0,1fr));
+  }
+  .rc-app-stat:last-child {
+    grid-column: 1 / -1;
+  }
+  .rc-app-dashboard .rc-artist-profile__sidebar {
+    grid-template-columns: 1fr;
+  }
+  .rc-app-dashboard .rc-artist-profile__switcher {
+    display: grid;
+    gap: 10px;
+  }
+  .rc-app-dashboard .rc-artist-profile__switcher select {
+    max-width: none;
+  }
+  .rc-app-dashboard .rc-artist-profile__grid {
+    grid-template-columns: 1fr;
+  }
+  .rc-app-dashboard .rc-artist-profile__actions {
+    display: grid;
+    gap: 12px;
+  }
+  .rc-app-dashboard .rc-artist-profile__actions .rc-artist-profile__button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rc-app-dashboard *,
+  .rc-app-dashboard *::before,
+  .rc-app-dashboard *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}
