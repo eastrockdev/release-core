@@ -27,6 +27,13 @@ const SETTINGS_GROUPS = [
         primary: true,
       },
       {
+        title: "Release templates",
+        description:
+          "Save reusable release structure, artist assignments, credits, and availability rules without carrying identifiers or distribution state forward.",
+        href: "/app/release-templates",
+        icon: "▤",
+      },
+      {
         title: "Import catalog",
         description:
           "Bring existing Shopify music products into ReleaseCore without duplicating records already imported.",

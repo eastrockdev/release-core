@@ -482,6 +482,23 @@ model ProductionMutation {
   @@index([shop, operation, createdAt])
 }
 
+model ReleaseTemplate {
+  id              String   @id @default(cuid())
+  shop            String
+  name            String
+  description     String?
+  sourceReleaseId String?
+  releaseType     String
+  trackCount      Int      @default(1)
+  blueprint       Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([shop, name])
+  @@index([shop, updatedAt])
+  @@index([shop, releaseType])
+}
+
 model AppSettings {
   id                                     String  @id @default(cuid())
   shop                                   String  @unique

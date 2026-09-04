@@ -1369,6 +1369,30 @@ export default function ReleaseWorkspace() {
       >
         All releases
       </s-button>
+      <s-button
+        slot="secondary-actions"
+        onClick={() =>
+          navigate(
+            `/app/release/new?duplicate=${encodeURIComponent(
+              release.id,
+            )}`,
+          )
+        }
+      >
+        Duplicate release
+      </s-button>
+      <s-button
+        slot="secondary-actions"
+        onClick={() =>
+          navigate(
+            `/app/release-templates?source=${encodeURIComponent(
+              release.id,
+            )}`,
+          )
+        }
+      >
+        Save as template
+      </s-button>
       {release.status === "APPROVED" ||
       (release.distributionStatus &&
         release.distributionStatus !== "NOT_QUEUED") ? (
