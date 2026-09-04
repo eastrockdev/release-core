@@ -126,11 +126,12 @@ export function StalledOperationRecovery() {
   };
 
   return createPortal(
-    <div className="rc-operation-recovery" role="status">
-      <div className="rc-operation-recovery__head">
+    <div style={styles.panel} role="status">
+      <div style={styles.heading}>
+        <span style={styles.icon} aria-hidden="true">↻</span>
         <div>
-          <strong>Stalled operation recovery</strong>
-          <span>
+          <strong style={styles.title}>Stalled operation recovery</strong>
+          <span style={styles.copy}>
             ReleaseCore detected work that has exceeded its normal running
             window. Restarting abandons that attempt and queues a fresh copy
             without removing completed release data.
@@ -138,15 +139,13 @@ export function StalledOperationRecovery() {
         </div>
       </div>
 
-      {error ? (
-        <div className="rc-operation-recovery__error">{error}</div>
-      ) : null}
+      {error ? <div style={styles.error}>{error}</div> : null}
 
       {restartable.map((job) => (
-        <div className="rc-operation-recovery__row" key={job.id}>
-          <div>
-            <strong>{job.label}</strong>
-            <span>
+        <div style={styles.row} key={job.id}>
+          <div style={styles.jobCopy}>
+            <strong style={styles.jobTitle}>{job.label}</strong>
+            <span style={styles.copy}>
               {job.restartReason || "This operation appears stalled."}
             </span>
           </div>
@@ -164,3 +163,69 @@ export function StalledOperationRecovery() {
     host,
   );
 }
+
+const styles = {
+  panel: {
+    display: "grid",
+    gap: 12,
+    border: "1px solid #e6c86c",
+    borderRadius: 14,
+    padding: 14,
+    background: "#fffaf0",
+  },
+  heading: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  icon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    display: "grid",
+    placeItems: "center",
+    flex: "0 0 auto",
+    background: "#fff2c7",
+    color: "#7a5b00",
+    fontSize: 20,
+    lineHeight: 1,
+  },
+  title: {
+    display: "block",
+    color: "#2f2f2f",
+    fontSize: 14,
+    lineHeight: 1.35,
+  },
+  copy: {
+    display: "block",
+    marginTop: 4,
+    color: "#6d6250",
+    fontSize: 12,
+    lineHeight: 1.45,
+  },
+  row: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 14,
+    borderTop: "1px solid #ead9aa",
+    paddingTop: 12,
+  },
+  jobCopy: {
+    minWidth: 0,
+    flex: "1 1 auto",
+  },
+  jobTitle: {
+    display: "block",
+    color: "#343434",
+    fontSize: 13,
+  },
+  error: {
+    borderRadius: 9,
+    padding: "9px 10px",
+    background: "#fff1f0",
+    color: "#8e1f0b",
+    fontSize: 12,
+    lineHeight: 1.4,
+  },
+};
