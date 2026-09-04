@@ -1,3 +1,4 @@
+import db from "../db.server";
 import { creditRoleLabel } from "./releasecore";
 import { shopifyMutationError } from "./operational-errors";
 import { buildEastRockReleaseProductMetafields } from "./east-rock-compatibility.server";
@@ -30,6 +31,39 @@ const CREDIT_ROLES = [
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function hydrateReleaseProductMetadata(release) {
+  if (!release?.id || !release?.shop) return release;
+
+  const hydrated = await db.release.findFirst({
+    where: {
+      id: release.id,
+      shop: release.shop,
+    },
+    include: {
+      artists: {
+        include: { artist: true },
+        orderBy: { position: "asc" },
+      },
+      tracks: {
+        orderBy: { position: "asc" },
+        include: {
+          artists: {
+            include: { artist: true },
+            orderBy: { position: "asc" },
+          },
+          credits: {
+            include: { contributor: true },
+            orderBy: { createdAt: "asc" },
+          },
+          files: true,
+        },
+      },
+    },
+  });
+
+  return hydrated || release;
+}
 
 function metafield(key, type, value) {
   if (value === null || value === undefined || value === "") return null;
@@ -96,12 +130,23 @@ function creditsJson(release) {
 }
 
 function releaseArtist(release) {
-  const primary = assignmentNames(release.artists, "PRIMARY");
-  return primary.join(" & ") || release.artistName || "Various Artists";
+  const primary = uniqueStrings([
+    ...assignmentNames(release.artists, "PRIMARY"),
+    ...(release.tracks || []).flatMap((track) =>
+      assignmentNames(track.artists, "PRIMARY"),
+    ),
+    release.artistName,
+  ]);
+  return primary.join(" & ") || "Various Artists";
 }
 
 function releaseFeaturedArtists(release) {
-  return assignmentNames(release.artists, "FEATURED");
+  return uniqueStrings([
+    ...assignmentNames(release.artists, "FEATURED"),
+    ...(release.tracks || []).flatMap((track) =>
+      assignmentNames(track.artists, "FEATURED"),
+    ),
+  ]);
 }
 
 function releaseTypeLabel(release) {
@@ -173,9 +218,23 @@ export function buildReleaseProductMetafields({ release, settings }) {
 }
 
 async function releaseProductMetafields(admin, release, settings) {
-  const fields = buildReleaseProductMetafields({ release, settings });
-  const genre = await resolveShopifyMusicGenreMetafield(admin, release.primaryGenre);
-  if (genre) fields.push({ namespace: genre.namespace, key: genre.key, type: genre.type, value: genre.value });
+  const metadataRelease = await hydrateReleaseProductMetadata(release);
+  const fields = buildReleaseProductMetafields({
+    release: metadataRelease,
+    settings,
+  });
+  const genre = await resolveShopifyMusicGenreMetafield(
+    admin,
+    metadataRelease.primaryGenre,
+  );
+  if (genre) {
+    fields.push({
+      namespace: genre.namespace,
+      key: genre.key,
+      type: genre.type,
+      value: genre.value,
+    });
+  }
   return fields;
 }
 

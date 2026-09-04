@@ -52,15 +52,28 @@ function joinedCredits(track, role) {
   return values.length ? values.join(", ") : null;
 }
 
+function uniqueEastRockNames(values) {
+  const seen = new Set();
+  const result = [];
+
+  for (const value of values || []) {
+    const name = clean(value);
+    if (!name) continue;
+    const key = name.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(name);
+  }
+
+  return result;
+}
+
 function releaseContributorNames(release, role) {
-  return [
-    ...new Set(
-      (release?.tracks || [])
-        .flatMap((track) => contributorNames(track, role))
-        .map(clean)
-        .filter(Boolean),
+  return uniqueEastRockNames(
+    (release?.tracks || []).flatMap((track) =>
+      contributorNames(track, role),
     ),
-  ];
+  );
 }
 
 function joinedReleaseCredits(release, role) {
@@ -76,9 +89,19 @@ function releaseTypeLabel(type) {
   return clean(type);
 }
 
+function releasePrimaryArtists(release) {
+  return uniqueEastRockNames([
+    ...names(release?.artists, "PRIMARY"),
+    ...(release?.tracks || []).flatMap((track) =>
+      names(track?.artists, "PRIMARY"),
+    ),
+    release?.artistName,
+  ]);
+}
+
 function releaseArtistName(release) {
-  const primary = names(release?.artists, "PRIMARY");
-  return primary.join(" & ") || clean(release?.artistName);
+  const primary = releasePrimaryArtists(release);
+  return primary.length ? primary.join(" & ") : null;
 }
 
 function trackArtistName(release, track) {
@@ -87,18 +110,12 @@ function trackArtistName(release, track) {
 }
 
 function releaseFeaturedArtists(release) {
-  return [
-    ...new Set(
-      [
-        ...names(release?.artists, "FEATURED"),
-        ...(release?.tracks || []).flatMap((track) =>
-          names(track?.artists, "FEATURED"),
-        ),
-      ]
-        .map(clean)
-        .filter(Boolean),
+  return uniqueEastRockNames([
+    ...names(release?.artists, "FEATURED"),
+    ...(release?.tracks || []).flatMap((track) =>
+      names(track?.artists, "FEATURED"),
     ),
-  ];
+  ]);
 }
 
 export const EAST_ROCK_PARENTAL_ADVISORY_CHOICES = [
@@ -287,7 +304,7 @@ export function buildEastRockTrackProductMetafields({ release, track }) {
 export function buildEastRockReleaseProductMetafields({ release }) {
   if (!eastRockCompatibilityEnabled()) return [];
 
-  const primary = names(release?.artists, "PRIMARY");
+  const primary = releasePrimaryArtists(release);
   const featured = releaseFeaturedArtists(release);
   const anyExplicit = (release?.tracks || []).some((track) => track?.explicit);
   const parental = anyExplicit ? "Explicit" : "Non-Explicit";
