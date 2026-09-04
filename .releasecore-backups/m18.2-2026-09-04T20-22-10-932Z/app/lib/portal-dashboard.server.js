@@ -229,10 +229,11 @@ export async function portalDashboardState({
   customerId,
   selectedArtistId = null,
 }) {
-  const [membership, access, artists] = await Promise.all([
+  const [membership, access, artists, releases] = await Promise.all([
     portalMembership({ admin, shop, customerId }),
     portalReleaseAccess({ admin, shop, customerId }),
     fullPortalArtists({ shop, customerId }),
+    listPortalReleases({ shop, customerId, admin, limit: 12 }),
   ]);
 
   if (!membership.allowed) {
@@ -258,21 +259,11 @@ export async function portalDashboardState({
     artists[0] ||
     null;
 
-  const [customer, contributors, releases] = await Promise.all([
-    shopifyCustomerWithLegacyProfile(admin, customerId),
-    contributorsForArtist({
-      shop,
-      artistId: selectedArtist?.id,
-    }),
-    selectedArtist
-      ? listPortalReleases({
-          shop,
-          customerId,
-          admin,
-          artistId: selectedArtist.id,
-        })
-      : Promise.resolve([]),
-  ]);
+  const customer = await shopifyCustomerWithLegacyProfile(admin, customerId);
+  const contributors = await contributorsForArtist({
+    shop,
+    artistId: selectedArtist?.id,
+  });
 
   return {
     membership,
@@ -284,7 +275,6 @@ export async function portalDashboardState({
     stats: releaseStats(releases),
     profileCompletion: profileCompletion(selectedArtist),
     contributors,
-    labelAccount: access.labelAccount || null,
     onboarding: {
       required: artists.length === 0,
       legacyPrefill: artists.length ? null : legacyPrefill(customer),
@@ -393,14 +383,12 @@ export async function savePortalOnboarding({
     });
   }
 
-  const maxArtists = Number(access.artistAccess?.maxArtists || 1);
-  const assignedArtistCount =
-    access.artistAccess?.artists?.length || 0;
-  if (assignedArtistCount >= maxArtists) {
+  if (
+    access.artistAccess?.artists?.length &&
+    !access.artistAccess?.canManageMultipleArtists
+  ) {
     throw publicError(
-      access.labelAccount?.enabled
-        ? `This label/team account can manage up to ${maxArtists} artists.`
-        : "This customer account already has an artist associated with it.",
+      "This customer account already has an artist associated with it.",
       { status: 409 },
     );
   }

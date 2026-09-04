@@ -45,8 +45,6 @@ model Release {
   catalogNumber               String?
   catalogNumberAssignedAt     DateTime?
   ownerCustomerId             String?
-  labelName                   String?
-  pLineHolder                 String?
   shopifyReleaseProductId     String?                @unique
   shopifyReleaseProductHandle String?
   shopifyReleaseBundleOperationId String?
@@ -223,20 +221,6 @@ model PortalCustomerPolicy {
 
   @@unique([shop, customerId])
   @@index([soloArtistId])
-}
-
-model PortalLabelAccount {
-  id          String   @id @default(cuid())
-  shop        String
-  customerId  String
-  name        String?
-  sourceTag   String?
-  artistLimit Int      @default(1)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@unique([shop, customerId])
-  @@index([shop, updatedAt])
 }
 
 model Contributor {
@@ -689,9 +673,6 @@ model AppSettings {
   releaseAlbumRequiredTags  String?
   releaseTagMatchMode       String  @default("ANY")
   releaseAccessLockMessage  String?
-
-  // Label/team customer tiers. JSON array: [{ tag, maxArtists }].
-  portalLabelPlans Json @default("[]")
 
   // Automation / communications. Event lists are comma-separated ReleaseCore event keys.
   artistEmailEvents     String  @default("SUBMITTED,CHANGES_REQUESTED,APPROVED,REJECTED,SUBMITTED_TO_STORES,DELIVERED")

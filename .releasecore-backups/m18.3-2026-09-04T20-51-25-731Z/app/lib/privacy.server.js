@@ -64,14 +64,7 @@ export async function buildCustomerDataExport(request) {
   const customerId = request.customerId;
   const email = request.customerEmail;
 
-  const [
-    releases,
-    contributors,
-    portalAccess,
-    portalPolicy,
-    portalLabel,
-    deliveries,
-  ] = await Promise.all([
+  const [releases, contributors, portalAccess, portalPolicy, deliveries] = await Promise.all([
     db.release.findMany({
       where: { shop: request.shop, ownerCustomerId: customerId },
       orderBy: { createdAt: "asc" },
@@ -84,8 +77,6 @@ export async function buildCustomerDataExport(request) {
         upc: true,
         catalogNumber: true,
         primaryGenre: true,
-        labelName: true,
-        pLineHolder: true,
         releaseDate: true,
         submittedAt: true,
         createdAt: true,
@@ -165,21 +156,6 @@ export async function buildCustomerDataExport(request) {
       where: { shop_customerId: { shop: request.shop, customerId } },
       select: { artistMode: true, createdAt: true, updatedAt: true, soloArtist: { select: { id: true, name: true } } },
     }),
-    db.portalLabelAccount.findUnique({
-      where: {
-        shop_customerId: {
-          shop: request.shop,
-          customerId,
-        },
-      },
-      select: {
-        name: true,
-        sourceTag: true,
-        artistLimit: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    }),
     db.notificationDelivery.findMany({
       where: {
         shop: request.shop,
@@ -200,7 +176,6 @@ export async function buildCustomerDataExport(request) {
     },
     portal: {
       policy: portalPolicy,
-      label: portalLabel,
       artistAccess: portalAccess,
     },
     releases,
@@ -235,7 +210,6 @@ async function redactCustomer(request) {
   await db.$transaction(async (tx) => {
     await tx.portalArtistAccess.deleteMany({ where: { shop: request.shop, customerId } });
     await tx.portalCustomerPolicy.deleteMany({ where: { shop: request.shop, customerId } });
-    await tx.portalLabelAccount.deleteMany({ where: { shop: request.shop, customerId } });
     await tx.release.updateMany({ where: { shop: request.shop, ownerCustomerId: customerId }, data: { ownerCustomerId: null } });
     await tx.contributor.updateMany({ where: { shop: request.shop, ownerCustomerId: customerId }, data: { ownerCustomerId: null } });
 
@@ -309,7 +283,6 @@ async function redactShop(request) {
     await tx.release.deleteMany({ where: { shop: request.shop } });
     await tx.portalArtistAccess.deleteMany({ where: { shop: request.shop } });
     await tx.portalCustomerPolicy.deleteMany({ where: { shop: request.shop } });
-    await tx.portalLabelAccount.deleteMany({ where: { shop: request.shop } });
     await tx.artist.deleteMany({ where: { shop: request.shop } });
     await tx.contributor.deleteMany({ where: { shop: request.shop } });
     await tx.notificationDelivery.deleteMany({ where: { shop: request.shop } });

@@ -32,8 +32,7 @@ const portal = read("app/lib/portal.server.js");
 for (const marker of [
   "export function portalReleaseCustomerWhere",
   "where: portalReleaseCustomerWhere({ shop, customerId, releaseId })",
-  "const accessWhere = portalReleaseCustomerWhere({ shop, customerId });",
-  "AND: [",
+  "where: portalReleaseCustomerWhere({ shop, customerId })",
   '{ ownerCustomerId: customerId }',
   'role: "PRIMARY"',
   "portalAccess:",

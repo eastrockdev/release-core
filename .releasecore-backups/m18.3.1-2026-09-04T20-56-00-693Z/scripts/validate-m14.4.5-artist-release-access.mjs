@@ -39,25 +39,11 @@ need(
   "portalAccess:",
   "Portal release access does not consult PortalArtistAccess.",
 );
-const portalReleaseListUsesArtistAwareAuthorization =
-  portalServer.includes(
-    "where: portalReleaseCustomerWhere({ shop, customerId })",
-  ) ||
-  (
-    portalServer.includes(
-      "const accessWhere = portalReleaseCustomerWhere({ shop, customerId });",
-    ) &&
-    portalServer.includes("const where = artistId") &&
-    portalServer.includes("AND: [") &&
-    portalServer.includes("accessWhere") &&
-    portalServer.includes("where,")
-  );
-
-if (!portalReleaseListUsesArtistAwareAuthorization) {
-  failures.push(
-    "Portal release list does not use artist-aware customer authorization.",
-  );
-}
+need(
+  portalServer,
+  "where: portalReleaseCustomerWhere({ shop, customerId })",
+  "Portal release list is still creator-only.",
+);
 need(
   proxy,
   "getPortalRelease({",

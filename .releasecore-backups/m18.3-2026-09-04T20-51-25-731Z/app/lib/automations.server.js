@@ -3,10 +3,6 @@ import {
   customerCanManageMultipleArtists,
   portalMultiArtistTag,
 } from "./portal-access-rules.server";
-import {
-  portalLabelAccount,
-  resolvePortalLabelPlan,
-} from "./portal-labels.server";
 
 import { AUTOMATION_CHANNELS, parseEventList, normalizeEventKey } from "./automations";
 import { sendAutomationEmail } from "./email-delivery.server";
@@ -94,12 +90,8 @@ export async function portalReleaseAccess({ admin, shop, customerId }) {
 
   const customerTags = customer?.tags || [];
   const multiArtistTag = portalMultiArtistTag();
-  const labelPlan = resolvePortalLabelPlan({
-    tags: customerTags,
-    settings,
-  });
   const canManageMultipleArtists =
-    Boolean(labelPlan) || customerCanManageMultipleArtists(customerTags);
+    customerCanManageMultipleArtists(customerTags);
 
   const assignedArtists = [];
   const seenArtistIds = new Set();
@@ -126,13 +118,6 @@ export async function portalReleaseAccess({ admin, shop, customerId }) {
   const mode = canManageMultipleArtists ? "MULTI" : "SOLO";
   const soloArtist =
     mode === "SOLO" ? assignedArtists[0] || null : null;
-  const labelAccount = await portalLabelAccount({
-    shop,
-    customerId: numericCustomerId,
-    customerTags,
-    settings,
-    artistCount: assignedArtists.length,
-  });
 
   return {
     customerTags,
@@ -150,9 +135,7 @@ export async function portalReleaseAccess({ admin, shop, customerId }) {
       needsArtistSetup: assignedArtists.length === 0,
       canManageMultipleArtists,
       multiArtistTag,
-      maxArtists: labelAccount.maxArtists,
     },
-    labelAccount,
     options: {
       SINGLE: releaseTypeEligibility({
         settings,

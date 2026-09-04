@@ -366,16 +366,8 @@ export function buildTrackProductMetafields({ release, track, settings }) {
     metafield("parental_advisory", "single_line_text_field", track.explicit ? "Explicit" : "Clean"),
     metafield("primary_artist", "single_line_text_field", primary.join(" & ") || release.artistName),
     listMetafield("featured_artists", featured),
-    metafield(
-      "label_name",
-      "single_line_text_field",
-      release.labelName || settings?.defaultLabelName,
-    ),
-    metafield(
-      "copyright_holder",
-      "single_line_text_field",
-      release.pLineHolder || settings?.defaultCopyrightHolder,
-    ),
+    metafield("label_name", "single_line_text_field", settings?.defaultLabelName),
+    metafield("copyright_holder", "single_line_text_field", settings?.defaultCopyrightHolder),
     metafield("lyrics", "multi_line_text_field", track.lyrics),
     listMetafield("songwriters", contributorNames(track, "SONGWRITER")),
     listMetafield("composers", contributorNames(track, "COMPOSER")),

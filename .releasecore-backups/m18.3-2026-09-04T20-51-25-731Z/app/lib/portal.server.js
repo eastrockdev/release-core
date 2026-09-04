@@ -2,11 +2,6 @@ import db from "../db.server";
 import { parseReleaseTimelineFormData } from "./release-timeline.server";
 import { isPublishingRole, isValidReleaseType, starterTitle, typeLabel } from "./releasecore";
 import { configuredCreditRoles } from "./credit-types";
-import {
-  portalLabelAccount,
-  portalLabelMerchantIdentity,
-  validatePortalDistributionChoice,
-} from "./portal-labels.server";
 import { FILE_KINDS, fileContentTypeForKind, isReplaceableKind, stagedResourceForKind, validateUploadDescriptor } from "./releasecore-files";
 import { maybeAutoAssignIsrc } from "./isrc.server";
 import { isrcAssignmentMode } from "./isrc";
@@ -243,12 +238,12 @@ export async function createPortalArtistProfile({
   });
   const assignedArtists = access.artistAccess?.artists || [];
 
-  const maxArtists = Number(access.artistAccess?.maxArtists || 1);
-  if (assignedArtists.length >= maxArtists) {
+  if (
+    assignedArtists.length &&
+    !access.artistAccess?.canManageMultipleArtists
+  ) {
     throw publicError(
-      access.labelAccount?.enabled
-        ? `This label/team account can manage up to ${maxArtists} artists.`
-        : `This account already has access to ${assignedArtists[0]?.name || "an artist"}.`,
+      `This account already has access to ${assignedArtists[0].name}. Add the ${access.artistAccess?.multiArtistTag || "multi-artist"} Shopify customer tag before creating another artist profile.`,
       { status: 409 },
     );
   }
@@ -321,25 +316,10 @@ export async function createPortalRelease({
     const requestedArtistName = String(artistName || "").trim();
 
     if (requestedArtistName) {
-      const normalizedRequestedName =
-        requestedArtistName.toLocaleLowerCase();
-      const assigned = assignedArtists.find(
-        (item) =>
-          String(item?.name || "")
-            .trim()
-            .toLocaleLowerCase() === normalizedRequestedName,
-      );
-      if (!assigned) {
-        throw publicError(
-          "Choose an artist from this label/team roster. Add new artists from Team / Label first.",
-          { status: 400 },
-        );
-      }
-      artist = await db.artist.findFirst({
-        where: {
-          id: assigned.id,
-          shop,
-        },
+      artist = await findOrCreatePortalArtist({
+        shop,
+        customerId,
+        name: requestedArtistName,
       });
     } else if (assignedArtists.length === 1) {
       artist = await db.artist.findFirst({
@@ -367,14 +347,10 @@ export async function createPortalRelease({
     where: { shop },
   });
 
-  const merchantIdentity = portalLabelMerchantIdentity(settings || {});
-
   const release = await db.release.create({
     data: {
       shop,
       ownerCustomerId: customerId,
-      labelName: merchantIdentity.labelName,
-      pLineHolder: merchantIdentity.pLineHolder,
       type: normalizedType,
       title: releaseTitle,
       status: "DRAFT",
@@ -432,7 +408,7 @@ export async function createPortalRelease({
   return release;
 }
 
-export async function updatePortalRelease({ admin, shop, customerId, releaseId, formData }) {
+export async function updatePortalRelease({ shop, customerId, releaseId, formData }) {
   const release = await getPortalRelease({ shop, customerId, releaseId });
   if (!release) throw publicError("Release not found.");
   if (!releaseIsEditable(release.status)) throw publicError("This release is locked while it is under review or finalized.");
@@ -444,45 +420,12 @@ export async function updatePortalRelease({ admin, shop, customerId, releaseId, 
   });
   if (!title) throw publicError("Release title is required.");
   const settings = (await db.appSettings.findUnique({ where: { shop } })) || {};
-  const access = await portalReleaseAccess({
-    admin,
-    shop,
-    customerId,
-  });
-  const labelAccount = access.labelAccount || await portalLabelAccount({
-    shop,
-    customerId,
-    customerTags: access.customerTags || [],
-    settings,
-  });
-  const merchantIdentity = portalLabelMerchantIdentity(settings);
-  const labelName = validatePortalDistributionChoice({
-    value: formData.get("labelName"),
-    options: labelAccount.labelOptions,
-    fallback: release.labelName || merchantIdentity.labelName,
-    fieldLabel: "release label",
-  });
-  const pLineHolder = validatePortalDistributionChoice({
-    value: formData.get("pLineHolder"),
-    options: labelAccount.pLineOptions,
-    fallback: release.pLineHolder || merchantIdentity.pLineHolder,
-    fieldLabel: "℗ line holder",
-  });
   if (releaseDateRaw && !/^\d{4}-\d{2}-\d{2}$/.test(releaseDateRaw)) throw publicError("Choose a valid release date.");
   const leadTime = validateReleaseDateLeadTime(releaseDateRaw || null, settings);
   if (!leadTime.ok) throw publicError(leadTime.message);
   return db.release.update({
     where: { id: release.id },
-    data: {
-      ...timeline,
-      title,
-      primaryGenre,
-      labelName,
-      pLineHolder,
-      releaseDate: releaseDateRaw
-        ? new Date(`${releaseDateRaw}T12:00:00.000Z`)
-        : null,
-    },
+    data: { ...timeline, title, primaryGenre, releaseDate: releaseDateRaw ? new Date(`${releaseDateRaw}T12:00:00.000Z`) : null },
   });
 }
 

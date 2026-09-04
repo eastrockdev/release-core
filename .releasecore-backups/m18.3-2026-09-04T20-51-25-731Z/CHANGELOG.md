@@ -1,11 +1,3 @@
-## ReleaseCore M18.3 — Users & Labels
-
-- Reworked Portal Access into Users & Labels with tag-based artist roster limits.
-- Added label/team self-service naming and roster creation for multi-artist accounts.
-- Added release-specific Release Label and ℗ Line Holder choices, including independent label identities.
-- Updated Shopify music metafields to use release-specific label/P-line values before store defaults.
-- Updated tenant-hardening validation for the secure M18.2 artist-scoped release query.
-
 ## ReleaseCore M18.2 — Native Artist Portal Surfaces
 
 - Replaced the legacy embedded My Releases and Artist Profile app blocks with native ReleaseCore dashboard views.

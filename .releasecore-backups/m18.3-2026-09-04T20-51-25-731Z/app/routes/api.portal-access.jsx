@@ -5,63 +5,14 @@ import {
   getShopifyCustomer,
 } from "../lib/automations.server";
 import { apiErrorResponse } from "../lib/http-security.server";
+import { findShopArtist, findShopRelease } from "../lib/tenant-db.server";
 import {
-  findShopArtist,
-  findShopRelease,
-} from "../lib/tenant-db.server";
-import {
-  normalizePortalLabelPlans,
-  resolvePortalLabelPlan,
-  savePortalLabelName,
-} from "../lib/portal-labels.server";
+  customerCanManageMultipleArtists,
+  portalMultiArtistTag,
+} from "../lib/portal-access-rules.server";
 
 function uniqueIds(values) {
-  return [
-    ...new Set(
-      (values || [])
-        .map((value) => String(value || "").trim())
-        .filter(Boolean),
-    ),
-  ];
-}
-
-function parsePlans(raw) {
-  let parsed;
-  try {
-    parsed = JSON.parse(String(raw || "[]"));
-  } catch {
-    throw new Error("Label access tiers are not valid JSON.");
-  }
-
-  if (!Array.isArray(parsed)) {
-    throw new Error("Label access tiers must be a list.");
-  }
-
-  const seen = new Set();
-  for (const item of parsed) {
-    const tag = String(item?.tag || "").trim();
-    const normalized = tag.toUpperCase();
-    const maxArtists = Number(item?.maxArtists);
-
-    if (!tag) {
-      throw new Error("Every label tier needs a Shopify customer tag.");
-    }
-    if (seen.has(normalized)) {
-      throw new Error(`The label tier tag ${tag} is duplicated.`);
-    }
-    if (
-      !Number.isInteger(maxArtists) ||
-      maxArtists < 1 ||
-      maxArtists > 100
-    ) {
-      throw new Error(
-        `The ${tag} tier needs an artist limit between 1 and 100.`,
-      );
-    }
-    seen.add(normalized);
-  }
-
-  return normalizePortalLabelPlans(parsed);
+  return [...new Set((values || []).map((value) => String(value || "").trim()).filter(Boolean))];
 }
 
 export const action = async ({ request }) => {
@@ -77,78 +28,6 @@ export const action = async ({ request }) => {
     const form = await request.formData();
     const intent = String(form.get("intent") || "");
 
-    if (intent === "save-label-plans") {
-      const plans = parsePlans(form.get("plans"));
-      await db.appSettings.upsert({
-        where: { shop: session.shop },
-        create: {
-          shop: session.shop,
-          portalLabelPlans: plans,
-        },
-        update: {
-          portalLabelPlans: plans,
-        },
-      });
-      return Response.json({
-        ok: true,
-        message: `${plans.length} label access tier${
-          plans.length === 1 ? "" : "s"
-        } saved.`,
-      });
-    }
-
-    if (intent === "save-label-name") {
-      const customerId = customerNumericId(form.get("customerId"));
-      if (!customerId) {
-        return Response.json(
-          { ok: false, error: "Choose a valid Shopify customer." },
-          { status: 400 },
-        );
-      }
-
-      const [customer, settings] = await Promise.all([
-        getShopifyCustomer(admin, customerId),
-        db.appSettings.findUnique({
-          where: { shop: session.shop },
-        }),
-      ]);
-
-      if (!customer) {
-        return Response.json(
-          { ok: false, error: "Shopify customer not found." },
-          { status: 404 },
-        );
-      }
-
-      const plan = resolvePortalLabelPlan({
-        tags: customer.tags,
-        settings: settings || {},
-      });
-      if (!plan) {
-        return Response.json(
-          {
-            ok: false,
-            error:
-              "This customer does not have a configured label/team access tag.",
-          },
-          { status: 409 },
-        );
-      }
-
-      const label = await savePortalLabelName({
-        shop: session.shop,
-        customerId,
-        customerTags: customer.tags,
-        settings: settings || {},
-        name: form.get("name"),
-      });
-
-      return Response.json({
-        ok: true,
-        message: `${label.name} saved as this customer's label/team identity.`,
-      });
-    }
-
     if (intent === "save-artist-access") {
       const customerId = customerNumericId(form.get("customerId"));
       if (!customerId) {
@@ -158,13 +37,7 @@ export const action = async ({ request }) => {
         );
       }
 
-      const [customer, settings] = await Promise.all([
-        getShopifyCustomer(admin, customerId),
-        db.appSettings.findUnique({
-          where: { shop: session.shop },
-        }),
-      ]);
-
+      const customer = await getShopifyCustomer(admin, customerId);
       if (!customer) {
         return Response.json(
           { ok: false, error: "Shopify customer not found." },
@@ -173,19 +46,13 @@ export const action = async ({ request }) => {
       }
 
       const artistIds = uniqueIds(form.getAll("artistId"));
-      const labelPlan = resolvePortalLabelPlan({
-        tags: customer.tags,
-        settings: settings || {},
-      });
-      const maxArtists = labelPlan?.maxArtists || 1;
+      const multiAllowed = customerCanManageMultipleArtists(customer.tags);
 
-      if (artistIds.length > maxArtists) {
+      if (!multiAllowed && artistIds.length > 1) {
         return Response.json(
           {
             ok: false,
-            error: labelPlan
-              ? `This label tier allows up to ${maxArtists} artists.`
-              : "This customer is a single-artist account.",
+            error: `Add the ${portalMultiArtistTag()} Shopify customer tag before assigning more than one artist.`,
           },
           { status: 409 },
         );
@@ -205,8 +72,7 @@ export const action = async ({ request }) => {
         return Response.json(
           {
             ok: false,
-            error:
-              "One or more selected artists do not belong to this shop.",
+            error: "One or more selected artists do not belong to this shop.",
           },
           { status: 400 },
         );
@@ -244,16 +110,12 @@ export const action = async ({ request }) => {
           create: {
             shop: session.shop,
             customerId,
-            artistMode: labelPlan ? "MULTI" : "SOLO",
-            soloArtistId: labelPlan
-              ? null
-              : validIds[0] || null,
+            artistMode: multiAllowed ? "MULTI" : "SOLO",
+            soloArtistId: multiAllowed ? null : validIds[0] || null,
           },
           update: {
-            artistMode: labelPlan ? "MULTI" : "SOLO",
-            soloArtistId: labelPlan
-              ? null
-              : validIds[0] || null,
+            artistMode: multiAllowed ? "MULTI" : "SOLO",
+            soloArtistId: multiAllowed ? null : validIds[0] || null,
           },
         });
       });
@@ -261,9 +123,7 @@ export const action = async ({ request }) => {
       return Response.json({
         ok: true,
         message: validIds.length
-          ? `Artist access saved for ${validIds.length} artist${
-              validIds.length === 1 ? "" : "s"
-            }.`
+          ? `Artist access saved for ${validIds.length} artist${validIds.length === 1 ? "" : "s"}.`
           : "Artist access cleared.",
       });
     }
@@ -287,8 +147,7 @@ export const action = async ({ request }) => {
       }
 
       const artistMode =
-        String(form.get("artistMode") || "MULTI").toUpperCase() ===
-        "SOLO"
+        String(form.get("artistMode") || "MULTI").toUpperCase() === "SOLO"
           ? "SOLO"
           : "MULTI";
       const soloArtistId =
@@ -359,17 +218,15 @@ export const action = async ({ request }) => {
 
     if (intent !== "assign-owner") {
       return Response.json(
-        { ok: false, error: "Unknown Users & Labels action." },
+        { ok: false, error: "Unknown portal access action." },
         { status: 400 },
       );
     }
 
     const releaseId = String(form.get("releaseId") || "");
-    const release = await findShopRelease(
-      session.shop,
-      releaseId,
-      { include: { artists: true } },
-    );
+    const release = await findShopRelease(session.shop, releaseId, {
+      include: { artists: true },
+    });
     if (!release) {
       return Response.json(
         { ok: false, error: "Release not found." },
@@ -383,10 +240,7 @@ export const action = async ({ request }) => {
 
     if (raw) {
       ownerCustomerId = customerNumericId(raw);
-      ownerCustomer = await getShopifyCustomer(
-        admin,
-        ownerCustomerId,
-      );
+      ownerCustomer = await getShopifyCustomer(admin, ownerCustomerId);
       if (!ownerCustomer) {
         return Response.json(
           { ok: false, error: "Shopify customer not found." },
@@ -401,19 +255,6 @@ export const action = async ({ request }) => {
         .map((item) => item.artistId),
     );
 
-    const settings = ownerCustomerId
-      ? await db.appSettings.findUnique({
-          where: { shop: session.shop },
-        })
-      : null;
-
-    const ownerPlan = ownerCustomer
-      ? resolvePortalLabelPlan({
-          tags: ownerCustomer.tags,
-          settings: settings || {},
-        })
-      : null;
-
     await db.$transaction(async (tx) => {
       await tx.release.updateMany({
         where: {
@@ -424,37 +265,11 @@ export const action = async ({ request }) => {
       });
 
       if (ownerCustomerId && primaryArtistIds.length) {
-        if (ownerPlan) {
-          const existingCount =
-            await tx.portalArtistAccess.count({
-              where: {
-                shop: session.shop,
-                customerId: ownerCustomerId,
-              },
-            });
-          const existingIds = new Set(
-            (
-              await tx.portalArtistAccess.findMany({
-                where: {
-                  shop: session.shop,
-                  customerId: ownerCustomerId,
-                },
-                select: { artistId: true },
-              })
-            ).map((item) => item.artistId),
-          );
-          const additions = primaryArtistIds.filter(
-            (artistId) => !existingIds.has(artistId),
-          );
-          if (
-            existingCount + additions.length >
-            ownerPlan.maxArtists
-          ) {
-            throw new Error(
-              `This label tier allows up to ${ownerPlan.maxArtists} artists.`,
-            );
-          }
+        const multiAllowed = customerCanManageMultipleArtists(
+          ownerCustomer?.tags || [],
+        );
 
+        if (multiAllowed) {
           for (const artistId of primaryArtistIds) {
             await tx.portalArtistAccess.upsert({
               where: {
@@ -474,14 +289,13 @@ export const action = async ({ request }) => {
             });
           }
         } else {
-          const existing =
-            await tx.portalArtistAccess.findFirst({
-              where: {
-                shop: session.shop,
-                customerId: ownerCustomerId,
-              },
-              select: { id: true },
-            });
+          const existing = await tx.portalArtistAccess.findFirst({
+            where: {
+              shop: session.shop,
+              customerId: ownerCustomerId,
+            },
+            select: { id: true },
+          });
 
           if (!existing) {
             await tx.portalArtistAccess.upsert({
@@ -526,8 +340,8 @@ export const action = async ({ request }) => {
     });
   } catch (error) {
     return apiErrorResponse(request, error, {
-      context: "users and labels mutation",
-      fallback: "Could not update Users & Labels.",
+      context: "portal access mutation",
+      fallback: "Could not update portal access.",
     });
   }
 };

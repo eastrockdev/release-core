@@ -8,9 +8,6 @@ import { authenticate } from "../shopify.server";
 import { GENRES, LANGUAGES, PRO_OPTIONS } from "../lib/releasecore";
 import { configuredCreditRoles } from "../lib/credit-types";
 import {
-  savePortalLabelName,
-} from "../lib/portal-labels.server";
-import {
   addPortalCredit,
   addPortalTrack,
   completePortalUpload,
@@ -243,18 +240,8 @@ export const loader = async ({ request }) => {
 
     if (path === "portal/releases") {
       const limit = identity.url.searchParams.get("limit");
-      const artistId = identity.url.searchParams.get("artist");
-      const releases = await listPortalReleases({
-        ...identity,
-        admin: context.admin,
-        limit,
-        artistId,
-      });
-      const access = await portalReleaseAccess({
-        admin: context.admin,
-        shop: identity.shop,
-        customerId: identity.customerId,
-      });
+      const releases = await listPortalReleases({ ...identity, admin: context.admin, limit });
+      const access = await portalReleaseAccess({ admin: context.admin, shop: identity.shop, customerId: identity.customerId });
       return Response.json({ ok: true, releases, access });
     }
 
@@ -263,23 +250,10 @@ export const loader = async ({ request }) => {
       const release = await portalReleaseDetail({ ...identity, admin: context.admin, releaseId: detailMatch[1] });
       if (!release) return Response.json({ ok: false, error: "Release not found." }, { status: 404 });
       const portalSettings = await db.appSettings.findUnique({ where: { shop: identity.shop } });
-      const releaseAccess = await portalReleaseAccess({
-        admin: context.admin,
-        shop: identity.shop,
-        customerId: identity.customerId,
-      });
       return Response.json({
         ok: true,
         release,
-        options: {
-          genres: GENRES,
-          languages: LANGUAGES,
-          creditRoles: configuredCreditRoles(portalSettings),
-          proOptions: PRO_OPTIONS,
-          labelOptions: releaseAccess.labelAccount?.labelOptions || [],
-          pLineOptions: releaseAccess.labelAccount?.pLineOptions || [],
-          labelAccount: releaseAccess.labelAccount || null,
-        },
+        options: { genres: GENRES, languages: LANGUAGES, creditRoles: configuredCreditRoles(portalSettings), proOptions: PRO_OPTIONS },
       });
     }
 
@@ -353,77 +327,6 @@ export const action = async ({ request }) => {
       return Response.json({ ok: true, artist, ...dashboard });
     }
 
-    if (path === "portal/label") {
-      const intent = String(formData.get("intent") || "");
-      const access = await portalReleaseAccess({
-        admin: context.admin,
-        shop: identity.shop,
-        customerId: identity.customerId,
-      });
-
-      if (!access.labelAccount?.enabled) {
-        return Response.json(
-          {
-            ok: false,
-            error: "This account is not configured as a label/team account.",
-          },
-          { status: 403 },
-        );
-      }
-
-      if (intent === "save-label") {
-        const settings =
-          (await db.appSettings.findUnique({
-            where: { shop: identity.shop },
-          })) || {};
-        const label = await savePortalLabelName({
-          shop: identity.shop,
-          customerId: identity.customerId,
-          customerTags: access.customerTags || [],
-          settings,
-          name: formData.get("name"),
-        });
-        const dashboard = await portalDashboardState({
-          admin: context.admin,
-          shop: identity.shop,
-          customerId: identity.customerId,
-          selectedArtistId: identity.url.searchParams.get("artist"),
-        });
-        return Response.json({
-          ok: true,
-          label,
-          ...dashboard,
-        });
-      }
-
-      if (intent === "create-artist") {
-        const artist = await createPortalArtistProfile({
-          admin: context.admin,
-          ...identity,
-          name: formData.get("artistName"),
-        });
-        const dashboard = await portalDashboardState({
-          admin: context.admin,
-          shop: identity.shop,
-          customerId: identity.customerId,
-          selectedArtistId: artist.id,
-        });
-        return Response.json({
-          ok: true,
-          artist,
-          ...dashboard,
-        });
-      }
-
-      return Response.json(
-        {
-          ok: false,
-          error: "Unknown label/team action.",
-        },
-        { status: 400 },
-      );
-    }
-
     if (path === "portal/profile") {
       const artist = await updatePortalArtistProfile({ ...identity, formData });
       return Response.json({ ok: true, artist });
@@ -476,12 +379,7 @@ export const action = async ({ request }) => {
       return Response.json({ ok: true, releaseId: release.id });
     }
     if (intent === "update-release") {
-      await updatePortalRelease({
-        admin: context.admin,
-        ...identity,
-        releaseId,
-        formData,
-      });
+      await updatePortalRelease({ ...identity, releaseId, formData });
       return Response.json({ ok: true });
     }
     if (intent === "add-track") {

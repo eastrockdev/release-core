@@ -55,9 +55,9 @@ const SETTINGS_GROUPS = [
       "Configure who can see artist-facing tools and how customer experiences connect to ReleaseCore.",
     items: [
       {
-        title: "Users & Labels",
+        title: "Portal access",
         description:
-          "Manage artist users, label/team accounts, tag-based roster limits, and portal catalog access.",
+          "Assign Shopify customers to artists and control which artist catalog they can access.",
         href: "/app/portal-access",
         icon: "◉",
       },

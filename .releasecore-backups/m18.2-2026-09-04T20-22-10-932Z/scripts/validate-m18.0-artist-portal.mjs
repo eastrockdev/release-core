@@ -36,25 +36,8 @@ expect("app/lib/artist-profile.server.js", "publisherName", "profile publisher n
 expect("app/lib/artist-profile.server.js", "publisherIpi", "profile publisher IPI");
 expect("extensions/releasecore-artist-portal/blocks/artist-dashboard.liquid", '"name": "Artist dashboard"', "dashboard app block");
 expect("extensions/releasecore-artist-portal/blocks/artist-dashboard.liquid", '"type": "link_list"', "merchant supplemental navigation");
-const dashboardBlock = read(
-  "extensions/releasecore-artist-portal/blocks/artist-dashboard.liquid",
-);
-if (
-  !dashboardBlock.includes("data-rc-portal") &&
-  !dashboardBlock.includes("data-rc-native-release-grid")
-) {
-  failures.push(
-    "extensions/releasecore-artist-portal/blocks/artist-dashboard.liquid: missing release workspace",
-  );
-}
-if (
-  !dashboardBlock.includes("data-rc-artist-profile") &&
-  !dashboardBlock.includes("data-rc-native-profile")
-) {
-  failures.push(
-    "extensions/releasecore-artist-portal/blocks/artist-dashboard.liquid: missing artist profile workspace",
-  );
-}
+expect("extensions/releasecore-artist-portal/blocks/artist-dashboard.liquid", "data-rc-portal", "embedded releases workspace");
+expect("extensions/releasecore-artist-portal/blocks/artist-dashboard.liquid", "data-rc-artist-profile", "embedded profile workspace");
 expect("extensions/releasecore-artist-portal/assets/releasecore-dashboard.js", "membershipAttempts", "Flow activation retry");
 expect("extensions/releasecore-artist-portal/assets/releasecore-dashboard.js", "openNewRelease", "new release integration");
 expect("extensions/releasecore-artist-portal/assets/releasecore-dashboard.css", "rc-app-mobile-nav", "mobile dashboard navigation");

@@ -13,8 +13,6 @@
   data-design-mode="{% if rc_design_mode %}true{% else %}false{% endif %}"
   data-proxy-base="{{ block.settings.proxy_path | default: '/apps/releasecore' | escape }}"
   data-login-url="{{ routes.account_login_url }}"
-  data-show-publisher="{% if block.settings.show_publisher %}true{% else %}false{% endif %}"
-  data-show-publisher-ipi="{% if block.settings.show_publisher_ipi %}true{% else %}false{% endif %}"
   {{ block.shopify_attributes }}
 >
   {% if customer or rc_design_mode %}
@@ -35,9 +33,7 @@
             <div class="rc-app-identity__artist-copy">
               <span class="rc-app-identity__eyebrow">Artist workspace</span>
               <strong data-rc-identity-name>Loading artist…</strong>
-              {% if block.settings.show_membership %}
-                <small><span data-rc-membership-label>Membership</span></small>
-              {% endif %}
+              <small><span data-rc-membership-label>Membership</span> · <span data-rc-account-status>Active</span></small>
               <label class="rc-app-identity__picker-wrap" data-rc-identity-picker-wrap hidden>
                 <span class="rc-app-identity__eyebrow">Switch artist</span>
                 <select class="rc-app-identity__picker" data-rc-identity-picker aria-label="Switch artist"></select>
@@ -45,43 +41,29 @@
             </div>
           </div>
 
-          <div class="rc-app-identity__meta">
-            {% if block.settings.show_legal_name %}
-              <div class="rc-app-identity__datum">
-                <span class="rc-app-identity__eyebrow">Legal name</span>
-                <strong data-rc-identity-legal>—</strong>
-              </div>
-            {% endif %}
-            {% if block.settings.show_pro %}
-              <div class="rc-app-identity__datum">
-                <span class="rc-app-identity__eyebrow">PRO</span>
-                <strong data-rc-identity-pro>—</strong>
-              </div>
-            {% endif %}
-            {% if block.settings.show_ipi %}
-              <div class="rc-app-identity__datum">
-                <span class="rc-app-identity__eyebrow">IPI / CAE</span>
-                <strong data-rc-identity-ipi>—</strong>
-              </div>
-            {% endif %}
-            {% if block.settings.show_publisher %}
-              <div class="rc-app-identity__datum">
-                <span class="rc-app-identity__eyebrow">Publisher</span>
-                <strong data-rc-identity-publisher>—</strong>
-              </div>
-            {% endif %}
-            {% if block.settings.show_publisher_ipi %}
-              <div class="rc-app-identity__datum">
-                <span class="rc-app-identity__eyebrow">Publisher IPI</span>
-                <strong data-rc-identity-publisher-ipi>—</strong>
-              </div>
-            {% endif %}
-            {% if block.settings.show_account_status %}
-              <div class="rc-app-identity__datum rc-app-identity__active" data-membership>
-                <span class="rc-app-identity__eyebrow">Account</span>
-                <strong data-rc-account-status>Active</strong>
-              </div>
-            {% endif %}
+          <div class="rc-app-identity__datum">
+            <span class="rc-app-identity__eyebrow">Legal name</span>
+            <strong data-rc-identity-legal>—</strong>
+          </div>
+          <div class="rc-app-identity__datum">
+            <span class="rc-app-identity__eyebrow">PRO</span>
+            <strong data-rc-identity-pro>—</strong>
+          </div>
+          <div class="rc-app-identity__datum">
+            <span class="rc-app-identity__eyebrow">IPI / CAE</span>
+            <strong data-rc-identity-ipi>—</strong>
+          </div>
+          <div class="rc-app-identity__datum" data-mobile-secondary="true">
+            <span class="rc-app-identity__eyebrow">Publisher</span>
+            <strong data-rc-identity-publisher>—</strong>
+          </div>
+          <div class="rc-app-identity__datum" data-mobile-secondary="true">
+            <span class="rc-app-identity__eyebrow">Publisher IPI</span>
+            <strong data-rc-identity-publisher-ipi>—</strong>
+          </div>
+          <div class="rc-app-identity__datum rc-app-identity__active" data-membership>
+            <span class="rc-app-identity__eyebrow">Account</span>
+            <strong>Active</strong>
           </div>
         </header>
 
@@ -220,22 +202,14 @@
                     <span>IPI / CAE</span>
                     <input name="ipi" inputmode="numeric">
                   </label>
-                  {% if block.settings.show_publisher %}
-                    <label class="rc-app-field">
-                      <span>Publisher</span>
-                      <input name="publisherName">
-                    </label>
-                  {% else %}
-                    <input type="hidden" name="publisherName">
-                  {% endif %}
-                  {% if block.settings.show_publisher_ipi %}
-                    <label class="rc-app-field">
-                      <span>Publisher IPI</span>
-                      <input name="publisherIpi" inputmode="numeric">
-                    </label>
-                  {% else %}
-                    <input type="hidden" name="publisherIpi">
-                  {% endif %}
+                  <label class="rc-app-field">
+                    <span>Publisher</span>
+                    <input name="publisherName">
+                  </label>
+                  <label class="rc-app-field">
+                    <span>Publisher IPI</span>
+                    <input name="publisherIpi" inputmode="numeric">
+                  </label>
                   <label class="rc-app-field">
                     <span>Website</span>
                     <input name="websiteUrl" type="url" placeholder="https://">
@@ -312,34 +286,31 @@
             <section class="rc-app-view" data-rc-view="releases" hidden>
               <div class="rc-app-page-head">
                 <div>
-                  <span class="rc-app-eyebrow">ReleaseCore catalog</span>
+                  <span class="rc-app-eyebrow">ReleaseCore</span>
                   <h1>My Releases</h1>
-                  <p>Everything for the selected artist, in one ReleaseCore workspace.</p>
+                  <p>Create, edit and follow every release through review and distribution.</p>
                 </div>
                 <button type="button" class="rc-app-primary" data-action="new-release">+ New release</button>
               </div>
 
-              <div class="rc-native-release-library" data-rc-native-release-library>
-                <div class="rc-native-release-toolbar">
-                  <div class="rc-native-release-filters" role="group" aria-label="Filter releases">
-                    <button type="button" class="rc-native-filter" data-native-release-filter="ALL" data-active="true" aria-pressed="true">All</button>
-                    <button type="button" class="rc-native-filter" data-native-release-filter="ACTIVE" aria-pressed="false">Active</button>
-                    <button type="button" class="rc-native-filter" data-native-release-filter="CHANGES" aria-pressed="false">Needs changes</button>
-                    <button type="button" class="rc-native-filter" data-native-release-filter="APPROVED" aria-pressed="false">Approved</button>
-                    <button type="button" class="rc-native-filter" data-native-release-filter="LIVE" aria-pressed="false">Live</button>
-                  </div>
-                  <div class="rc-native-release-tools">
-                    <label class="rc-native-release-search">
-                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-                      <input type="search" data-rc-native-release-search placeholder="Search releases" aria-label="Search releases">
-                    </label>
-                    <span data-rc-native-release-count>0 releases</span>
-                  </div>
+              <div
+                class="rc-portal"
+                data-rc-portal
+                data-appearance="dark"
+                data-layout="contained"
+                data-accent="#9c7cff"
+                data-proxy-base="{{ block.settings.proxy_path | default: '/apps/releasecore' | escape }}"
+                data-logged-in="{% if customer %}true{% else %}false{% endif %}"
+                data-preview-all="{% if rc_design_mode %}true{% else %}false{% endif %}"
+                data-customer-name="{% if customer %}{{ customer.name | escape }}{% endif %}"
+                data-show-add="true"
+                style="--rc-accent:#9c7cff;"
+              >
+                <div class="rc-shell rc-library-shell">
+                  <div data-rc-portal-body></div>
+                  <div data-rc-modal-host></div>
                 </div>
-                <div class="rc-native-release-grid" data-rc-native-release-grid></div>
               </div>
-
-              <div class="rc-native-release-workspace" data-rc-native-release-workspace hidden></div>
             </section>
 
             <section class="rc-app-view" data-rc-view="profile" hidden>
@@ -347,10 +318,105 @@
                 <div>
                   <span class="rc-app-eyebrow">ReleaseCore identity</span>
                   <h1>Artist Profile</h1>
-                  <p>One authoritative artist identity for releases, rights information and storefront experiences.</p>
+                  <p>This ReleaseCore artist record is now the authoritative source for the portal.</p>
                 </div>
               </div>
-              <div data-rc-native-profile></div>
+
+              <section
+                class="rc-artist-profile"
+                data-rc-artist-profile
+                data-appearance="dark"
+                data-design-mode="{% if rc_design_mode %}true{% else %}false{% endif %}"
+                data-endpoint="{{ block.settings.proxy_path | default: '/apps/releasecore' | escape }}/portal/profile"
+                data-saved-message="Artist profile saved."
+                data-image-saved-message="Artist photo saved."
+                data-error-message="ReleaseCore could not update the artist profile."
+                data-no-profile-message="Create your artist profile from Dashboard first."
+                data-saving-message="Saving artist profile…"
+                data-uploading-message="Uploading photo…"
+                data-complete-suffix="complete"
+                style="--rcp-accent:#9c7cff;"
+              >
+                <div class="rc-artist-profile__shell">
+                  <div class="rc-artist-profile__notice" data-profile-status role="status" aria-live="polite">Loading artist profile…</div>
+
+                  <form class="rc-artist-profile__form" data-profile-form hidden>
+                    <label class="rc-artist-profile__switcher" data-artist-picker hidden>
+                      <span><strong>Choose artist</strong><small>Switch between the artists this customer can manage.</small></span>
+                      <select data-profile-select aria-label="Choose artist"></select>
+                    </label>
+                    <input type="hidden" name="artistId">
+
+                    <div class="rc-artist-profile__layout">
+                      <aside class="rc-artist-profile__sidebar">
+                        <article class="rc-artist-profile__card rc-artist-profile__identity-card">
+                          <div class="rc-artist-profile__avatar" data-profile-avatar aria-hidden="true">A</div>
+                          <span class="rc-artist-profile__eyebrow">Public identity</span>
+                          <h3 data-profile-name>Artist</h3>
+                          <p data-profile-summary data-fallback="Add rights and identity information to strengthen this profile.">Add rights and identity information to strengthen this profile.</p>
+                          <label class="rc-artist-profile__button rc-artist-profile__button--secondary">
+                            <span data-profile-upload-label>Upload photo</span>
+                            <input type="file" accept="image/jpeg,image/png,image/webp" data-profile-image hidden>
+                          </label>
+                          <small class="rc-artist-profile__photo-help">JPG, PNG or WebP up to 10 MB.</small>
+                        </article>
+
+                        <article class="rc-artist-profile__card rc-artist-profile__progress-card">
+                          <div class="rc-artist-profile__card-heading"><div><h3>Profile strength</h3><p>Complete core identity and destination fields.</p></div></div>
+                          <div class="rc-artist-profile__progress"><span data-profile-progress></span></div>
+                          <strong class="rc-artist-profile__progress-label" data-profile-progress-label></strong>
+                          <span data-profile-completion hidden></span>
+                        </article>
+                      </aside>
+
+                      <div class="rc-artist-profile__main">
+                        <article class="rc-artist-profile__card">
+                          <div class="rc-artist-profile__card-heading"><div><h3>Identity & rights</h3><p>Artist, publishing and contact information.</p></div></div>
+                          <div class="rc-artist-profile__grid">
+                            <label class="rc-artist-profile__field"><span>Artist / stage name</span><input name="name" required readonly data-profile-name-input><small class="rc-artist-profile__field-help" data-profile-name-lock>Artist name changes may be locked by ReleaseCore settings.</small></label>
+                            <label class="rc-artist-profile__field"><span>Legal name</span><input name="legalName"></label>
+                            <label class="rc-artist-profile__field"><span>Email</span><input name="email" type="email"></label>
+                            <label class="rc-artist-profile__field"><span>PRO</span><input name="pro"></label>
+                            <label class="rc-artist-profile__field"><span>IPI / CAE</span><input name="ipi" inputmode="numeric"></label>
+                            <label class="rc-artist-profile__field"><span>Publisher</span><input name="publisherName"></label>
+                            <label class="rc-artist-profile__field"><span>Publisher IPI</span><input name="publisherIpi" inputmode="numeric"></label>
+                            <label class="rc-artist-profile__field"><span>Website</span><input name="websiteUrl" type="url" placeholder="https://"></label>
+                          </div>
+                        </article>
+
+                        <article class="rc-artist-profile__card">
+                          <div class="rc-artist-profile__card-heading"><div><h3>Biography</h3><p>Public-facing artist context.</p></div></div>
+                          <label class="rc-artist-profile__field rc-artist-profile__field--visually-labeled"><span>Biography</span><textarea name="biography" rows="7"></textarea></label>
+                        </article>
+
+                        <article class="rc-artist-profile__card">
+                          <div class="rc-artist-profile__card-heading"><div><h3>Music platforms</h3><p>Connect the artist's primary DSP profiles.</p></div></div>
+                          <div class="rc-artist-profile__grid">
+                            <label class="rc-artist-profile__field"><span>Spotify</span><input name="spotifyUrl" type="url" placeholder="https://open.spotify.com/artist/"></label>
+                            <label class="rc-artist-profile__field"><span>Apple Music</span><input name="appleMusicUrl" type="url" placeholder="https://music.apple.com/artist/"></label>
+                          </div>
+                        </article>
+
+                        <article class="rc-artist-profile__card">
+                          <div class="rc-artist-profile__card-heading"><div><h3>Social presence</h3><p>Optional public destinations.</p></div></div>
+                          <div class="rc-artist-profile__grid">
+                            <label class="rc-artist-profile__field"><span>Instagram</span><input name="instagramUrl" type="url"></label>
+                            <label class="rc-artist-profile__field"><span>Facebook</span><input name="facebookUrl" type="url"></label>
+                            <label class="rc-artist-profile__field"><span>TikTok</span><input name="tiktokUrl" type="url"></label>
+                            <label class="rc-artist-profile__field"><span>YouTube</span><input name="youtubeUrl" type="url"></label>
+                            <label class="rc-artist-profile__field rc-artist-profile__field--wide"><span>X</span><input name="xUrl" type="url"></label>
+                          </div>
+                        </article>
+                      </div>
+                    </div>
+
+                    <div class="rc-artist-profile__actions">
+                      <div><strong>ReleaseCore artist record</strong><span>Changes here are used throughout the artist portal.</span></div>
+                      <button class="rc-artist-profile__button" type="submit">Save artist profile</button>
+                    </div>
+                  </form>
+                </div>
+              </section>
             </section>
 
             <section class="rc-app-view" data-rc-view="contributors" hidden>
@@ -444,6 +510,13 @@
   {% endif %}
 </section>
 
+{% # theme-check-disable AssetSizeJavaScript %}
+<link rel="stylesheet" href="{{ 'releasecore-portal.css' | asset_url }}">
+<link rel="stylesheet" href="{{ 'releasecore-artist-profile.css' | asset_url }}">
+<script src="{{ 'releasecore-portal.js' | asset_url }}" defer></script>
+<script src="{{ 'releasecore-artist-profile.js' | asset_url }}" defer></script>
+{% # theme-check-enable AssetSizeJavaScript %}
+
 {% schema %}
 {
   "name": "Artist dashboard",
@@ -451,56 +524,6 @@
   "stylesheet": "releasecore-dashboard.css",
   "javascript": "releasecore-dashboard.js",
   "settings": [
-    {
-      "type": "header",
-      "content": "Artist header"
-    },
-    {
-      "type": "checkbox",
-      "id": "show_legal_name",
-      "label": "Show legal name",
-      "default": true
-    },
-    {
-      "type": "checkbox",
-      "id": "show_pro",
-      "label": "Show PRO",
-      "default": true
-    },
-    {
-      "type": "checkbox",
-      "id": "show_ipi",
-      "label": "Show IPI / CAE",
-      "default": true
-    },
-    {
-      "type": "checkbox",
-      "id": "show_publisher",
-      "label": "Show publisher",
-      "default": false
-    },
-    {
-      "type": "checkbox",
-      "id": "show_publisher_ipi",
-      "label": "Show publisher IPI",
-      "default": false
-    },
-    {
-      "type": "checkbox",
-      "id": "show_account_status",
-      "label": "Show account status",
-      "default": true
-    },
-    {
-      "type": "checkbox",
-      "id": "show_membership",
-      "label": "Show membership label",
-      "default": true
-    },
-    {
-      "type": "header",
-      "content": "Navigation"
-    },
     {
       "type": "link_list",
       "id": "supplemental_menu",

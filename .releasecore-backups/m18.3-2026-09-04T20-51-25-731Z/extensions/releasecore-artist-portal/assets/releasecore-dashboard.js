@@ -221,19 +221,6 @@
           ipi: "000000001",
           relationshipType: "REGULAR",
         }],
-        labelAccount: {
-          enabled: true,
-          name: "Independent Label",
-          sourceTag: "RLIAB_MULTI_ARTIST",
-          maxArtists: 5,
-          artistCount: 1,
-          remainingArtists: 4,
-          canCreateArtist: true,
-          merchantLabelName: "East Rock Entertainment",
-          merchantPLineHolder: "East Rock Entertainment",
-          labelOptions: ["East Rock Entertainment", "Independent Label"],
-          pLineOptions: ["East Rock Entertainment", "Independent Label"],
-        },
         onboarding: {
           required: false,
           legacyPrefill: null,
@@ -241,114 +228,6 @@
         },
       };
     };
-
-    const ensureLabelSurface = () => {
-      if (root.querySelector("[data-rc-view='label']")) return;
-
-      const corePanel = root.querySelector(".rc-app-sidebar__panel");
-      if (corePanel) {
-        corePanel.insertAdjacentHTML(
-          "beforeend",
-          `
-            <button type="button" class="rc-app-nav rc-app-label-nav" data-rc-nav="label" data-rc-label-nav hidden>
-              <span class="rc-app-nav__icon">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8h16v11H4zM8 8V5h8v3M8 13h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              </span>
-              <span class="rc-app-nav__copy"><strong>Team / Label</strong><small>Roster & distribution identity</small></span>
-            </button>`,
-        );
-      }
-
-      if (moreSheet) {
-        const firstExternal = moreSheet.querySelector(".rc-app-menu-group, a.rc-app-nav");
-        const mobile = document.createElement("button");
-        mobile.type = "button";
-        mobile.className = "rc-app-nav rc-app-label-nav";
-        mobile.dataset.rcNav = "label";
-        mobile.dataset.rcLabelNav = "";
-        mobile.hidden = true;
-        mobile.innerHTML =
-          '<span class="rc-app-nav__copy"><strong>Team / Label</strong></span>';
-        if (firstExternal) moreSheet.insertBefore(mobile, firstExternal);
-        else moreSheet.append(mobile);
-      }
-
-      const mainHost = root.querySelector("[data-rc-dashboard-scroll]");
-      if (mainHost) {
-        mainHost.insertAdjacentHTML(
-          "beforeend",
-          `
-            <section class="rc-app-view rc-app-label-view" data-rc-view="label" hidden>
-              <div class="rc-app-page-head">
-                <div>
-                  <span class="rc-app-eyebrow">ReleaseCore label workspace</span>
-                  <h1>Team / Label</h1>
-                  <p>Manage your roster and the identity this account can use on releases.</p>
-                </div>
-              </div>
-
-              <div data-rc-native-label>
-                <section class="rc-app-label-hero">
-                  <div>
-                    <span class="rc-app-eyebrow">Independent label account</span>
-                    <h2 data-native-label-name>Your label</h2>
-                    <p>Manage multiple artist identities while each artist keeps an independent ReleaseCore profile and catalog.</p>
-                    <span class="rc-app-label-badge" data-native-label-tag></span>
-                  </div>
-                  <div class="rc-app-label-capacity">
-                    <span>Roster capacity</span>
-                    <strong data-native-label-capacity>0 / 0</strong>
-                    <small data-native-label-remaining>0 slots remaining</small>
-                  </div>
-                </section>
-
-                <div class="rc-app-label-grid">
-                  <article class="rc-native-panel">
-                    <div class="rc-native-panel__head">
-                      <div><span class="rc-app-eyebrow">Identity</span><h3>Team / label name</h3></div>
-                    </div>
-                    <form class="rc-native-form" data-native-label-form>
-                      <input type="hidden" name="intent" value="save-label">
-                      <label class="rc-native-field rc-native-field--wide">
-                        <span>Label or team name</span>
-                        <input name="name" data-native-label-name-input placeholder="Your independent label">
-                        <small>This becomes an optional Release Label and ℗ Line identity for releases owned by this account.</small>
-                      </label>
-                      <div class="rc-native-form-actions">
-                        <span data-native-form-message></span>
-                        <button type="submit" class="rc-app-primary">Save label</button>
-                      </div>
-                    </form>
-                  </article>
-
-                  <article class="rc-native-panel">
-                    <div class="rc-native-panel__head">
-                      <div><span class="rc-app-eyebrow">Roster</span><h3>Artists</h3></div>
-                      <span data-native-label-roster-count>0 artists</span>
-                    </div>
-                    <div class="rc-app-label-roster" data-native-label-roster></div>
-                    <form class="rc-native-form" data-native-label-artist-form>
-                      <input type="hidden" name="intent" value="create-artist">
-                      <div class="rc-native-form-grid" style="margin-top:12px;">
-                        <label class="rc-native-field rc-native-field--wide">
-                          <span>Add artist</span>
-                          <input name="artistName" required placeholder="Artist / stage name">
-                        </label>
-                      </div>
-                      <div class="rc-native-form-actions">
-                        <span data-native-form-message></span>
-                        <button type="submit" class="rc-app-secondary" data-native-label-add-artist>Add artist to roster</button>
-                      </div>
-                    </form>
-                  </article>
-                </div>
-              </div>
-            </section>`,
-        );
-      }
-    };
-
-    ensureLabelSurface();
 
     const currentArtist = () => state.data?.selectedArtist || null;
     const currentArtistId = () =>
@@ -479,86 +358,6 @@
       }).join("");
     };
 
-    const renderLabelAccount = () => {
-      const label = state.data?.labelAccount;
-
-      root.querySelectorAll("[data-rc-label-nav]").forEach((node) => {
-        node.hidden = !label?.enabled;
-      });
-
-      if (!label?.enabled) {
-        if (state.view === "label") openView("dashboard", false);
-        return;
-      }
-
-      text("[data-native-label-name]", label.name, "Set your label name");
-      text(
-        "[data-native-label-capacity]",
-        `${Number(label.artistCount || 0)} / ${Number(label.maxArtists || 1)}`,
-      );
-      text(
-        "[data-native-label-remaining]",
-        `${Number(label.remainingArtists || 0)} slot${
-          Number(label.remainingArtists || 0) === 1 ? "" : "s"
-        } remaining`,
-      );
-      text(
-        "[data-native-label-tag]",
-        label.sourceTag ? `Access · ${label.sourceTag}` : "Label account",
-      );
-      text(
-        "[data-native-label-roster-count]",
-        `${(state.data?.artists || []).length} artist${
-          (state.data?.artists || []).length === 1 ? "" : "s"
-        }`,
-      );
-
-      const input = root.querySelector("[data-native-label-name-input]");
-      if (input && document.activeElement !== input) {
-        input.value = label.name || "";
-      }
-
-      const roster = root.querySelector("[data-native-label-roster]");
-      if (roster) {
-        const artists = state.data?.artists || [];
-        roster.innerHTML = artists.length
-          ? artists
-              .map(
-                (artist) => `
-                  <div class="rc-app-label-roster__item">
-                    <span
-                      class="rc-app-label-roster__avatar"
-                      style="${
-                        artist.imageUrl
-                          ? `background-image:url('${attr(artist.imageUrl)}')`
-                          : ""
-                      }"
-                    >${esc((artist.name || "A").slice(0, 1).toUpperCase())}</span>
-                    <span>
-                      <strong>${esc(artist.name)}</strong>
-                      <small>${esc(
-                        artist.legalName || "ReleaseCore artist identity",
-                      )}</small>
-                    </span>
-                  </div>`,
-              )
-              .join("")
-          : '<p class="rc-native-muted">No artists are assigned yet.</p>';
-      }
-
-      const addButton = root.querySelector("[data-native-label-add-artist]");
-      const artistInput = root.querySelector(
-        "[data-native-label-artist-form] input[name='artistName']",
-      );
-      if (addButton) {
-        addButton.disabled = !label.canCreateArtist;
-        addButton.textContent = label.canCreateArtist
-          ? "Add artist to roster"
-          : "Roster limit reached";
-      }
-      if (artistInput) artistInput.disabled = !label.canCreateArtist;
-    };
-
     const fillOnboarding = () => {
       if (!onboardingForm) return;
       const prefill = state.data?.onboarding?.legacyPrefill || {};
@@ -576,14 +375,7 @@
       if (onboarding) onboarding.hidden = !required;
       if (main) main.dataset.onboardingRequired = required ? "true" : "false";
       root.querySelectorAll("[data-rc-nav]").forEach((button) => {
-        const isLabelSetup =
-          button.dataset.rcNav === "label" &&
-          Boolean(state.data?.labelAccount?.enabled);
-        if (button.dataset.rcNav === "dashboard" || isLabelSetup) {
-          button.disabled = false;
-          button.removeAttribute("aria-disabled");
-          return;
-        }
+        if (button.dataset.rcNav === "dashboard") return;
         button.disabled = required;
         button.setAttribute("aria-disabled", String(required));
       });
@@ -687,13 +479,7 @@
     };
 
     const openView = (view, updateHash = true) => {
-      if (
-        state.data?.onboarding?.required &&
-        view !== "dashboard" &&
-        !(view === "label" && state.data?.labelAccount?.enabled)
-      ) {
-        return;
-      }
+      if (state.data?.onboarding?.required && view !== "dashboard") return;
       state.view = view;
       let visible = null;
       root.querySelectorAll("[data-rc-view]").forEach((panel) => {
@@ -1083,25 +869,6 @@
                       <input name="releaseDate" type="date" value="${attr(dateInput(release.releaseDate))}" ${release.editable ? "" : "readonly"}>
                       ${release.releaseDatePolicy?.enabled ? `<small>Minimum lead time: ${Number(release.releaseDatePolicy.minimumDays || 0)} days.</small>` : ""}
                     </label>
-                    ${options.labelAccount?.enabled ? `
-                      <label class="rc-native-field rc-native-field--identity-choice">
-                        <span>Release label</span>
-                        <select name="labelName" ${release.editable ? "" : "disabled"}>
-                          ${(options.labelOptions || [release.labelName].filter(Boolean)).map((value) => `
-                            <option value="${attr(value)}"${value === (release.labelName || options.labelOptions?.[0]) ? " selected" : ""}>${esc(value)}</option>
-                          `).join("")}
-                        </select>
-                      </label>
-                      <label class="rc-native-field rc-native-field--identity-choice">
-                        <span>℗ line holder</span>
-                        <select name="pLineHolder" ${release.editable ? "" : "disabled"}>
-                          ${(options.pLineOptions || [release.pLineHolder].filter(Boolean)).map((value) => `
-                            <option value="${attr(value)}"${value === (release.pLineHolder || options.pLineOptions?.[0]) ? " selected" : ""}>${esc(value)}</option>
-                          `).join("")}
-                        </select>
-                      </label>
-                      <div class="rc-native-release-identity-note">Choose East Rock's distribution identity or this account's saved independent label identity for this release.</div>`
-                      : ""}
                   </div>
                   ${release.editable ? `
                     <div class="rc-native-form-actions">
@@ -1190,8 +957,6 @@
           releaseDatePolicy: { enabled: false },
           primaryGenre: "Hip-Hop/Rap",
           catalogNumber: "ERE260001",
-          labelName: "East Rock Entertainment",
-          pLineHolder: "East Rock Entertainment",
           artists: [
             { role: "PRIMARY", artist: { name: currentArtist()?.name || "Artist" } },
           ],
@@ -1220,12 +985,6 @@
           languages: ["English", "Instrumental / No linguistic content"],
           creditRoles: ["SONGWRITER", "COMPOSER", "PRODUCER"],
           proOptions: ["BMI", "ASCAP", "SESAC"],
-          labelOptions: ["East Rock Entertainment", "Independent Label"],
-          pLineOptions: ["East Rock Entertainment", "Independent Label"],
-          labelAccount: {
-            enabled: true,
-            name: "Independent Label",
-          },
         },
       };
     };
@@ -2043,7 +1802,6 @@
       renderRecent();
       renderProfileHealth();
       renderContributors();
-      renderLabelAccount();
       renderOnboarding();
       renderNativeReleases();
 
@@ -2058,7 +1816,7 @@
         void openRelease(id);
       } else if (initialHash.startsWith("#rc-view-")) {
         const requested = initialHash.replace("#rc-view-", "");
-        if (["dashboard", "releases", "profile", "contributors", "label"].includes(requested)) {
+        if (["dashboard", "releases", "profile", "contributors"].includes(requested)) {
           openView(requested, false);
         }
       }
@@ -2269,79 +2027,6 @@
       if (profileForm) {
         event.preventDefault();
         void saveNativeProfile(profileForm);
-        return;
-      }
-
-      const labelForm = event.target.closest("[data-native-label-form]");
-      if (labelForm) {
-        event.preventDefault();
-        if (designMode) {
-          formFeedback(
-            labelForm,
-            "Theme editor preview is read-only.",
-            "error",
-          );
-          return;
-        }
-        const button = labelForm.querySelector("button[type='submit']");
-        if (button) button.disabled = true;
-        formFeedback(labelForm, "Saving label…");
-        void requestJson(`${proxy}/portal/label`, {
-          method: "POST",
-          body: new FormData(labelForm),
-        })
-          .then(async () => {
-            formFeedback(labelForm, "Label saved.", "success");
-            await loadDashboard(true, { preserveView: true });
-          })
-          .catch((error) =>
-            formFeedback(labelForm, error.message, "error"),
-          )
-          .finally(() => {
-            if (button) button.disabled = false;
-          });
-        return;
-      }
-
-      const labelArtistForm = event.target.closest(
-        "[data-native-label-artist-form]",
-      );
-      if (labelArtistForm) {
-        event.preventDefault();
-        if (designMode) {
-          formFeedback(
-            labelArtistForm,
-            "Theme editor preview is read-only.",
-            "error",
-          );
-          return;
-        }
-        const button = labelArtistForm.querySelector(
-          "button[type='submit']",
-        );
-        if (button) button.disabled = true;
-        formFeedback(labelArtistForm, "Creating artist…");
-        void requestJson(`${proxy}/portal/label`, {
-          method: "POST",
-          body: new FormData(labelArtistForm),
-        })
-          .then(async (result) => {
-            formFeedback(labelArtistForm, "Artist added.", "success");
-            labelArtistForm.reset();
-            state.profilePayload = null;
-            await loadDashboard(true, { preserveView: true });
-            const picker = root.querySelector("[data-rc-identity-picker]");
-            if (picker && result.artist?.id) {
-              picker.value = result.artist.id;
-              await loadDashboard(true, { preserveView: true });
-            }
-          })
-          .catch((error) =>
-            formFeedback(labelArtistForm, error.message, "error"),
-          )
-          .finally(() => {
-            if (button) button.disabled = false;
-          });
       }
     });
 
