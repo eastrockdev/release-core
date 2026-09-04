@@ -1,4 +1,5 @@
 import { creditRoleLabel } from "./releasecore";
+import { shopifyMutationError } from "./operational-errors";
 import {
   applyDefaultAlbumPublication,
   DIGITAL_MUSIC_CATEGORY_ID,
@@ -462,7 +463,13 @@ async function startBundleUpdate(admin, productId, release) {
   const json = await response.json();
   const payload = json?.data?.productBundleUpdate;
   const errors = payload?.userErrors || [];
-  if (errors.length) throw new Error(errors.map((error) => error.message).join(" "));
+  if (errors.length) {
+    throw shopifyMutationError(
+      errors.map((error) => error.message).join(" "),
+      errors,
+      { status: 409 },
+    );
+  }
   if (!payload?.productBundleOperation?.id) throw new Error("Shopify did not start the fixed bundle update.");
   return payload.productBundleOperation;
 }
@@ -497,7 +504,13 @@ async function waitForBundleOperation(admin, operationId, { attempts = 24, delay
 
 function throwOperationErrors(operation) {
   const errors = operation?.userErrors || [];
-  if (errors.length) throw new Error(errors.map((error) => error.message).join(" "));
+  if (errors.length) {
+    throw shopifyMutationError(
+      errors.map((error) => error.message).join(" "),
+      errors,
+      { status: 409 },
+    );
+  }
 }
 
 async function updateReleaseProductMetadata({ admin, product, release, settings, price, assignTemplate = false }) {
@@ -527,7 +540,13 @@ async function updateReleaseProductMetadata({ admin, product, release, settings,
   const json = await response.json();
   const payload = json?.data?.productUpdate;
   const errors = payload?.userErrors || [];
-  if (errors.length) throw new Error(errors.map((error) => error.message).join(" "));
+  if (errors.length) {
+    throw shopifyMutationError(
+      errors.map((error) => error.message).join(" "),
+      errors,
+      { status: 409 },
+    );
+  }
 
   await deleteStaleReleaseCoreMetafields(admin, product.id, product.metafields?.nodes || [], desired);
   await tagsAdd(admin, product.id, releaseTags(release));
@@ -580,7 +599,13 @@ async function createStandardFallbackProduct({ admin, release, settings, price, 
   const json = await response.json();
   const payload = json?.data?.productCreate;
   const errors = payload?.userErrors || [];
-  if (errors.length) throw new Error(errors.map((error) => error.message).join(" "));
+  if (errors.length) {
+    throw shopifyMutationError(
+      errors.map((error) => error.message).join(" "),
+      errors,
+      { status: 409 },
+    );
+  }
   const product = payload?.product;
   if (!product?.id) throw new Error("Shopify did not return the Album/EP product.");
   if (onCreated) await onCreated(product);

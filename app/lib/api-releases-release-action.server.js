@@ -68,8 +68,13 @@ async function getWorkflowRelease(id, shop) {
 export const action = async ({ request, params }) => {
   if (request.method !== "POST") return Response.json({ ok: false, error: "Method not allowed." }, { status: 405 });
 
+  let issueShop = null;
+  let issueIntent = "release mutation";
+  let issueTrackId = null;
+
   try {
     const { admin, session } = await authenticate.admin(request);
+    issueShop = session.shop;
     const release = await getOwnedRelease(params.releaseId, session.shop, {
       tracks: { orderBy: { position: "asc" } },
       artists: { orderBy: { position: "asc" } },
@@ -78,6 +83,10 @@ export const action = async ({ request, params }) => {
 
     const formData = await request.formData();
     const intent = String(formData.get("intent") || "");
+    issueIntent = intent || "release mutation";
+    issueTrackId =
+      String(formData.get("trackId") || "").trim() ||
+      null;
     const appSettings = await db.appSettings.findUnique({ where: { shop: session.shop } });
 
     if (intent === "submit-release") {
@@ -533,6 +542,14 @@ export const action = async ({ request, params }) => {
 
     return Response.json({ ok: false, error: "Unknown release action." }, { status: 400 });
   } catch (error) {
-    return apiErrorResponse(request, error, { context: "release mutation", fallback: "ReleaseCore could not save this change." });
+    return apiErrorResponse(request, error, {
+      context: "release mutation",
+      operation: issueIntent,
+      releaseId: params.releaseId,
+      trackId: issueTrackId,
+      fallback:
+        "ReleaseCore could not save this change.",
+      shop: issueShop,
+    });
   }
 };

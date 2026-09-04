@@ -76,6 +76,7 @@ model Release {
   notifications               NotificationDelivery[]
   reviewItems                 ReleaseReviewItem[]
   operationJobs              OperationJob[]
+  systemIssues               SystemIssue[]
 
   @@unique([shop, catalogNumber])
   @@index([shop, status])
@@ -329,6 +330,41 @@ model ReleaseReviewItem {
 
   @@index([releaseId, status])
   @@index([trackId])
+}
+
+model SystemIssue {
+  id                String   @id @default(cuid())
+  shop              String
+  deploymentProfile String   @default("releasecore")
+  source            String
+  operation         String
+  fingerprint       String
+  status            String   @default("OPEN")
+  severity          String   @default("ERROR")
+  releaseId         String?
+  trackId           String?
+  operationJobId    String?
+  requestId         String?
+  errorClass        String
+  errorCode         String?
+  safeMessage       String
+  technicalMessage  String?
+  shopifyUserErrors Json?
+  retryable         Boolean  @default(false)
+  resolution        String?
+  occurrenceCount   Int      @default(1)
+  firstSeenAt       DateTime @default(now())
+  lastSeenAt        DateTime @default(now())
+  resolvedAt        DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  release           Release? @relation(fields: [releaseId], references: [id], onDelete: SetNull)
+
+  @@unique([shop, deploymentProfile, fingerprint])
+  @@index([shop, deploymentProfile, status, lastSeenAt])
+  @@index([shop, deploymentProfile, lastSeenAt])
+  @@index([releaseId, lastSeenAt])
+  @@index([operationJobId])
 }
 
 model OperationJob {

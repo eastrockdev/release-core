@@ -77,6 +77,9 @@ export const action = async ({ request, params }) => {
 
     return apiErrorResponse(request, error, {
       context: "distribution mutation",
+      operation:
+        intent || "distribution mutation",
+      releaseId: params.releaseId,
       fallback: "ReleaseCore could not update distribution.",
       shop,
     });

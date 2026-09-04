@@ -1,5 +1,9 @@
 import db from "../db.server";
 import { calculateReleaseReadiness } from "./workflow";
+import {
+  countOpenSystemIssues,
+  listRecentSystemIssues,
+} from "./system-issues.server";
 
 const ACTIVE_RELEASE_STATUSES = [
   "SUBMITTED",
@@ -315,6 +319,8 @@ export async function loadOperationsCenter({
     scheduledNextSevenDays,
     activeBackgroundJobs,
     failedBackgroundJobs,
+    openSystemIssues,
+    recentSystemIssues,
   ] = await Promise.all([
     db.appSettings.findUnique({ where: { shop } }),
     db.release.findMany({
@@ -483,6 +489,12 @@ export async function loadOperationsCenter({
         },
       },
     }),
+    countOpenSystemIssues({ shop }),
+    listRecentSystemIssues({
+      shop,
+      take: 8,
+      status: "OPEN",
+    }),
   ]);
 
   const issues = [];
@@ -592,7 +604,9 @@ export async function loadOperationsCenter({
       readyToDistribute: readyToDistribute.length,
       scheduledNextSevenDays,
       activeBackgroundJobs,
+      openSystemIssues,
     },
+    recentSystemIssues,
     issues: actionable.slice(0, issueLimit),
     advisories: advisories.slice(0, issueLimit),
     readyToDistribute: readyToDistribute.slice(0, 20),

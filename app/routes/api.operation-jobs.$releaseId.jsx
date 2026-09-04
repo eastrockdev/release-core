@@ -71,6 +71,8 @@ export const action = async ({ request, params }) => {
   } catch (error) {
     return apiErrorResponse(request, error, {
       context: "operation job mutation",
+      operation: "operation-job-mutation",
+      releaseId: params.releaseId,
       fallback:
         "ReleaseCore could not update the background operation.",
       shop,

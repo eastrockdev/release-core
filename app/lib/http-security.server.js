@@ -1,4 +1,9 @@
 import { randomUUID } from "node:crypto";
+import {
+  classifyOperationalError,
+  shouldRecordOperationalIssue,
+} from "./operational-errors";
+import { recordSystemIssue } from "./system-issues.server";
 
 export class ReleaseCorePublicError extends Error {
   constructor(message, { status = 400, code = null } = {}) {
@@ -60,6 +65,9 @@ export function apiErrorResponse(
     fallback = "ReleaseCore could not complete this request.",
     status = 500,
     shop = null,
+    operation = null,
+    releaseId = null,
+    trackId = null,
   } = {},
 ) {
   if (error instanceof Response) return error;
@@ -68,14 +76,66 @@ export function apiErrorResponse(
   const exposed = isPublicError(error);
   const responseStatus = exposed && Number.isInteger(error.status) ? error.status : status;
   const message = exposed && error?.message ? error.message : fallback;
+  const classification = classifyOperationalError(
+    error,
+    {
+      fallback: message,
+      status: responseStatus,
+    },
+  );
 
-  if (!exposed) logServerError({ requestId, context, error, shop });
+  if (!exposed) {
+    logServerError({
+      requestId,
+      context,
+      error,
+      shop,
+    });
+  }
+
+  if (
+    shop &&
+    shouldRecordOperationalIssue(classification)
+  ) {
+    void recordSystemIssue({
+      shop,
+      source: "API",
+      operation: operation || context,
+      releaseId,
+      trackId,
+      requestId,
+      error,
+      classification,
+    }).catch((issueError) => {
+      console.warn(
+        "ReleaseCore system issue could not be persisted",
+        {
+          requestId,
+          message: safeDiagnosticText(
+            issueError instanceof Error
+              ? issueError.message
+              : issueError,
+            700,
+          ),
+        },
+      );
+    });
+  }
 
   return Response.json(
     {
       ok: false,
       error: message,
       requestId,
+      errorClass: classification.errorClass,
+      retryable: classification.retryable,
+      resolution: classification.resolution,
+      ...(classification.shopifyUserErrors.length
+        ? {
+            shopifyUserErrors:
+              classification.shopifyUserErrors,
+          }
+        : {}),
       ...(exposed && error?.code ? { code: error.code } : {}),
       ...(exposed && Array.isArray(error?.blockers) ? { blockers: error.blockers } : {}),
     },

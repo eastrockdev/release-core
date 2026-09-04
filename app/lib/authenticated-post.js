@@ -23,9 +23,31 @@ export async function authenticatedPost(shopify, url, formData) {
   }
 
   if (!response.ok || data?.ok === false) {
-    const message = data?.error || `Request failed with status ${response.status}.`;
-    const reference = data?.requestId ? ` Reference: ${data.requestId}.` : "";
-    throw new Error(`${message}${reference}`);
+    const message =
+      data?.error ||
+      `Request failed with status ${response.status}.`;
+    const resolution = data?.resolution
+      ? ` ${data.resolution}`
+      : "";
+    const reference = data?.requestId
+      ? ` Reference: ${data.requestId}.`
+      : "";
+    const error = new Error(
+      `${message}${resolution}${reference}`,
+    );
+    error.name = "ReleaseCoreRequestError";
+    error.status = response.status;
+    error.requestId = data?.requestId || null;
+    error.code = data?.code || null;
+    error.errorClass =
+      data?.errorClass || null;
+    error.retryable =
+      Boolean(data?.retryable);
+    error.resolution =
+      data?.resolution || null;
+    error.shopifyUserErrors =
+      data?.shopifyUserErrors || [];
+    throw error;
   }
 
   return data;

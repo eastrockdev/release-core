@@ -38,6 +38,59 @@ function issueTone(severity) {
   return "info";
 }
 
+function SystemIssueSummary({ issue }) {
+  return (
+    <article className="rc-system-issue rc-system-issue--summary">
+      <div className="rc-system-issue__body">
+        <div className="rc-system-issue__badges">
+          <StatusBadge
+            tone={
+              issue.severity === "CRITICAL"
+                ? "critical"
+                : issue.severity === "ERROR"
+                  ? "warning"
+                  : "info"
+            }
+          >
+            {issue.errorClass}
+          </StatusBadge>
+          <span>
+            {issue.source} · {issue.operation}
+          </span>
+        </div>
+        <strong>
+          {issue.release?.title ||
+            "ReleaseCore system"}
+        </strong>
+        <div className="rc-operations-issue__copy">
+          {issue.safeMessage}
+        </div>
+        {issue.resolution ? (
+          <div className="rc-system-issue__resolution">
+            <strong>Recommended resolution</strong>
+            <span>{issue.resolution}</span>
+          </div>
+        ) : null}
+        <div className="rc-system-issue__reference">
+          {issue.requestId
+            ? `Reference: ${issue.requestId}`
+            : "No request reference"}
+          {" · "}
+          {new Date(
+            issue.lastSeenAt,
+          ).toLocaleString()}
+        </div>
+      </div>
+      <Link
+        to="/app/system-issues"
+        className="rc-button rc-button--compact"
+      >
+        View issue
+      </Link>
+    </article>
+  );
+}
+
 function OperationsIssue({ issue }) {
   return (
     <article className="rc-operations-issue">
@@ -141,6 +194,12 @@ export default function Operations() {
             value={data.stats.activeBackgroundJobs}
             detail="Queued or currently running"
           />
+          <MetricCard
+            label="System issues"
+            value={data.stats.openSystemIssues}
+            detail="Open production diagnostics"
+            href="/app/system-issues"
+          />
         </MetricGrid>
         {data.capped ? (
           <div className="rc-operations-note">
@@ -150,6 +209,36 @@ export default function Operations() {
             active releases.
           </div>
         ) : null}
+      </s-section>
+
+      <s-section heading="Recent system issues">
+        {data.recentSystemIssues.length ? (
+          <div className="rc-system-issue-list">
+            {data.recentSystemIssues.map(
+              (issue) => (
+                <SystemIssueSummary
+                  key={issue.id}
+                  issue={issue}
+                />
+              ),
+            )}
+          </div>
+        ) : (
+          <EmptyState title="No open system issues">
+            ReleaseCore has not recorded a current
+            production failure for this store.
+          </EmptyState>
+        )}
+        <div className="rc-operations-footer">
+          <span>
+            Safe diagnostics only. Secrets and signed
+            URL query strings are redacted before
+            persistence.
+          </span>
+          <Link to="/app/system-issues">
+            View system issue history →
+          </Link>
+        </div>
       </s-section>
 
       <s-section heading="Needs attention">

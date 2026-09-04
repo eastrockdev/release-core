@@ -8,6 +8,10 @@ import {
   publicError,
   safeDiagnosticText,
 } from "./http-security.server";
+import {
+  recordSystemIssue,
+  resolveSystemIssuesForOperation,
+} from "./system-issues.server";
 
 export const BACKGROUND_DISTRIBUTION_INTENTS = new Set([
   "generate-audio-previews",
@@ -579,18 +583,29 @@ async function markJobSucceeded(job, result) {
     result,
   });
 
-  return db.operationJob.update({
-    where: { id: job.id },
-    data: {
-      status: "SUCCEEDED",
-      result,
-      completedAt: new Date(),
-      lockedAt: null,
-      lockedBy: null,
-      lastError: null,
-    },
-    include: JOB_VIEW_INCLUDE,
+  const completed =
+    await db.operationJob.update({
+      where: { id: job.id },
+      data: {
+        status: "SUCCEEDED",
+        result,
+        completedAt: new Date(),
+        lockedAt: null,
+        lockedBy: null,
+        lastError: null,
+      },
+      include: JOB_VIEW_INCLUDE,
+    });
+
+  await resolveSystemIssuesForOperation({
+    shop: job.shop,
+    source: "BACKGROUND_JOB",
+    operation: job.intent,
+    releaseId: job.releaseId,
+    operationJobId: job.id,
   });
+
+  return completed;
 }
 
 async function markJobFailed({
@@ -625,6 +640,31 @@ async function markJobFailed({
       },
       include: JOB_VIEW_INCLUDE,
     });
+  }
+
+  try {
+    await recordSystemIssue({
+      shop: job.shop,
+      source: "BACKGROUND_JOB",
+      operation: job.intent,
+      releaseId: job.releaseId,
+      operationJobId: job.id,
+      requestId:
+        `job_${job.id}_${job.attempts}`,
+      error,
+    });
+  } catch (issueError) {
+    console.warn(
+      "ReleaseCore background system issue could not be saved",
+      {
+        message: safeDiagnosticText(
+          issueError instanceof Error
+            ? issueError.message
+            : issueError,
+          700,
+        ),
+      },
+    );
   }
 
   try {

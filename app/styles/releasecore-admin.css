@@ -2104,3 +2104,112 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .rc-editor-save-state--saved {
   color: var(--p-color-text-success, #29845a);
 }
+
+
+/* M16.4 — Recent System Issues. */
+.rc-system-issue-list {
+  display: grid;
+  gap: 12px;
+}
+.rc-system-issue {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--p-color-border-secondary, #dedede);
+  border-radius: 14px;
+  background: var(--p-color-bg-surface, #fff);
+}
+.rc-system-issue--summary {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+.rc-system-issue__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  color: var(--p-color-text-secondary, #616161);
+  font-size: 12px;
+}
+.rc-system-issue__badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.rc-system-issue__body {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+.rc-system-issue__body h3,
+.rc-system-issue__body p {
+  margin: 0;
+}
+.rc-system-issue__facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.rc-system-issue__facts > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--p-color-bg-surface-secondary, #f7f7f7);
+}
+.rc-system-issue__facts dt {
+  color: var(--p-color-text-secondary, #616161);
+  font-size: 11px;
+}
+.rc-system-issue__facts dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 600;
+}
+.rc-system-issue__shopify,
+.rc-system-issue__resolution {
+  display: grid;
+  gap: 5px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  background: var(--p-color-bg-surface-secondary, #f7f7f7);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.rc-system-issue__shopify ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.rc-system-issue__reference {
+  color: var(--p-color-text-secondary, #616161);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.rc-system-issue__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.rc-system-issue__actions form {
+  margin: 0;
+}
+@media (max-width: 760px) {
+  .rc-system-issue--summary {
+    grid-template-columns: 1fr;
+  }
+  .rc-system-issue__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .rc-system-issue__facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .rc-system-issue__actions,
+  .rc-system-issue__actions form,
+  .rc-system-issue__actions .rc-button {
+    width: 100%;
+  }
+}

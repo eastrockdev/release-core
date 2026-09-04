@@ -5,6 +5,7 @@ import {
   resolveShopifyMusicGenreMetafield,
 } from "./shopify-catalog.server";
 import { buildEastRockTrackProductMetafields } from "./east-rock-compatibility.server";
+import { shopifyMutationError } from "./operational-errors";
 
 const DEFINITIONS = [
   ["ReleaseCore Track ID", "track_id", "single_line_text_field"],
@@ -119,7 +120,12 @@ async function createDefinition(admin, [name, key, type]) {
     });
   const json = await response.json();
   const errors = json?.data?.metafieldDefinitionCreate?.userErrors || [];
-  if (errors.length) throw new Error(errors.map((error) => error.message).join(" "));
+  if (errors.length) {
+    throw shopifyMutationError(
+      errors.map((error) => error.message).join(" "),
+      errors,
+    );
+  }
   return json?.data?.metafieldDefinitionCreate?.createdDefinition;
 }
 
@@ -147,7 +153,12 @@ async function repairDefinition(admin, definition, name) {
     }`, { variables: { definition: input } });
   const json = await response.json();
   const errors = json?.data?.metafieldDefinitionUpdate?.userErrors || [];
-  if (errors.length) throw new Error(errors.map((error) => error.message).join(" "));
+  if (errors.length) {
+    throw shopifyMutationError(
+      errors.map((error) => error.message).join(" "),
+      errors,
+    );
+  }
 }
 
 export async function ensureReleaseCoreProductMetafields(admin) {
@@ -561,7 +572,12 @@ export async function updateVariant(admin, productId, variantId, { price, barcod
     }`, { variables: { productId, variants: [variant] } });
   const json = await response.json();
   const errors = json?.data?.productVariantsBulkUpdate?.userErrors || [];
-  if (errors.length) throw new Error(errors.map((error) => error.message).join(" "));
+  if (errors.length) {
+    throw shopifyMutationError(
+      errors.map((error) => error.message).join(" "),
+      errors,
+    );
+  }
 }
 
 export async function normalizeShopifyDigitalProduct(admin, productId, { title } = {}) {
@@ -674,7 +690,12 @@ export async function tagsAdd(admin, productId, tags) {
   `, { variables: { id: productId, tags: clean } });
   const json = await response.json();
   const errors = json?.data?.tagsAdd?.userErrors || [];
-  if (errors.length) throw new Error(errors.map((error) => error.message).join(" "));
+  if (errors.length) {
+    throw shopifyMutationError(
+      errors.map((error) => error.message).join(" "),
+      errors,
+    );
+  }
 }
 
 export async function deleteStaleReleaseCoreMetafields(admin, productId, currentMetafields, desiredMetafields) {
@@ -693,7 +714,12 @@ export async function deleteStaleReleaseCoreMetafields(admin, productId, current
   `, { variables: { metafields: stale } });
   const json = await response.json();
   const errors = json?.data?.metafieldsDelete?.userErrors || [];
-  if (errors.length) throw new Error(errors.map((error) => error.message).join(" "));
+  if (errors.length) {
+    throw shopifyMutationError(
+      errors.map((error) => error.message).join(" "),
+      errors,
+    );
+  }
   return stale.length;
 }
 
