@@ -8,19 +8,58 @@ import { downloadR2StorageKeyToFile, localStoragePath } from "./storage.server";
 import { deleteShopifyFilesBestEffort } from "./shopify-files.server";
 
 const MAX_SHOPIFY_FILE_BYTES = 20 * 1024 * 1024;
+const DEFAULT_FFMPEG_TIMEOUT_MS = 10 * 60 * 1000;
+const MIN_FFMPEG_TIMEOUT_MS = 30 * 1000;
+const MAX_FFMPEG_TIMEOUT_MS = 30 * 60 * 1000;
+const SHOPIFY_UPLOAD_TIMEOUT_MS = 2 * 60 * 1000;
 
 function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+function ffmpegTimeoutMs() {
+  const configured = Number(process.env.RELEASECORE_FFMPEG_TIMEOUT_MS);
+  if (!Number.isFinite(configured) || configured <= 0) {
+    return DEFAULT_FFMPEG_TIMEOUT_MS;
+  }
+  return Math.max(
+    MIN_FFMPEG_TIMEOUT_MS,
+    Math.min(MAX_FFMPEG_TIMEOUT_MS, Math.trunc(configured)),
+  );
+}
 
 function runFfmpeg(args) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.env.FFMPEG_PATH || "ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
+    let timedOut = false;
+    let settled = false;
+    const timeoutMs = ffmpegTimeoutMs();
+    const timer = setTimeout(() => {
+      if (settled) return;
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, timeoutMs);
+
+    const finish = (error = null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error) reject(error);
+      else resolve();
+    };
+
     child.stderr.on("data", (chunk) => { stderr += String(chunk); });
     child.on("error", (error) => {
-      if (error?.code === "ENOENT") reject(new Error("FFmpeg is not installed. Install it on the ReleaseCore server or set FFMPEG_PATH."));
-      else reject(error);
+      if (error?.code === "ENOENT") finish(new Error("FFmpeg is not installed. Install it on the ReleaseCore server or set FFMPEG_PATH."));
+      else finish(error);
     });
-    child.on("close", (code) => code === 0 ? resolve() : reject(new Error(stderr.trim() || `FFmpeg exited with code ${code}.`)));
+    child.on("close", (code) => {
+      if (timedOut) {
+        finish(new Error(`FFmpeg preview generation timed out after ${Math.round(timeoutMs / 60000)} minutes. The conversion was stopped so it can be retried.`));
+        return;
+      }
+      if (code === 0) finish();
+      else finish(new Error(stderr.trim() || `FFmpeg exited with code ${code}.`));
+    });
   });
 }
 
@@ -44,7 +83,11 @@ async function uploadTarget(target, filename, bytes) {
   const body = new FormData();
   for (const parameter of target.parameters || []) body.append(parameter.name, parameter.value);
   body.append("file", new Blob([bytes], { type: "audio/mpeg" }), filename);
-  const response = await fetch(target.url, { method: "POST", body });
+  const response = await fetch(target.url, {
+    method: "POST",
+    body,
+    signal: AbortSignal.timeout(SHOPIFY_UPLOAD_TIMEOUT_MS),
+  });
   if (!response.ok) throw new Error(`Shopify storage rejected the MP3 preview (${response.status}).`);
 }
 
