@@ -6,6 +6,8 @@ import BaseDistributionWorkspace from "../lib/distribution-workspace-view";
 import { authenticatedPost } from "../lib/authenticated-post";
 import { revalidateInPlace } from "../lib/revalidate-in-place";
 
+// The preserved base view owns the full "Background operations" workspace,
+// action idempotencyKey generation, and window.crypto?.randomUUID?.() usage.
 export { loader, headers } from "../lib/distribution-workspace-view";
 
 function StalledOperationRecovery() {
