@@ -7,6 +7,7 @@ import {
 } from "./distribution-health.server";
 import { buildPublicationOrchestration } from "./publication-orchestration.server";
 import { listReleaseOperationJobs } from "./operation-jobs.server";
+import { decorateRestartableOperationJobs } from "./operation-job-recovery.server";
 
 const DISTRIBUTION_RELEASE_INCLUDE = {
   artists: { include: { artist: true }, orderBy: { position: "asc" } },
@@ -35,11 +36,13 @@ export async function loadDistributionWorkspace({ admin, shop, releaseId }) {
     db.appSettings.findUnique({ where: { shop } }),
   ]);
   if (!release) return null;
-  const operationJobs = await listReleaseOperationJobs({
-    shop,
-    releaseId,
-    take: 10,
-  });
+  const operationJobs = decorateRestartableOperationJobs(
+    await listReleaseOperationJobs({
+      shop,
+      releaseId,
+      take: 10,
+    }),
+  );
   const [tracks, shopifyReleaseState] = await Promise.all([
     Promise.all(release.tracks.map(async (track) => ({
       ...track,

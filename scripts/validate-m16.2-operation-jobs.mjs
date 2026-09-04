@@ -13,6 +13,8 @@ const migration = read(
   "prisma/migrations/20260903233000_m16_2_operation_jobs/migration.sql",
 );
 const jobs = read("app/lib/operation-jobs.server.js");
+const recovery = read("app/lib/operation-job-recovery.server.js");
+const audioPreview = read("app/lib/audio-preview.server.js");
 const distributionApi = read(
   "app/routes/api.distribution.$releaseId.jsx",
 );
@@ -123,6 +125,37 @@ need(
   "Final background failures are not integrated with Sync Health.",
 );
 
+for (const marker of [
+  "MANUAL_RESTART_AFTER_MINUTES",
+  "operationJobLooksStalled",
+  "decorateRestartableOperationJobs",
+  "restartStalledOperationJob",
+  'status: "ABANDONED"',
+  'status: "QUEUED"',
+  "randomUUID()",
+  "OPERATION_RESTART_CONFLICT",
+]) {
+  need(
+    recovery,
+    marker,
+    `Stalled background-operation recovery is missing ${marker}.`,
+  );
+}
+
+for (const marker of [
+  "DEFAULT_FFMPEG_TIMEOUT_MS",
+  "RELEASECORE_FFMPEG_TIMEOUT_MS",
+  'child.kill("SIGKILL")',
+  "FFmpeg preview generation timed out",
+  "AbortSignal.timeout(SHOPIFY_UPLOAD_TIMEOUT_MS)",
+]) {
+  need(
+    audioPreview,
+    marker,
+    `Audio-preview stall protection is missing ${marker}.`,
+  );
+}
+
 need(
   distributionApi,
   "isBackgroundDistributionIntent",
@@ -148,6 +181,21 @@ need(
   jobsApi,
   'intent === "retry"',
   "Operation job API cannot retry failed jobs.",
+);
+need(
+  jobsApi,
+  'intent === "restart"',
+  "Operation job API cannot restart stalled jobs.",
+);
+need(
+  jobsApi,
+  "decorateRestartableOperationJobs",
+  "Operation job API does not expose stalled jobs as recoverable.",
+);
+need(
+  jobsApi,
+  "restartStalledOperationJob",
+  "Operation job API does not route stalled retries through safe recovery.",
 );
 need(
   jobsApi,
@@ -312,5 +360,5 @@ if (failures.length) {
 }
 
 console.log(
-  "ReleaseCore M16.2 durable background jobs / idempotent retry validation passed.",
+  "ReleaseCore M16.2 durable background jobs / stalled recovery / idempotent retry validation passed.",
 );
