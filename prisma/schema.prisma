@@ -78,8 +78,12 @@ model Release {
   operationJobs              OperationJob[]
   systemIssues               SystemIssue[]
   feedbackReports           FeedbackReport[]
+  catalogRelationships ReleaseRelationship[] @relation("ReleaseRelationshipRelease")
+  catalogBacklinks     ReleaseRelationship[] @relation("ReleaseRelationshipRelated")
 
-  @@unique([shop, catalogNumber])
+    deliveryPlan                  ReleaseDeliveryPlan?
+
+@@unique([shop, catalogNumber])
   @@index([shop, status])
   @@index([shop, distributionStatus])
   @@index([shop, ownerCustomerId])
@@ -111,6 +115,8 @@ model Track {
   files                ReleaseFile[]
   reviewItems          ReleaseReviewItem[]
   feedbackReports    FeedbackReport[]
+  recordingRelationships TrackRelationship[] @relation("TrackRelationshipTrack")
+  recordingBacklinks      TrackRelationship[] @relation("TrackRelationshipRelatedTrack")
 
   @@unique([releaseId, position])
   @@index([releaseId])
@@ -480,6 +486,82 @@ model ProductionMutation {
   @@unique([shop, deploymentProfile, requestId])
   @@index([shop, deploymentProfile, createdAt])
   @@index([shop, operation, createdAt])
+}
+
+model ReleaseRelationship {
+  id               String   @id @default(cuid())
+  shop             String
+  releaseId        String
+  relatedReleaseId String
+  relationshipType String
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  release          Release  @relation("ReleaseRelationshipRelease", fields: [releaseId], references: [id], onDelete: Cascade)
+  relatedRelease   Release  @relation("ReleaseRelationshipRelated", fields: [relatedReleaseId], references: [id], onDelete: Cascade)
+  trackRelationships TrackRelationship[]
+
+  @@unique([shop, releaseId, relatedReleaseId])
+  @@index([shop, releaseId, updatedAt])
+  @@index([shop, relatedReleaseId, updatedAt])
+}
+
+model TrackRelationship {
+  id                    String              @id @default(cuid())
+  shop                  String
+  releaseRelationshipId String
+  trackId               String
+  relatedTrackId        String
+  recordingRelationship String              @default("UNKNOWN")
+  notes                 String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  releaseRelationship   ReleaseRelationship @relation(fields: [releaseRelationshipId], references: [id], onDelete: Cascade)
+  track                 Track               @relation("TrackRelationshipTrack", fields: [trackId], references: [id], onDelete: Cascade)
+  relatedTrack          Track               @relation("TrackRelationshipRelatedTrack", fields: [relatedTrackId], references: [id], onDelete: Cascade)
+
+  @@unique([releaseRelationshipId, trackId])
+  @@index([shop, trackId])
+  @@index([shop, relatedTrackId])
+}
+
+model ReleaseDeliveryPlan {
+  id                  String                   @id @default(cuid())
+  shop                String
+  releaseId           String                   @unique
+  channelMode         String                   @default("ALL")
+  channelKeys         Json                     @default("[]")
+  territoryMode       String                   @default("WORLDWIDE")
+  territoryCodes      Json                     @default("[]")
+  exclusiveChannelKey String?
+  exclusiveStartDate  DateTime?
+  exclusiveEndDate    DateTime?
+  notes               String?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  release             Release                  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  overrides           ReleaseDeliveryChannel[]
+
+  @@index([shop, updatedAt])
+}
+
+model ReleaseDeliveryChannel {
+  id             String              @id @default(cuid())
+  shop           String
+  planId         String
+  channelKey     String
+  enabledState   String              @default("INHERIT")
+  releaseDate    DateTime?
+  territoryMode  String              @default("INHERIT")
+  territoryCodes Json                @default("[]")
+  notes          String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  plan           ReleaseDeliveryPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, channelKey])
+  @@index([shop, updatedAt])
+  @@index([planId])
 }
 
 model ReleaseTemplate {

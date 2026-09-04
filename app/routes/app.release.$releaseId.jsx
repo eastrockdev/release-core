@@ -1393,6 +1393,16 @@ export default function ReleaseWorkspace() {
       >
         Save as template
       </s-button>
+      <s-button
+        slot="secondary-actions"
+        onClick={() =>
+          navigate(
+            `/app/release/${release.id}/relationships`,
+          )
+        }
+      >
+        Catalog relationships
+      </s-button>
       {release.status === "APPROVED" ||
       (release.distributionStatus &&
         release.distributionStatus !== "NOT_QUEUED") ? (

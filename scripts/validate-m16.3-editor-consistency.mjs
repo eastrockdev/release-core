@@ -64,11 +64,19 @@ for (const [source, label] of [
     "editorSaveStateLabel",
     `${label} does not expose an explicit save state.`,
   );
-  need(
-    source,
-    'data.set(\n      "expectedReleaseUpdatedAt"',
-    `${label} does not send optimistic-concurrency state.`,
-  );
+  if (label === "Edit Track Info") {
+    need(
+      source,
+      "expectedTrackUpdatedAt",
+      "Edit Track Info does not send track-scoped optimistic-concurrency state.",
+    );
+  } else {
+    need(
+      source,
+      "expectedReleaseUpdatedAt",
+      "Bulk Edit Tracks does not send release-scoped optimistic-concurrency state.",
+    );
+  }
   need(
     source,
     "editor.markSaving()",
@@ -95,6 +103,17 @@ for (const [source, label] of [
     `${label} is missing save-state UI.`,
   );
 }
+
+need(
+  trackInfo,
+  "expectedTrackUpdatedAt",
+  "Edit Track Info does not use track-scoped optimistic concurrency.",
+);
+need(
+  bulkEditor,
+  "expectedReleaseUpdatedAt",
+  "Bulk Edit Tracks does not retain release-scoped optimistic concurrency.",
+);
 
 need(
   trackInfo,

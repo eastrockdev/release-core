@@ -961,6 +961,16 @@ export default function DistributionWorkspace() {
       </s-button>
       <s-button
         slot="secondary-actions"
+        onClick={() =>
+          navigate(
+            `/app/distribution/${release.id}/delivery-plan`,
+          )
+        }
+      >
+        Delivery plan
+      </s-button>
+      <s-button
+        slot="secondary-actions"
         onClick={() => navigate(`/app/release/${release.id}`)}
       >
         Release workspace

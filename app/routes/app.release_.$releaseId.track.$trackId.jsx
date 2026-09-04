@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  Link,
   useLoaderData,
   useNavigate,
   useRevalidator,
@@ -200,6 +199,12 @@ export default function EditTrackInfo() {
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [uploadState, setUploadState] = useState(null);
+  const [artistAddMode, setArtistAddMode] = useState(
+    () => (artists.length ? "existing" : "new"),
+  );
+  const [contributorAddMode, setContributorAddMode] = useState(
+    () => (contributors.length ? "existing" : "new"),
+  );
 
   const editor = useEditorDirtyState({
     message:
@@ -334,8 +339,8 @@ export default function EditTrackInfo() {
     data.set("intent", "bulk-update-tracks");
     data.set("tracks", JSON.stringify([row]));
     data.set(
-      "expectedReleaseUpdatedAt",
-      String(release.updatedAt || ""),
+      "expectedTrackUpdatedAt",
+      String(track.updatedAt || ""),
     );
 
     editor.markSaving();
@@ -836,26 +841,83 @@ export default function EditTrackInfo() {
           </div>
         )}
 
-        {artists.length ? (
-          <form
-            className="rc-track-info-add-row"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const data = new FormData(
-                event.currentTarget,
-              );
-              data.set("intent", "add-track-artist");
-              data.set("trackId", track.id);
-              mutate(data, "Adding track artist…");
-            }}
+        <div
+          className="rc-inline-identity-switch"
+          role="group"
+          aria-label="Artist source"
+        >
+          <button
+            type="button"
+            className={`rc-button rc-button--compact ${
+              artistAddMode === "existing"
+                ? "rc-button--primary"
+                : "rc-button--tertiary"
+            }`}
+            aria-pressed={artistAddMode === "existing"}
+            disabled={busy || !editable || !artists.length}
+            onClick={() => setArtistAddMode("existing")}
           >
+            Existing artist
+          </button>
+          <button
+            type="button"
+            className={`rc-button rc-button--compact ${
+              artistAddMode === "new"
+                ? "rc-button--primary"
+                : "rc-button--tertiary"
+            }`}
+            aria-pressed={artistAddMode === "new"}
+            disabled={busy || !editable}
+            onClick={() => setArtistAddMode("new")}
+          >
+            New artist
+          </button>
+        </div>
+
+        <form
+          className="rc-track-info-add-row rc-inline-identity-form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const data = new FormData(form);
+            data.set(
+              "intent",
+              artistAddMode === "new"
+                ? "create-track-artist-inline"
+                : "add-track-artist",
+            );
+            data.set("trackId", track.id);
+            const result = await mutate(
+              data,
+              artistAddMode === "new"
+                ? "Creating and adding artist…"
+                : "Adding track artist…",
+            );
+            if (result) form.reset();
+          }}
+        >
+          {artistAddMode === "new" ? (
+            <input
+              name="artistName"
+              required
+              maxLength={200}
+              className="rc-control"
+              placeholder="Artist name"
+              autoComplete="off"
+              disabled={busy || !editable}
+            />
+          ) : (
             <select
               name="artistId"
               required
               className="rc-control"
-              disabled={busy || !editable}
+              disabled={busy || !editable || !artists.length}
             >
-              <option value="">Choose artist…</option>
+              <option value="">
+                {artists.length
+                  ? "Choose artist…"
+                  : "No existing artists"}
+              </option>
               {artists.map((artist) => (
                 <option
                   key={artist.id}
@@ -865,25 +927,31 @@ export default function EditTrackInfo() {
                 </option>
               ))}
             </select>
-            <RoleSelect
-              disabled={busy || !editable}
-            />
-            <button
-              disabled={busy || !editable}
-              className="rc-button"
-            >
-              Add artist
-            </button>
-          </form>
-        ) : (
-          <div className="rc-track-info-empty">
-            No artist identities yet.{" "}
-            <Link to="/app/artists">
-              Add artists
-            </Link>
-            .
-          </div>
-        )}
+          )}
+
+          <RoleSelect
+            disabled={busy || !editable}
+          />
+
+          <button
+            disabled={
+              busy ||
+              !editable ||
+              (artistAddMode === "existing" &&
+                !artists.length)
+            }
+            className="rc-button"
+          >
+            {artistAddMode === "new"
+              ? "Create + add artist"
+              : "Add artist"}
+          </button>
+        </form>
+
+        <div className="rc-field__help">
+          New artists are saved to the Artist directory immediately
+          and can be reused elsewhere in ReleaseCore.
+        </div>
       </CollapsibleSection>
 
       <CollapsibleSection
@@ -1016,32 +1084,90 @@ export default function EditTrackInfo() {
           </div>
         ) : null}
 
-        {contributors.length ? (
-          <form
-            className={`rc-track-info-add-credit${
-              creditSplitsEnabled
-                ? ""
-                : " rc-track-info-add-credit--roles-only"
+        <div
+          className="rc-inline-identity-switch"
+          role="group"
+          aria-label="Contributor source"
+        >
+          <button
+            type="button"
+            className={`rc-button rc-button--compact ${
+              contributorAddMode === "existing"
+                ? "rc-button--primary"
+                : "rc-button--tertiary"
             }`}
-            onSubmit={(event) => {
-              event.preventDefault();
-              const data = new FormData(
-                event.currentTarget,
-              );
-              data.set("intent", "add-credit");
-              data.set("trackId", track.id);
-              mutate(data, "Adding credit…");
-            }}
+            aria-pressed={contributorAddMode === "existing"}
+            disabled={busy || !editable || !contributors.length}
+            onClick={() => setContributorAddMode("existing")}
           >
+            Existing contributor
+          </button>
+          <button
+            type="button"
+            className={`rc-button rc-button--compact ${
+              contributorAddMode === "new"
+                ? "rc-button--primary"
+                : "rc-button--tertiary"
+            }`}
+            aria-pressed={contributorAddMode === "new"}
+            disabled={busy || !editable}
+            onClick={() => setContributorAddMode("new")}
+          >
+            New contributor
+          </button>
+        </div>
+
+        <form
+          className={`rc-track-info-add-credit${
+            creditSplitsEnabled
+              ? ""
+              : " rc-track-info-add-credit--roles-only"
+          } rc-inline-identity-form`}
+          onSubmit={async (event) => {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const data = new FormData(form);
+            data.set(
+              "intent",
+              contributorAddMode === "new"
+                ? "create-track-contributor-inline"
+                : "add-credit",
+            );
+            data.set("trackId", track.id);
+            const result = await mutate(
+              data,
+              contributorAddMode === "new"
+                ? "Creating and adding contributor…"
+                : "Adding credit…",
+            );
+            if (result) form.reset();
+          }}
+        >
+          {contributorAddMode === "new" ? (
+            <input
+              name="contributorName"
+              required
+              maxLength={200}
+              className="rc-control"
+              placeholder="Contributor legal name"
+              autoComplete="off"
+              disabled={busy || !editable}
+            />
+          ) : (
             <select
               name="contributorId"
               required
               className="rc-control"
-              disabled={busy || !editable}
+              disabled={
+                busy || !editable || !contributors.length
+              }
             >
               <option value="">
-                Choose contributor…
+                {contributors.length
+                  ? "Choose contributor…"
+                  : "No existing contributors"}
               </option>
+
               {suggestedContributors.length ? (
                 <optgroup label="Linked to this artist">
                   {suggestedContributors.map(
@@ -1059,6 +1185,7 @@ export default function EditTrackInfo() {
                   )}
                 </optgroup>
               ) : null}
+
               {otherContributors.length ? (
                 <optgroup
                   label={
@@ -1083,40 +1210,45 @@ export default function EditTrackInfo() {
                 </optgroup>
               ) : null}
             </select>
+          )}
 
-            <CreditRoleSelect
+          <CreditRoleSelect
+            disabled={busy || !editable}
+          />
+
+          {creditSplitsEnabled ? (
+            <input
+              name="ownershipPercent"
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              placeholder="Split %"
+              className="rc-control rc-control--compact"
               disabled={busy || !editable}
             />
+          ) : null}
 
-            {creditSplitsEnabled ? (
-              <input
-                name="ownershipPercent"
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                placeholder="Split %"
-                className="rc-control rc-control--compact"
-                disabled={busy || !editable}
-              />
-            ) : null}
+          <button
+            disabled={
+              busy ||
+              !editable ||
+              (contributorAddMode === "existing" &&
+                !contributors.length)
+            }
+            className="rc-button"
+          >
+            {contributorAddMode === "new"
+              ? "Create + add credit"
+              : "Add credit"}
+          </button>
+        </form>
 
-            <button
-              disabled={busy || !editable}
-              className="rc-button"
-            >
-              Add credit
-            </button>
-          </form>
-        ) : (
-          <div className="rc-track-info-empty">
-            No contributor records yet.{" "}
-            <Link to="/app/contributors">
-              Add contributors
-            </Link>
-            .
-          </div>
-        )}
+        <div className="rc-field__help">
+          New contributors are saved to the Contributor directory
+          immediately. PRO, IPI, publisher, email, and other
+          identity details can be completed later.
+        </div>
 
         {creditSplitsEnabled ? (
           <div className="rc-track-info-credit-total">

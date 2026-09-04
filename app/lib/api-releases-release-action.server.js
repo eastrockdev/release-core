@@ -20,6 +20,10 @@ import {
   deleteDraftTrack,
 } from "./release-tracks.server";
 import { bulkUpdateReleaseTracks } from "./bulk-track-edit.server";
+import {
+  createAndAssignTrackArtist,
+  createAndCreditTrackContributor,
+} from "./inline-track-identities.server";
 
 const HIGH_IMPACT_RELEASE_INTENTS = new Map([
   ["approve-release", null],
@@ -254,6 +258,8 @@ export const action = async ({ request, params }) => {
         rows,
         expectedReleaseUpdatedAt:
           formData.get("expectedReleaseUpdatedAt"),
+        expectedTrackUpdatedAt:
+          formData.get("expectedTrackUpdatedAt"),
         actorLabel: "Shopify admin",
       });
 
@@ -463,6 +469,22 @@ export const action = async ({ request, params }) => {
       return Response.json({ ok: true, message: `Track ${track.position} saved.` });
     }
 
+    if (intent === "create-track-artist-inline") {
+      const result = await createAndAssignTrackArtist({
+        shop: session.shop,
+        releaseId: release.id,
+        trackId: track.id,
+        name: formData.get("artistName"),
+        role: formData.get("role"),
+        actorLabel: "Shopify admin",
+      });
+      return Response.json({
+        ok: true,
+        artistId: result.artistId,
+        message: `${result.artistName} created and added to Track ${track.position}.`,
+      });
+    }
+
     if (intent === "add-track-artist") {
       const artistId=String(formData.get("artistId")||"");
       const role=String(formData.get("role")||"PRIMARY").toUpperCase();
@@ -493,6 +515,23 @@ export const action = async ({ request, params }) => {
       if (!assignment) return Response.json({ok:false,error:"Track artist assignment not found."},{status:404});
       await db.trackArtist.delete({where:{id:assignment.id}});
       return Response.json({ok:true,message:"Artist removed from track."});
+    }
+
+    if (intent === "create-track-contributor-inline") {
+      const result = await createAndCreditTrackContributor({
+        shop: session.shop,
+        releaseId: release.id,
+        trackId: track.id,
+        legalName: formData.get("contributorName"),
+        role: formData.get("role"),
+        ownership: formData.get("ownershipPercent"),
+        actorLabel: "Shopify admin",
+      });
+      return Response.json({
+        ok: true,
+        contributorId: result.contributorId,
+        message: `${result.contributorName} created and credited on Track ${track.position}.`,
+      });
     }
 
     if (intent === "add-credit") {

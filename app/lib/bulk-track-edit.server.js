@@ -43,6 +43,20 @@ function validExpectedReleaseUpdatedAt(value) {
   return date;
 }
 
+function validExpectedTrackUpdatedAt(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) {
+    throw publicError(
+      "This track editor has stale version information. Reload the track before saving.",
+      { status: 409, code: "EDIT_CONFLICT" },
+    );
+  }
+  return date;
+}
+
 function validPosition(value, trackCount, track) {
   const position = Number(value ?? track.position);
   if (
@@ -63,6 +77,7 @@ export async function bulkUpdateReleaseTracks({
   releaseId,
   rows,
   expectedReleaseUpdatedAt = null,
+  expectedTrackUpdatedAt = null,
   actorLabel = "Shopify admin",
 }) {
   if (!Array.isArray(rows) || !rows.length) {
@@ -79,6 +94,10 @@ export async function bulkUpdateReleaseTracks({
   const expectedUpdatedAt =
     validExpectedReleaseUpdatedAt(
       expectedReleaseUpdatedAt,
+    );
+  const expectedTrackAt =
+    validExpectedTrackUpdatedAt(
+      expectedTrackUpdatedAt,
     );
   const byId = new Map(release.tracks.map((track) => [track.id, track]));
   const seen = new Set();
@@ -220,7 +239,23 @@ export async function bulkUpdateReleaseTracks({
 
   const now = new Date();
   await db.$transaction(async (tx) => {
-    if (expectedUpdatedAt) {
+    if (expectedTrackAt && normalized.length === 1) {
+      const claimed = await tx.track.updateMany({
+        where: {
+          id: normalized[0].trackId,
+          releaseId: release.id,
+          updatedAt: expectedTrackAt,
+        },
+        data: { updatedAt: now },
+      });
+
+      if (claimed.count !== 1) {
+        throw publicError(
+          "This track changed since this editor loaded. Reload and review the latest track values before saving again.",
+          { status: 409, code: "EDIT_CONFLICT" },
+        );
+      }
+    } else if (expectedUpdatedAt) {
       const claimed = await tx.release.updateMany({
         where: {
           id: release.id,
