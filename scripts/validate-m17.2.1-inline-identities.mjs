@@ -90,16 +90,29 @@ for (const marker of [
 for (const marker of [
   "expectedTrackMetadataVersion",
   "validExpectedTrackMetadataVersion",
-  "This track information changed since this editor loaded.",
-  "expectedReleaseUpdatedAt",
-  "expectedTrackVersion !== null",
-  "normalized.length === 1",
+  "information changed since this editor loaded.",
+  "row.expectedTrackMetadataVersion",
+  "for (const row of changed)",
+  "metadataVersion: expectedVersion",
+  "metadataVersion: { increment: 1 }",
 ]) {
   need(
     bulk,
     marker,
     `Track save conflict handling is missing ${marker}.`,
   );
+}
+
+for (const legacyMarker of [
+  "expectedReleaseUpdatedAt",
+  "expectedTrackVersion !== null",
+  "normalized.length === 1 &&",
+]) {
+  if (bulk.includes(legacyMarker)) {
+    failures.push(
+      `Track save conflict handling still contains legacy concurrency marker ${legacyMarker}.`,
+    );
+  }
 }
 
 if (
