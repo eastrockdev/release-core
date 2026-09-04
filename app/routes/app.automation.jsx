@@ -203,20 +203,30 @@ export default function AutomationPage() {
     }
   };
 
+  // RELEASECORE_SMTP_HOTFIX_V101: test actions persist the current SMTP form in the same request.
   const testConnection = async () => {
     if (busy) return;
     setBusy(true);
-    setNotice({ scope: "smtp", tone: "info", message: "Testing SMTP connection…" });
+    setNotice({
+      scope: "smtp",
+      tone: "info",
+      message: "Saving SMTP settings and testing connection…",
+    });
     try {
       const form = new FormData();
+      appendCommonSettings(form);
       form.set("intent", "test-smtp");
+      form.set("smtpSettingsIncluded", "on");
       const response = await authenticatedPost(
         shopify,
         "/api/automation",
         form,
       );
+      setSmtpPassword("");
+      setClearSmtpPassword(false);
       setNotice({ scope: "smtp", tone: "good", message: response.message });
       shopify.toast.show("SMTP connection succeeded");
+      await revalidateInPlace(revalidator);
     } catch (error) {
       setNotice({
         scope: "smtp",
@@ -231,18 +241,27 @@ export default function AutomationPage() {
   const sendTest = async () => {
     if (busy) return;
     setBusy(true);
-    setNotice({ scope: "smtp", tone: "info", message: "Sending test email…" });
+    setNotice({
+      scope: "smtp",
+      tone: "info",
+      message: "Saving SMTP settings and sending test email…",
+    });
     try {
       const form = new FormData();
+      appendCommonSettings(form);
       form.set("intent", "send-test-email");
+      form.set("smtpSettingsIncluded", "on");
       form.set("testEmail", testEmail);
       const response = await authenticatedPost(
         shopify,
         "/api/automation",
         form,
       );
+      setSmtpPassword("");
+      setClearSmtpPassword(false);
       setNotice({ scope: "smtp", tone: "good", message: response.message });
       shopify.toast.show("Test email sent");
+      await revalidateInPlace(revalidator);
     } catch (error) {
       setNotice({
         scope: "smtp",
