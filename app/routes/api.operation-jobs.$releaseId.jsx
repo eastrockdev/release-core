@@ -4,9 +4,22 @@ import {
   retryOperationJob,
 } from "../lib/operation-jobs.server";
 import {
+  decorateRestartableOperationJobs,
+  restartStalledOperationJob,
+} from "../lib/operation-job-recovery.server";
+import {
   apiErrorResponse,
   publicError,
 } from "../lib/http-security.server";
+
+async function listedJobs({ shop, releaseId }) {
+  const jobs = await listReleaseOperationJobs({
+    shop,
+    releaseId,
+    take: 10,
+  });
+  return decorateRestartableOperationJobs(jobs);
+}
 
 export const action = async ({ request, params }) => {
   if (request.method !== "POST") {
@@ -26,41 +39,43 @@ export const action = async ({ request, params }) => {
     const intent = String(formData.get("intent") || "");
 
     if (intent === "list") {
-      const jobs = await listReleaseOperationJobs({
-        shop,
-        releaseId,
-        take: 10,
-      });
+      const jobs = await listedJobs({ shop, releaseId });
       return Response.json({ ok: true, jobs });
     }
 
-    if (intent === "retry") {
+    if (intent === "retry" || intent === "restart") {
       const jobId = String(
         formData.get("jobId") || "",
       ).trim();
       if (!jobId) {
         throw publicError(
-          "Select a failed background operation to retry.",
+          "Select a background operation to retry or restart.",
           { status: 400 },
         );
       }
 
-      await retryOperationJob({
+      const recovery = await restartStalledOperationJob({
         shop,
         releaseId,
         jobId,
       });
 
-      const jobs = await listReleaseOperationJobs({
-        shop,
-        releaseId,
-        take: 10,
-      });
+      if (!recovery.restarted) {
+        await retryOperationJob({
+          shop,
+          releaseId,
+          jobId,
+        });
+      }
+
+      const jobs = await listedJobs({ shop, releaseId });
 
       return Response.json({
         ok: true,
         jobs,
-        message: "Background operation queued for retry.",
+        message: recovery.restarted
+          ? "Stalled background operation restarted. The previous attempt was abandoned and fresh work was queued."
+          : "Background operation queued for retry.",
       });
     }
 
