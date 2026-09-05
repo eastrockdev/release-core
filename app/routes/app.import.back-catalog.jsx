@@ -6,7 +6,6 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { authenticatedPost } from "../lib/authenticated-post";
 import {
-  buildBackCatalogTemplateCsv,
   importBackCatalogCsv,
   previewBackCatalogCsv,
 } from "../lib/back-catalog-import.server";
@@ -14,17 +13,6 @@ import { apiErrorResponse } from "../lib/http-security.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
-  const url = new URL(request.url);
-
-  if (url.searchParams.get("template") === "1") {
-    return new Response(buildBackCatalogTemplateCsv(), {
-      headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": 'attachment; filename="releasecore-back-catalog-template.csv"',
-        "Cache-Control": "no-store",
-      },
-    });
-  }
 
   const artists = await db.artist.findMany({
     where: { shop: session.shop },
@@ -91,11 +79,61 @@ export default function BackCatalogImportPage() {
   const [preview, setPreview] = useState(null);
   const [notice, setNotice] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [templateBusy, setTemplateBusy] = useState(false);
 
   const selectedArtist = useMemo(
     () => artists.find((artist) => artist.id === artistId) || null,
     [artists, artistId],
   );
+
+  const downloadTemplate = async () => {
+    if (templateBusy) return;
+    setTemplateBusy(true);
+    setNotice(null);
+
+    try {
+      const idToken = await shopify.idToken();
+      const response = await fetch("/api/back-catalog-template", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          Accept: "text/csv",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        let message = `Template download failed with status ${response.status}.`;
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          const data = await response.json();
+          if (data?.error) message = data.error;
+        } else {
+          const text = await response.text();
+          if (text) message = text;
+        }
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "releasecore-back-catalog-template.csv";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      shopify.toast.show("CSV template downloaded");
+    } catch (error) {
+      setNotice({
+        tone: "bad",
+        message: error.message || "ReleaseCore could not download the CSV template.",
+      });
+    } finally {
+      setTemplateBusy(false);
+    }
+  };
 
   const loadCsv = async (event) => {
     const file = event.target.files?.[0];
@@ -196,9 +234,9 @@ export default function BackCatalogImportPage() {
               The template includes project title/type/date, UPC, catalog number, label, P-line, genre, URLs, track number/title/version/language, explicit flag, ISRC and lyrics. Artist and credit columns are intentionally excluded.
             </div>
           </div>
-          <a className="rc-secondary-link" href="/app/import/back-catalog?template=1" download>
-            Download CSV template
-          </a>
+          <s-button disabled={templateBusy} onClick={downloadTemplate}>
+            {templateBusy ? "Preparing CSV…" : "Download CSV template"}
+          </s-button>
         </div>
       </s-section>
 
