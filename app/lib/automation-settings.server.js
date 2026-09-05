@@ -79,20 +79,38 @@ export async function loadAutomationSettings(shop) {
   };
 }
 
-// RELEASECORE_SMTP_HOTFIX_V101: deterministic save/test path preserved.
-// RELEASECORE_RESEND_API_V100: Resend HTTPS delivery joins Custom SMTP behind one provider dispatcher.
 function normalizeEmailDeliveryProvider(value) {
   return String(value || "SMTP").toUpperCase() === "RESEND"
     ? EMAIL_DELIVERY_PROVIDERS.RESEND
     : EMAIL_DELIVERY_PROVIDERS.SMTP;
 }
 
-async function saveAutomationSettingsFromForm({ shop, form }) {
+async function saveAccessSettingsFromForm({ shop, form }) {
   const releaseTagMatchMode =
     String(form.get("releaseTagMatchMode") || "ANY").toUpperCase() === "ALL"
       ? "ALL"
       : "ANY";
 
+  const data = {
+    releaseSingleEnabled: form.get("releaseSingleEnabled") === "on",
+    releaseSingleRequiredTags: normalizeTags(form.get("releaseSingleRequiredTags")),
+    releaseEpEnabled: form.get("releaseEpEnabled") === "on",
+    releaseEpRequiredTags: normalizeTags(form.get("releaseEpRequiredTags")),
+    releaseAlbumEnabled: form.get("releaseAlbumEnabled") === "on",
+    releaseAlbumRequiredTags: normalizeTags(form.get("releaseAlbumRequiredTags")),
+    releaseTagMatchMode,
+    releaseAccessLockMessage: text(form.get("releaseAccessLockMessage")),
+    flowEvents: normalizeEvents(form.get("flowEvents")),
+  };
+
+  return db.appSettings.upsert({
+    where: { shop },
+    create: { shop, ...data },
+    update: data,
+  });
+}
+
+async function saveEmailSettingsFromForm({ shop, form }) {
   const existing = await automationSettingsForShop(shop);
 
   const suppliedPassword = String(form.get("smtpPassword") || "");
@@ -116,17 +134,8 @@ async function saveAutomationSettingsFromForm({ shop, form }) {
   );
 
   const data = {
-    releaseSingleEnabled: form.get("releaseSingleEnabled") === "on",
-    releaseSingleRequiredTags: normalizeTags(form.get("releaseSingleRequiredTags")),
-    releaseEpEnabled: form.get("releaseEpEnabled") === "on",
-    releaseEpRequiredTags: normalizeTags(form.get("releaseEpRequiredTags")),
-    releaseAlbumEnabled: form.get("releaseAlbumEnabled") === "on",
-    releaseAlbumRequiredTags: normalizeTags(form.get("releaseAlbumRequiredTags")),
-    releaseTagMatchMode,
-    releaseAccessLockMessage: text(form.get("releaseAccessLockMessage")),
     artistEmailEvents: normalizeEvents(form.get("artistEmailEvents")),
     adminEmailEvents: normalizeEvents(form.get("adminEmailEvents")),
-    flowEvents: normalizeEvents(form.get("flowEvents")),
     smtpEnabled: form.get("smtpEnabled") === "on",
     smtpHost: text(form.get("smtpHost")),
     smtpPort: normalizeSmtpPort(form.get("smtpPort")),
@@ -149,6 +158,12 @@ async function saveAutomationSettingsFromForm({ shop, form }) {
     create: { shop, ...data },
     update: data,
   });
+}
+
+// Backward-compatible full save for any older UI still posting save-automation.
+async function saveAutomationSettingsFromForm({ shop, form }) {
+  await saveAccessSettingsFromForm({ shop, form });
+  return saveEmailSettingsFromForm({ shop, form });
 }
 
 function requireEmailDelivery(settings, message) {
@@ -179,18 +194,30 @@ function requireEmailDelivery(settings, message) {
 export async function performAutomationSettingsAction({ shop, form }) {
   const intent = String(form.get("intent") || "");
 
+  if (intent === "save-access-settings") {
+    await saveAccessSettingsFromForm({ shop, form });
+    return { message: "Release access and Shopify Flow settings saved." };
+  }
+
+  if (intent === "save-email-settings") {
+    const settings = await saveEmailSettingsFromForm({ shop, form });
+    return {
+      message: "Email delivery settings saved.",
+      provider: emailDeliveryProvider(settings),
+    };
+  }
+
   if (intent === "save-automation") {
     const settings = await saveAutomationSettingsFromForm({ shop, form });
-    const provider = emailDeliveryProvider(settings);
     return {
       message: "Automation, access and email delivery settings saved.",
-      provider,
+      provider: emailDeliveryProvider(settings),
     };
   }
 
   if (intent === "test-email-provider" || intent === "test-smtp") {
-    const settings = form.get("smtpSettingsIncluded") === "on"
-      ? await saveAutomationSettingsFromForm({ shop, form })
+    const settings = form.get("emailSettingsIncluded") === "on" || form.get("smtpSettingsIncluded") === "on"
+      ? await saveEmailSettingsFromForm({ shop, form })
       : await automationSettingsForShop(shop);
 
     if (!settings) {
@@ -204,7 +231,7 @@ export async function performAutomationSettingsAction({ shop, form }) {
 
     if (provider === EMAIL_DELIVERY_PROVIDERS.RESEND) {
       return {
-        message: "Resend API settings are saved. Use Send test email to validate the API key and verified sender domain.",
+        message: "Resend settings are saved. Send a test email to verify the API key and sender domain.",
         provider,
       };
     }
@@ -222,8 +249,8 @@ export async function performAutomationSettingsAction({ shop, form }) {
   }
 
   if (intent === "send-test-email") {
-    const settings = form.get("smtpSettingsIncluded") === "on"
-      ? await saveAutomationSettingsFromForm({ shop, form })
+    const settings = form.get("emailSettingsIncluded") === "on" || form.get("smtpSettingsIncluded") === "on"
+      ? await saveEmailSettingsFromForm({ shop, form })
       : await automationSettingsForShop(shop);
 
     if (!settings) {

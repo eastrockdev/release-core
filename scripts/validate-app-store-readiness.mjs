@@ -81,21 +81,19 @@ for (const marker of ["addAppBlockId", "release-portal", "recent-releases", "art
 }
 
 const appNav = read("app/routes/app.jsx");
-const settingsHub = read(
-  "app/routes/app.settings.jsx",
-);
-if (
-  !appNav.includes("/app/settings") ||
-  !settingsHub.includes("/app/storefront-setup")
-) {
-  fail(
-    "merchant navigation is missing a discoverable Storefront setup path.",
-  );
+const settingsHub = read("app/routes/app.settings.jsx");
+for (const marker of [
+  "/app/settings",
+  "/app/notifications",
+]) {
+  if (!appNav.includes(marker)) fail(`merchant navigation is missing ${marker}.`);
 }
-
-const home = read("app/routes/app._index.jsx");
-for (const marker of ["Getting started", "/app/settings", "/app/portal-access", "/app/storefront-setup"]) {
-  if (!home.includes(marker)) fail(`App Home onboarding is missing ${marker}.`);
+for (const marker of [
+  "/app/portal-access",
+  "/app/storefront-setup",
+  "/app/settings/email",
+]) {
+  if (!settingsHub.includes(marker)) fail(`Settings is missing the discoverable destination ${marker}.`);
 }
 
 const shopifyServer = read("app/shopify.server.js");
@@ -118,7 +116,6 @@ else {
     if (!guide.includes(marker)) fail(`App Store submission runbook is missing ${marker}.`);
   }
 }
-
 
 const packageJson = JSON.parse(read("package.json"));
 if (packageJson?.scripts?.["verify:production"] !== "node scripts/verify-production.mjs") {

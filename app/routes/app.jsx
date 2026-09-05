@@ -12,18 +12,18 @@ import "../styles/releasecore-admin.css";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
-  const [submissions, distribution] = await Promise.all([
-    db.release.count({ where: { shop: session.shop, status: { in: ["SUBMITTED", "IN_REVIEW", "CHANGES_REQUESTED"] } } }),
-    db.release.count({ where: { shop: session.shop, distributionStatus: { in: ["NOT_QUEUED", "READY", "PROCESSING", "RETURNED"] }, status: "APPROVED" } }),
-  ]);
+  const distribution = await db.release.count({
+    where: {
+      shop: session.shop,
+      distributionStatus: { in: ["NOT_QUEUED", "READY", "PROCESSING", "RETURNED"] },
+      status: "APPROVED",
+    },
+  });
 
   return {
     // eslint-disable-next-line no-undef
     apiKey: process.env.SHOPIFY_API_KEY || "",
-    navCounts: {
-      submissions,
-      distribution,
-    },
+    navCounts: { distribution },
   };
 };
 
@@ -39,16 +39,13 @@ export default function App() {
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
         <s-link href="/app">Home</s-link>
-        <s-link href="/app/operations">Operations</s-link>
         <s-link href="/app/releases">Releases</s-link>
-        <s-link href="/app/submissions">
-          {navLabel("Submissions", navCounts.submissions)}
-        </s-link>
+        <s-link href="/app/artists">Artists</s-link>
         <s-link href="/app/distribution">
           {navLabel("Distribution", navCounts.distribution)}
         </s-link>
-        <s-link href="/app/artists">Artists</s-link>
-        <s-link href="/app/moderation">Moderation</s-link>
+        <s-link href="/app/operations">Operations</s-link>
+        <s-link href="/app/notifications">Notifications</s-link>
         <s-link href="/app/settings">Settings</s-link>
       </s-app-nav>
       <Outlet />

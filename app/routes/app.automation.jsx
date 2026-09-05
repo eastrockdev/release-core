@@ -62,258 +62,81 @@ function Toggle({ checked, onChange, title, help }) {
 }
 
 export default function AutomationPage() {
-  const {
-    settings: raw,
-    smtpPasswordStored,
-    encryptionConfigured,
-  } = useLoaderData();
+  const { settings: raw } = useLoaderData();
   const s = raw || {};
   const shopify = useAppBridge();
   const revalidator = useRevalidator();
 
-  const [singleEnabled, setSingleEnabled] = useState(
-    s.releaseSingleEnabled ?? true,
-  );
-  const [singleTags, setSingleTags] = useState(
-    s.releaseSingleRequiredTags || "",
-  );
+  const [singleEnabled, setSingleEnabled] = useState(s.releaseSingleEnabled ?? true);
+  const [singleTags, setSingleTags] = useState(s.releaseSingleRequiredTags || "");
   const [epEnabled, setEpEnabled] = useState(s.releaseEpEnabled ?? true);
   const [epTags, setEpTags] = useState(s.releaseEpRequiredTags || "");
-  const [albumEnabled, setAlbumEnabled] = useState(
-    s.releaseAlbumEnabled ?? true,
-  );
+  const [albumEnabled, setAlbumEnabled] = useState(s.releaseAlbumEnabled ?? true);
   const [albumTags, setAlbumTags] = useState(s.releaseAlbumRequiredTags || "");
   const [matchMode, setMatchMode] = useState(s.releaseTagMatchMode || "ANY");
-  const [lockMessage, setLockMessage] = useState(
-    s.releaseAccessLockMessage || "",
-  );
-
-  const [artistEvents, setArtistEvents] = useState(
-    csvSet(
-      s.artistEmailEvents ||
-        "SUBMITTED,CHANGES_REQUESTED,APPROVED,REJECTED,SUBMITTED_TO_STORES,DELIVERED",
-    ),
-  );
-  const [adminEvents, setAdminEvents] = useState(
-    csvSet(
-      s.adminEmailEvents || "SUBMITTED,CHANGES_REQUESTED,APPROVED,REJECTED",
-    ),
-  );
+  const [lockMessage, setLockMessage] = useState(s.releaseAccessLockMessage || "");
   const [flowEvents, setFlowEvents] = useState(
     csvSet(
       s.flowEvents ||
         "SUBMITTED,CHANGES_REQUESTED,APPROVED,REJECTED,PROCESSING,SUBMITTED_TO_STORES,DELIVERED,SHOPIFY_PRODUCTS_SYNCED",
     ),
   );
-
-  const [smtpEnabled, setSmtpEnabled] = useState(s.smtpEnabled ?? false);
-  // RELEASECORE_RESEND_API_V100: HTTPS email provider state.
-  const [emailDeliveryProvider, setEmailDeliveryProvider] = useState(
-    String(s.emailDeliveryProvider || "SMTP").toUpperCase() === "RESEND" ? "RESEND" : "SMTP",
-  );
-  const [resendApiKey, setResendApiKey] = useState("");
-  const [clearResendApiKey, setClearResendApiKey] = useState(false);
-  const [smtpHost, setSmtpHost] = useState(s.smtpHost || "");
-  const [smtpPort, setSmtpPort] = useState(String(s.smtpPort || 587));
-  const [smtpSecurity, setSmtpSecurity] = useState(
-    s.smtpSecurity || "STARTTLS",
-  );
-  const [smtpUsername, setSmtpUsername] = useState(s.smtpUsername || "");
-  const [smtpPassword, setSmtpPassword] = useState("");
-  const [clearSmtpPassword, setClearSmtpPassword] = useState(false);
-  const [testEmail, setTestEmail] = useState(
-    s.adminNotificationEmail || s.emailFromAddress || "",
-  );
-
-  const [senderName, setSenderName] = useState(s.emailSenderName || "");
-  const [fromAddress, setFromAddress] = useState(s.emailFromAddress || "");
-  const [replyTo, setReplyTo] = useState(s.emailReplyTo || "");
-  const [adminEmail, setAdminEmail] = useState(s.adminNotificationEmail || "");
-  const [brandName, setBrandName] = useState(s.emailBrandName || "");
-  const [footer, setFooter] = useState(s.emailFooterText || "");
-  const [portalUrl, setPortalUrl] = useState(s.portalUrl || "");
-
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
 
-  const toggle = (setter, current, key) => {
-    const next = new Set(current);
+  const flowRows = useMemo(
+    () => AUTOMATION_EVENT_KEYS.map((key) => ({ key, label: LABELS[key] || key })),
+    [],
+  );
+
+  const toggleFlow = (key) => {
+    const next = new Set(flowEvents);
     next.has(key) ? next.delete(key) : next.add(key);
-    setter(next);
-  };
-
-  const appendCommonSettings = (form) => {
-    form.set("intent", "save-automation");
-    [
-      ["releaseSingleEnabled", singleEnabled],
-      ["releaseEpEnabled", epEnabled],
-      ["releaseAlbumEnabled", albumEnabled],
-    ].forEach(([key, value]) => {
-      if (value) form.set(key, "on");
-    });
-    form.set("releaseSingleRequiredTags", singleTags);
-    form.set("releaseEpRequiredTags", epTags);
-    form.set("releaseAlbumRequiredTags", albumTags);
-    form.set("releaseTagMatchMode", matchMode);
-    form.set("releaseAccessLockMessage", lockMessage);
-    form.set("artistEmailEvents", setCsv(artistEvents));
-    form.set("adminEmailEvents", setCsv(adminEvents));
-    form.set("flowEvents", setCsv(flowEvents));
-
-    if (smtpEnabled) form.set("smtpEnabled", "on");
-    form.set("emailDeliveryProvider", emailDeliveryProvider);
-    if (resendApiKey) form.set("resendApiKey", resendApiKey);
-    if (clearResendApiKey) form.set("clearResendApiKey", "on");
-    form.set("smtpHost", smtpHost);
-    form.set("smtpPort", smtpPort);
-    form.set("smtpSecurity", smtpSecurity);
-    form.set("smtpUsername", smtpUsername);
-    if (smtpPassword) form.set("smtpPassword", smtpPassword);
-    if (clearSmtpPassword) form.set("clearSmtpPassword", "on");
-
-    form.set("emailSenderName", senderName);
-    form.set("emailFromAddress", fromAddress);
-    form.set("emailReplyTo", replyTo);
-    form.set("adminNotificationEmail", adminEmail);
-    form.set("emailBrandName", brandName);
-    form.set("emailFooterText", footer);
-    form.set("portalUrl", portalUrl);
+    setFlowEvents(next);
   };
 
   const save = async () => {
     if (busy) return;
     setBusy(true);
-    setNotice({ scope: "save", tone: "info", message: "Saving automation settings…" });
+    setNotice({ tone: "info", message: "Saving release access rules…" });
     try {
       const form = new FormData();
-      appendCommonSettings(form);
-      const response = await authenticatedPost(
-        shopify,
-        "/api/automation",
-        form,
-      );
-      setSmtpPassword("");
-      setClearSmtpPassword(false);
-      setNotice({
-        scope: "save",
-        tone: "good",
-        message: response.message || "Automation settings saved.",
-      });
-      shopify.toast.show("Automation settings saved");
-      await revalidateInPlace(revalidator);
-    } catch (error) {
-      setNotice({
-        scope: "save",
-        tone: "bad",
-        message: error.message || "Could not save automation settings.",
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
+      form.set("intent", "save-access-settings");
+      if (singleEnabled) form.set("releaseSingleEnabled", "on");
+      if (epEnabled) form.set("releaseEpEnabled", "on");
+      if (albumEnabled) form.set("releaseAlbumEnabled", "on");
+      form.set("releaseSingleRequiredTags", singleTags);
+      form.set("releaseEpRequiredTags", epTags);
+      form.set("releaseAlbumRequiredTags", albumTags);
+      form.set("releaseTagMatchMode", matchMode);
+      form.set("releaseAccessLockMessage", lockMessage);
+      form.set("flowEvents", setCsv(flowEvents));
 
-  // RELEASECORE_RESEND_API_V100: provider-aware test preserves the SMTP v1.0.1 save-first behavior.
-  const testConnection = async () => {
-    if (busy) return;
-    setBusy(true);
-    setNotice({
-      scope: "smtp",
-      tone: "info",
-      message: emailDeliveryProvider === "RESEND"
-        ? "Saving Resend API settings…"
-        : "Saving SMTP settings and testing connection…",
-    });
-    try {
-      const form = new FormData();
-      appendCommonSettings(form);
-      form.set("intent", "test-email-provider");
-      form.set("smtpSettingsIncluded", "on");
       const response = await authenticatedPost(shopify, "/api/automation", form);
-      setSmtpPassword("");
-      setClearSmtpPassword(false);
-      setResendApiKey("");
-      setClearResendApiKey(false);
-      setNotice({ scope: "smtp", tone: "good", message: response.message });
-      shopify.toast.show(emailDeliveryProvider === "RESEND" ? "Resend settings saved" : "SMTP connection succeeded");
+      setNotice({ tone: "good", message: response.message || "Release access rules saved." });
+      shopify.toast.show("Release access rules saved");
       await revalidateInPlace(revalidator);
     } catch (error) {
-      setNotice({
-        scope: "smtp",
-        tone: "bad",
-        message: error.message || "Email provider test failed.",
-      });
+      setNotice({ tone: "bad", message: error.message || "Could not save release access rules." });
     } finally {
       setBusy(false);
     }
   };
-
-  const sendTest = async () => {
-    if (busy) return;
-    setBusy(true);
-    setNotice({
-      scope: "smtp",
-      tone: "info",
-      message: emailDeliveryProvider === "RESEND"
-        ? "Saving Resend settings and sending test email…"
-        : "Saving SMTP settings and sending test email…",
-    });
-    try {
-      const form = new FormData();
-      appendCommonSettings(form);
-      form.set("intent", "send-test-email");
-      form.set("smtpSettingsIncluded", "on");
-      form.set("testEmail", testEmail);
-      const response = await authenticatedPost(shopify, "/api/automation", form);
-      setSmtpPassword("");
-      setClearSmtpPassword(false);
-      setResendApiKey("");
-      setClearResendApiKey(false);
-      setNotice({ scope: "smtp", tone: "good", message: response.message });
-      shopify.toast.show("Test email sent");
-      await revalidateInPlace(revalidator);
-    } catch (error) {
-      setNotice({
-        scope: "smtp",
-        tone: "bad",
-        message: error.message || "Could not send test email.",
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const channelRows = useMemo(
-    () =>
-      AUTOMATION_EVENT_KEYS.map((key) => ({ key, label: LABELS[key] || key })),
-    [],
-  );
-
-  const feedbackFor = (scope) => (notice?.scope === scope ? notice : null);
-
-  const passwordState = clearSmtpPassword
-    ? "Stored password will be removed when you save."
-    : smtpPassword
-      ? "A new password will be encrypted and stored when you save."
-      : smtpPasswordStored
-        ? "A password is already stored securely. Leave this blank to keep it."
-        : "No SMTP password is currently stored.";
 
   return (
-    <s-page heading="Automation & access">
+    <s-page heading="Release access rules">
       <s-section>
-        <PageIntro
-          eyebrow="Workflow automation"
-          title="Access rules, email, and event delivery."
-        >
-          Control release-format access by customer tag and choose how
-          ReleaseCore communicates important workflow events.
+        <PageIntro title="Control which customers can create each release type.">
+          Use Shopify customer tags for plan or roster access. Email settings now live under Notifications so access rules stay focused here.
         </PageIntro>
       </s-section>
 
+      <ActionFeedback feedback={notice} />
+
       <CollapsibleSection
         icon="artist"
-        title="Release access"
-        description="Control which customers can submit each release format."
+        title="Release types"
+        description="Choose who can create Singles, EPs, and Albums."
         summary="Customer tags"
         defaultOpen
       >
@@ -322,380 +145,67 @@ export default function AutomationPage() {
             <Toggle
               checked={singleEnabled}
               onChange={setSingleEnabled}
-              title="Single distribution"
-              help="Disable to hide/lock Singles for everyone."
+              title="Singles"
+              help="Disable to hide and block Single creation for everyone."
             />
-            <Field
-              label="Required customer tags"
-              help="Comma-separated. Leave blank for everyone."
-            >
-              <input
-                className="rc-control"
-                value={singleTags}
-                onChange={(event) => setSingleTags(event.target.value)}
-                placeholder="RLIAB, RLIAB_PRO"
-              />
+            <Field label="Required customer tags" help="Comma-separated. Leave blank for everyone.">
+              <input className="rc-control" value={singleTags} onChange={(event) => setSingleTags(event.target.value)} placeholder="RLIAB, RLIAB_PRO" />
             </Field>
           </div>
           <div style={styles.card}>
-            <Toggle
-              checked={epEnabled}
-              onChange={setEpEnabled}
-              title="EP distribution"
-              help="Server-side enforcement prevents bypassing the storefront lock."
-            />
-            <Field label="Required customer tags">
-              <input
-                className="rc-control"
-                value={epTags}
-                onChange={(event) => setEpTags(event.target.value)}
-                placeholder="RLIAB_PRO"
-              />
+            <Toggle checked={epEnabled} onChange={setEpEnabled} title="EPs" help="The same rule is enforced on the server, not only in the storefront." />
+            <Field label="Required customer tags" help="Comma-separated. Leave blank for everyone.">
+              <input className="rc-control" value={epTags} onChange={(event) => setEpTags(event.target.value)} placeholder="RLIAB_PRO" />
             </Field>
           </div>
           <div style={styles.card}>
-            <Toggle
-              checked={albumEnabled}
-              onChange={setAlbumEnabled}
-              title="Album distribution"
-            />
-            <Field label="Required customer tags">
-              <input
-                className="rc-control"
-                value={albumTags}
-                onChange={(event) => setAlbumTags(event.target.value)}
-                placeholder="RLIAB_PRO, PARTNER"
-              />
+            <Toggle checked={albumEnabled} onChange={setAlbumEnabled} title="Albums" />
+            <Field label="Required customer tags" help="Comma-separated. Leave blank for everyone.">
+              <input className="rc-control" value={albumTags} onChange={(event) => setAlbumTags(event.target.value)} placeholder="RLIAB_PRO, PARTNER" />
             </Field>
           </div>
           <div style={styles.grid}>
-            <Field
-              label="Tag matching"
-              help="ANY allows access when one required tag matches. ALL requires every listed tag."
-            >
-              <select
-                className="rc-control"
-                value={matchMode}
-                onChange={(event) => setMatchMode(event.target.value)}
-              >
+            <Field label="Tag matching" help="ANY grants access when one required tag matches. ALL requires every listed tag.">
+              <select className="rc-control" value={matchMode} onChange={(event) => setMatchMode(event.target.value)}>
                 <option value="ANY">Match any required tag</option>
                 <option value="ALL">Require all listed tags</option>
               </select>
             </Field>
-            <Field label="Locked message">
-              <input
-                className="rc-control"
-                value={lockMessage}
-                onChange={(event) => setLockMessage(event.target.value)}
-                placeholder="Upgrade your plan to unlock this release type."
-              />
+            <Field label="Message shown when locked">
+              <input className="rc-control" value={lockMessage} onChange={(event) => setLockMessage(event.target.value)} placeholder="Upgrade your plan to unlock this release type." />
             </Field>
-          </div>
-        </div>
-      </CollapsibleSection>
-
-            {/* RELEASECORE_RESEND_API_V100: Railway-friendly HTTPS email transport. */}
-      <CollapsibleSection
-        icon="email"
-        title="Email delivery provider"
-        description="Choose how ReleaseCore sends artist and staff automation email. Resend uses HTTPS and works without Railway SMTP egress."
-        summary={smtpEnabled ? (emailDeliveryProvider === "RESEND" ? "Resend API" : "Custom SMTP") : "Disabled"}
-        defaultOpen
-      >
-        <div style={{ display: "grid", gap: 14 }}>
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontWeight: 650 }}>Delivery provider</span>
-            <select
-              value={emailDeliveryProvider}
-              onChange={(event) => setEmailDeliveryProvider(event.currentTarget.value)}
-            >
-              <option value="RESEND">Resend API (recommended)</option>
-              <option value="SMTP">Custom SMTP</option>
-            </select>
-            <small>
-              Resend sends through HTTPS. Custom SMTP remains available for hosts that allow outbound SMTP.
-            </small>
-          </label>
-
-          {emailDeliveryProvider === "RESEND" ? (
-            <>
-              <label style={{ display: "grid", gap: 6 }}>
-                <span style={{ fontWeight: 650 }}>Resend API key</span>
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  value={resendApiKey}
-                  onChange={(event) => setResendApiKey(event.currentTarget.value)}
-                  placeholder="re_…"
-                />
-                <small>
-                  Stored encrypted. Leave blank after saving to keep the existing key.
-                </small>
-              </label>
-              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={clearResendApiKey}
-                  onChange={(event) => setClearResendApiKey(event.currentTarget.checked)}
-                />
-                <span>Remove the stored Resend API key when settings are saved</span>
-              </label>
-              <div className="rc-notice rc-notice--info">
-                Verify your sending domain in Resend before sending from your East Rock address. Replies still go to the Reply-To mailbox configured below.
-              </div>
-            </>
-          ) : (
-            <div className="rc-notice rc-notice--info">
-              Custom SMTP remains available below. Railway plans that block SMTP will still time out even with correct credentials.
-            </div>
-          )}
-        </div>
-      </CollapsibleSection>
-
-<CollapsibleSection
-        icon="files"
-        title="Transactional email"
-        description="Sender identity, test delivery, and optional Custom SMTP fallback settings."
-        summary={smtpEnabled ? "Enabled" : "Disabled"}
-      >
-        <ActionFeedback feedback={feedbackFor("smtp")} />
-        <div style={styles.stack}>
-          <div className="rc-notice rc-notice--info">
-            {encryptionConfigured
-              ? "Secure credential storage is ready."
-              : "Secure credential storage is not configured. Complete the server encryption setup before saving a mail password."}
-          </div>
-          <Toggle
-            checked={smtpEnabled}
-            onChange={setSmtpEnabled}
-            title="Enable email delivery"
-            help="ReleaseCore sends through this store’s mail account. A delivery failure will not block the release workflow."
-          />
-          <div style={styles.grid}>
-            <Field
-              label="SMTP host"
-              help="Examples: smtp.example.com, smtp.office365.com"
-            >
-              <input
-                className="rc-control"
-                value={smtpHost}
-                onChange={(event) => setSmtpHost(event.target.value)}
-                placeholder="smtp.example.com"
-              />
-            </Field>
-            <Field label="Port">
-              <input
-                className="rc-control"
-                type="number"
-                min="1"
-                max="65535"
-                value={smtpPort}
-                onChange={(event) => setSmtpPort(event.target.value)}
-              />
-            </Field>
-            <Field label="Security">
-              <select
-                className="rc-control"
-                value={smtpSecurity}
-                onChange={(event) => setSmtpSecurity(event.target.value)}
-              >
-                <option value="STARTTLS">STARTTLS · usually port 587</option>
-                <option value="SSL_TLS">SSL/TLS · usually port 465</option>
-                <option value="NONE">
-                  No transport encryption · not recommended
-                </option>
-              </select>
-            </Field>
-            <Field
-              label="SMTP username"
-              help="Leave blank only if your server explicitly allows unauthenticated SMTP."
-            >
-              <input
-                className="rc-control"
-                autoComplete="username"
-                value={smtpUsername}
-                onChange={(event) => setSmtpUsername(event.target.value)}
-                placeholder="distribution@example.com"
-              />
-            </Field>
-            <Field label="SMTP password / app password" help={passwordState}>
-              <input
-                className="rc-control"
-                type="password"
-                autoComplete="new-password"
-                value={smtpPassword}
-                onChange={(event) => {
-                  setSmtpPassword(event.target.value);
-                  if (event.target.value) setClearSmtpPassword(false);
-                }}
-                placeholder={
-                  smtpPasswordStored
-                    ? "Stored — enter only to replace"
-                    : "Enter SMTP password"
-                }
-              />
-            </Field>
-            <Field label="Stored credential">
-              <label style={styles.inlineCheck}>
-                <input
-                  type="checkbox"
-                  className="rc-choice-input"
-                  checked={clearSmtpPassword}
-                  onChange={(event) => {
-                    setClearSmtpPassword(event.target.checked);
-                    if (event.target.checked) setSmtpPassword("");
-                  }}
-                />
-                Remove stored SMTP password on save
-              </label>
-            </Field>
-          </div>
-
-          <div style={styles.divider} />
-
-          <div style={styles.grid}>
-            <Field label="Sender name">
-              <input
-                className="rc-control"
-                value={senderName}
-                onChange={(event) => setSenderName(event.target.value)}
-                placeholder="East Rock Entertainment"
-              />
-            </Field>
-            <Field label="From email">
-              <input
-                className="rc-control"
-                type="email"
-                value={fromAddress}
-                onChange={(event) => setFromAddress(event.target.value)}
-                placeholder="distribution@example.com"
-              />
-            </Field>
-            <Field label="Reply-to">
-              <input
-                className="rc-control"
-                type="email"
-                value={replyTo}
-                onChange={(event) => setReplyTo(event.target.value)}
-                placeholder="support@example.com"
-              />
-            </Field>
-            <Field label="Internal notification email">
-              <input
-                className="rc-control"
-                type="email"
-                value={adminEmail}
-                onChange={(event) => {
-                  setAdminEmail(event.target.value);
-                  if (!testEmail) setTestEmail(event.target.value);
-                }}
-                placeholder="distribution-team@example.com"
-              />
-            </Field>
-            <Field label="Email brand name">
-              <input
-                className="rc-control"
-                value={brandName}
-                onChange={(event) => setBrandName(event.target.value)}
-                placeholder="RLIAB"
-              />
-            </Field>
-            <Field label="Artist portal URL">
-              <input
-                className="rc-control"
-                value={portalUrl}
-                onChange={(event) => setPortalUrl(event.target.value)}
-                placeholder="https://example.com/pages/music"
-              />
-            </Field>
-          </div>
-          <Field label="Email footer">
-            <textarea
-              className="rc-control" style={{ minHeight: 80 }}
-              value={footer}
-              onChange={(event) => setFooter(event.target.value)}
-              placeholder="Support contact, legal or label footer text."
-            />
-          </Field>
-
-          <div className="rc-admin-inline-panel" style={styles.smtpTest}>
-            <div>
-              <strong>Connection test</strong>
-              <div style={styles.help}>
-                Save SMTP settings first. ReleaseCore can verify authentication
-                and then send a real test message.
-              </div>
-            </div>
-            <input
-              className="rc-control" style={{ maxWidth: 310 }}
-              type="email"
-              value={testEmail}
-              onChange={(event) => setTestEmail(event.target.value)}
-              placeholder="test@example.com"
-            />
-            <button
-              className="rc-button"
-              disabled={busy}
-              onClick={testConnection}
-            >
-              Test connection
-            </button>
-            <button className="rc-button" disabled={busy} onClick={sendTest}>
-              Send test email
-            </button>
           </div>
         </div>
       </CollapsibleSection>
 
       <CollapsibleSection
         icon="history"
-        title="Event delivery"
-        description="Choose which channels run for each release event."
-        summary="Email and Shopify Flow"
+        title="Shopify Flow"
+        description="Choose which release events trigger the ReleaseCore Shopify Flow action."
+        summary={`${flowEvents.size} events`}
       >
-        <div className="rc-automation-table" style={styles.table}>
-          <div className="rc-automation-table__head" style={styles.tableHead}>
-            <strong>Release event</strong>
-            <strong>Artist email</strong>
-            <strong>Admin email</strong>
-            <strong>Shopify Flow</strong>
-          </div>
-          {channelRows.map((row) => (
-            <div className="rc-automation-table__row" style={styles.tableRow} key={row.key}>
-              <span>{row.label}</span>
-              <input
-                type="checkbox"
-                className="rc-choice-input"
-                checked={artistEvents.has(row.key)}
-                onChange={() => toggle(setArtistEvents, artistEvents, row.key)}
-              />
-              <input
-                type="checkbox"
-                className="rc-choice-input"
-                checked={adminEvents.has(row.key)}
-                onChange={() => toggle(setAdminEvents, adminEvents, row.key)}
-              />
+        <div style={styles.flowList}>
+          {flowRows.map((row) => (
+            <label key={row.key} style={styles.flowRow}>
               <input
                 type="checkbox"
                 className="rc-choice-input"
                 checked={flowEvents.has(row.key)}
-                onChange={() => toggle(setFlowEvents, flowEvents, row.key)}
+                onChange={() => toggleFlow(row.key)}
               />
-            </div>
+              <span>{row.label}</span>
+            </label>
           ))}
         </div>
-        <div style={styles.help}>
-          Flow uses the ReleaseCore “Release event occurred” trigger. A customer
-          owner is required so Flow can expose the Shopify customer and tags to
-          workflow conditions.
+        <div style={{ ...styles.help, marginTop: 12 }}>
+          Shopify Flow receives the customer context when the release has an owning customer, so your Flow conditions can use customer tags.
         </div>
       </CollapsibleSection>
 
       <s-section>
-        <ActionFeedback feedback={feedbackFor("save")} />
         <div className="rc-form-actions" style={styles.actions}>
           <button className="rc-button rc-button--primary" disabled={busy} onClick={save}>
-            {busy ? "Working…" : "Save automation settings"}
+            Save release access rules
           </button>
         </div>
       </s-section>
@@ -706,16 +216,6 @@ export default function AutomationPage() {
 export const headers = (args) => boundary.headers(args);
 
 const styles = {
-  hero: { padding: "20px 2px" },
-  eyebrow: {
-    fontSize: 12,
-    fontWeight: 750,
-    letterSpacing: ".08em",
-    textTransform: "uppercase",
-    color: "#6d7175",
-  },
-  title: { fontSize: 28, fontWeight: 750, marginTop: 6 },
-  copy: { color: "#6d7175", maxWidth: 760, marginTop: 6, lineHeight: 1.5 },
   stack: { display: "grid", gap: 14 },
   card: {
     display: "grid",
@@ -725,91 +225,12 @@ const styles = {
     border: "1px solid #dedede",
     borderRadius: 12,
   },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))",
-    gap: 14,
-  },
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 14 },
   field: { display: "grid", gap: 6 },
   label: { fontSize: 13, fontWeight: 650 },
-  help: {
-    display: "block",
-    fontSize: 12,
-    color: "#6d7175",
-    lineHeight: 1.45,
-    marginTop: 4,
-  },
-  input: {
-    boxSizing: "border-box",
-    width: "100%",
-    minHeight: 42,
-    padding: "9px 11px",
-    border: "1px solid #c9cccf",
-    borderRadius: 8,
-    background: "#fff",
-    fontSize: 14,
-  },
+  help: { display: "block", fontSize: 12, color: "#6d7175", lineHeight: 1.45, marginTop: 4 },
   toggle: { display: "flex", gap: 10, alignItems: "flex-start" },
-  inlineCheck: {
-    display: "flex",
-    gap: 8,
-    alignItems: "center",
-    minHeight: 42,
-    fontSize: 13,
-  },
-  notice: {
-    padding: 12,
-    border: "1px solid #dedede",
-    borderRadius: 9,
-    background: "#fafafa",
-    fontSize: 13,
-  },
-  divider: { height: 1, background: "#e8e8e8", margin: "2px 0" },
-  smtpTest: {
-    display: "flex",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 10,
-    padding: 14,
-    border: "1px solid #dedede",
-    borderRadius: 10,
-    background: "#fafafa",
-  },
-  table: { border: "1px solid #dedede", borderRadius: 12, overflow: "hidden" },
-  tableHead: {
-    display: "grid",
-    gridTemplateColumns: "minmax(220px,1fr) repeat(3,110px)",
-    padding: "11px 14px",
-    background: "#f6f6f7",
-    gap: 8,
-    fontSize: 12,
-  },
-  tableRow: {
-    display: "grid",
-    gridTemplateColumns: "minmax(220px,1fr) repeat(3,110px)",
-    padding: "12px 14px",
-    borderTop: "1px solid #eee",
-    gap: 8,
-    alignItems: "center",
-    fontSize: 13,
-  },
+  flowList: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 8 },
+  flowRow: { display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", border: "1px solid #e3e3e3", borderRadius: 10 },
   actions: { display: "flex", justifyContent: "flex-end" },
-  primary: {
-    border: 0,
-    borderRadius: 8,
-    background: "#202223",
-    color: "#fff",
-    padding: "11px 16px",
-    fontWeight: 650,
-    cursor: "pointer",
-  },
-  secondary: {
-    border: "1px solid #c9cccf",
-    borderRadius: 8,
-    background: "#fff",
-    color: "#202223",
-    padding: "10px 13px",
-    fontWeight: 650,
-    cursor: "pointer",
-  },
 };
