@@ -132,9 +132,6 @@ function creditsJson(release) {
 function releaseArtist(release) {
   const primary = uniqueStrings([
     ...assignmentNames(release.artists, "PRIMARY"),
-    ...(release.tracks || []).flatMap((track) =>
-      assignmentNames(track.artists, "PRIMARY"),
-    ),
     release.artistName,
   ]);
   return primary.join(" & ") || "Various Artists";
