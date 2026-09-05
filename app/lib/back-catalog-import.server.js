@@ -1,6 +1,7 @@
 import db from "../db.server";
 import { publicError } from "./http-security.server";
 import { normalizeIsrc, validateIsrc } from "./isrc";
+import { normalizeLanguage } from "./releasecore";
 import { isValidUpc } from "./upc";
 
 const VALID_RELEASE_TYPES = new Set(["SINGLE", "EP", "ALBUM"]);
@@ -76,7 +77,7 @@ export function buildBackCatalogTemplateCsv() {
       "1",
       "Track One",
       "",
-      "en",
+      "English",
       "false",
       "USABC2400001",
       "",
@@ -95,7 +96,7 @@ export function buildBackCatalogTemplateCsv() {
       "2",
       "Track Two",
       "",
-      "en",
+      "English",
       "true",
       "USABC2400002",
       "",
@@ -114,7 +115,7 @@ export function buildBackCatalogTemplateCsv() {
       "3",
       "Track Three",
       "Remastered",
-      "en",
+      "English",
       "false",
       "USABC2400003",
       "",
@@ -220,6 +221,21 @@ function parseExplicit(value, rowNumber, errors) {
   return false;
 }
 
+function parseLanguage(value, rowNumber, errors) {
+  const raw = clean(value);
+  if (!raw) return null;
+
+  const language = normalizeLanguage(raw);
+  if (!language) {
+    errors.push(
+      `Row ${rowNumber}: track_language “${raw}” is not recognized. Use a ReleaseCore language name or a supported ISO language code.`,
+    );
+    return null;
+  }
+
+  return language;
+}
+
 function sameText(left, right) {
   return clean(left).localeCompare(clean(right), undefined, { sensitivity: "base" }) === 0;
 }
@@ -302,7 +318,7 @@ export function parseBackCatalogCsv(csvText) {
       position: Number.isInteger(position) ? position : 0,
       title: trackTitle,
       version: clean(values.track_version) || null,
-      language: clean(values.track_language) || null,
+      language: parseLanguage(values.track_language, rowNumber, errors),
       explicit: parseExplicit(values.explicit, rowNumber, errors),
       isrc: isrc || null,
       lyrics: clean(values.lyrics) || null,
