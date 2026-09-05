@@ -14,8 +14,8 @@ const SETTINGS_GROUPS = [
     description: "Control how new releases are prepared, identified, and turned into storefront products.",
     items: [
       {
-        title: "Release requirements",
-        description: "Submission rules, contributor credit types, identity protection, identifiers, metadata defaults, pricing, previews, downloads, and Shopify product behavior.",
+        title: "Catalog & release defaults",
+        description: "Submission requirements, credit types, identifiers, metadata defaults, pricing, previews, downloads, and Shopify product behavior.",
         href: "/app/settings/preferences",
         icon: "⚙",
         primary: true,
@@ -36,13 +36,19 @@ const SETTINGS_GROUPS = [
   },
   {
     title: "Artists & access",
-    description: "Manage the customer-facing ReleaseCore experience and who can use it.",
+    description: "Manage people, customer access, and the artist-facing ReleaseCore experience.",
     items: [
       {
         title: "Artist access",
         description: "Assign Shopify customers and label/team accounts to the artists they can manage.",
         href: "/app/portal-access",
         icon: "◉",
+      },
+      {
+        title: "Contributors",
+        description: "Manage reusable contributor identities used for credits and publishing information.",
+        href: "/app/contributors",
+        icon: "◎",
       },
       {
         title: "Artist portal",
