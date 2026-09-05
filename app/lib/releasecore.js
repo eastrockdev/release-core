@@ -72,6 +72,66 @@ export const LANGUAGES = [
   "Instrumental / No linguistic content",
 ];
 
+const LANGUAGE_CODE_ALIASES = Object.freeze({
+  en: "English",
+  es: "Spanish",
+  fr: "French",
+  de: "German",
+  it: "Italian",
+  pt: "Portuguese",
+  nl: "Dutch",
+  ar: "Arabic",
+  zh: "Chinese",
+  ja: "Japanese",
+  ko: "Korean",
+  hi: "Hindi",
+  bn: "Bengali",
+  pa: "Punjabi",
+  ur: "Urdu",
+  ru: "Russian",
+  pl: "Polish",
+  tr: "Turkish",
+  el: "Greek",
+  he: "Hebrew",
+  iw: "Hebrew",
+  sv: "Swedish",
+  no: "Norwegian",
+  da: "Danish",
+  fi: "Finnish",
+  is: "Icelandic",
+  cs: "Czech",
+  sk: "Slovak",
+  hu: "Hungarian",
+  ro: "Romanian",
+  uk: "Ukrainian",
+  vi: "Vietnamese",
+  th: "Thai",
+  id: "Indonesian",
+  in: "Indonesian",
+  ms: "Malay",
+  sw: "Swahili",
+  zxx: "Instrumental / No linguistic content",
+  instrumental: "Instrumental / No linguistic content",
+  "no linguistic content": "Instrumental / No linguistic content",
+  "instrumental / no linguistic content": "Instrumental / No linguistic content",
+});
+
+export function normalizeLanguage(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+
+  const canonical = LANGUAGES.find(
+    (language) => language.localeCompare(raw, undefined, { sensitivity: "base" }) === 0,
+  );
+  if (canonical) return canonical;
+
+  const key = raw.toLowerCase().replace(/_/g, "-");
+  if (LANGUAGE_CODE_ALIASES[key]) return LANGUAGE_CODE_ALIASES[key];
+
+  const baseCode = key.split("-")[0];
+  return LANGUAGE_CODE_ALIASES[baseCode] || null;
+}
+
 export const ARTIST_ROLES = ["PRIMARY", "FEATURED"];
 export const CREDIT_ROLES = CORE_CREDIT_ROLES;
 
