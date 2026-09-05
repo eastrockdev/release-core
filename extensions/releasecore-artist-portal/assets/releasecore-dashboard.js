@@ -1000,6 +1000,9 @@
       const options = state.releaseOptions || {};
       const cover = fileByKind(release.files, "COVER_ART");
       const splitSheet = fileByKind(release.files, "SPLIT_SHEET");
+const showReadiness =
+  release.canSubmit &&
+  String(release.distributionStatus || "").toUpperCase() !== "DELIVERED";
       const artistNames = (release.artists || [])
         .filter((assignment) => assignment.role === "PRIMARY")
         .map((assignment) => assignment.artist?.name)
@@ -1124,7 +1127,7 @@
             </div>
 
             <aside class="rc-native-workspace__side">
-              <article class="rc-native-side-card">${renderReadiness(release)}</article>
+              ${showReadiness ? `<article class="rc-native-side-card">${renderReadiness(release)}</article>` : ""}
               ${renderReviewItems(release)}
               <article class="rc-native-side-card">
                 <div class="rc-native-card-heading">

@@ -190,23 +190,29 @@ export async function portalReleaseDetail({ shop, customerId, releaseId, admin }
   const settings = (await db.appSettings.findUnique({ where: { shop } })) || {};
   const readiness = calculateReleaseReadiness(release, settings);
   const datePolicy = releaseDatePolicy(settings);
-  const releaseDate = releaseDateOnly(release.releaseDate);
-  const leadTimeCheck = validateReleaseDateLeadTime(releaseDate, settings);
-  readiness.checks.releaseDateLeadTimeReady = !datePolicy.enabled || Boolean(releaseDate && leadTimeCheck.ok);
-  if (releaseDate && !leadTimeCheck.ok) {
-    readiness.ready = false;
-    readiness.blockers = [
-      { code: "RELEASE_LEAD_TIME", message: leadTimeCheck.message },
-      ...readiness.blockers.filter((item) => item.code !== "RELEASE_LEAD_TIME"),
-    ];
-  }
+const isInitialDraft = release.status === "DRAFT" && !release.submittedAt;
+const releaseDate = releaseDateOnly(release.releaseDate);
+const leadTimeCheck = validateReleaseDateLeadTime(releaseDate, settings);
+readiness.checks.releaseDateLeadTimeReady =
+  !datePolicy.enabled ||
+  !isInitialDraft ||
+  Boolean(releaseDate && leadTimeCheck.ok);
+if (isInitialDraft && releaseDate && !leadTimeCheck.ok) {
+  readiness.ready = false;
+  readiness.blockers = [
+    { code: "RELEASE_LEAD_TIME", message: leadTimeCheck.message },
+    ...readiness.blockers.filter((item) => item.code !== "RELEASE_LEAD_TIME"),
+  ];
+}
   return {
     ...release,
     editable: releaseIsEditable(release.status),
     canSubmit: releaseCanSubmit(release.status),
     readiness,
     isrcMode: isrcAssignmentMode(settings),
-    releaseDatePolicy: datePolicy,
+    releaseDatePolicy: isInitialDraft
+      ? datePolicy
+      : { ...datePolicy, enabled: false },
     creditSplitsEnabled: settings?.requirePublishing ?? true,
   };
 }
@@ -469,8 +475,10 @@ export async function updatePortalRelease({ admin, shop, customerId, releaseId, 
     fieldLabel: "℗ line holder",
   });
   if (releaseDateRaw && !/^\d{4}-\d{2}-\d{2}$/.test(releaseDateRaw)) throw publicError("Choose a valid release date.");
+  if (release.status === "DRAFT" && !release.submittedAt) {
   const leadTime = validateReleaseDateLeadTime(releaseDateRaw || null, settings);
   if (!leadTime.ok) throw publicError(leadTime.message);
+}
   return db.release.update({
     where: { id: release.id },
     data: {
