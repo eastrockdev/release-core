@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLoaderData, useNavigate } from "react-router";
+import { Outlet, useLoaderData, useLocation, useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -47,6 +47,7 @@ export default function ImportProductPage() {
   const { importedProducts = {} } = useLoaderData();
   const shopify = useAppBridge();
   const navigate = useNavigate();
+  const location = useLocation();
   const [product, setProduct] = useState(null);
   const [type, setType] = useState("AUTO");
   const [importState, setImportState] = useState("CATALOG");
@@ -54,6 +55,13 @@ export default function ImportProductPage() {
   const [artistOverride, setArtistOverride] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
+
+  const isShopifyImportIndex =
+    location.pathname.replace(/\/+$/, "") === "/app/import";
+
+  if (!isShopifyImportIndex) {
+    return <Outlet />;
+  }
 
   const importedProductFilter = Object.keys(importedProducts)
     .map((id) => String(id).match(/Product\/(\d+)$/)?.[1])
