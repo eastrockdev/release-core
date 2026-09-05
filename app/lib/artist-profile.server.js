@@ -1,4 +1,5 @@
 import db from "../db.server";
+import { unauthenticated } from "../shopify.server";
 import { deleteShopifyFilesBestEffort } from "./shopify-files.server";
 import { publicError } from "./http-security.server";
 import { syncArtistCollectionProfile } from "./artist-collection-profile.server";
@@ -31,6 +32,12 @@ function portalArtistView(artist) {
   }
 
   return profile;
+}
+
+async function collectionAdmin(shop, admin = null) {
+  if (admin) return admin;
+  const context = await unauthenticated.admin(shop);
+  return context.admin;
 }
 
 async function portalArtistIds({ shop, customerId }) {
@@ -104,7 +111,7 @@ function requirePartnerSetup(artist) {
   }
 }
 
-export async function updatePortalArtistProfile({ admin, shop, customerId, formData }) {
+export async function updatePortalArtistProfile({ admin = null, shop, customerId, formData }) {
   const artistId = String(formData.get("artistId") || "");
   const artist = await requirePortalArtist({ shop, customerId, artistId });
   const settings = await db.appSettings.findUnique({
@@ -138,7 +145,10 @@ export async function updatePortalArtistProfile({ admin, shop, customerId, formD
   });
 
   if (updated.shopifyCollectionId) {
-    await syncArtistCollectionProfile({ admin, artist: updated });
+    await syncArtistCollectionProfile({
+      admin: await collectionAdmin(shop, admin),
+      artist: updated,
+    });
   }
 
   if (name !== artist.name) {
