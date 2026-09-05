@@ -1,7 +1,44 @@
 import db from "../db.server";
+import { unauthenticated } from "../shopify.server";
 import { deleteShopifyFilesBestEffort } from "./shopify-files.server";
+import { publicError } from "./http-security.server";
+import { syncArtistCollectionProfile } from "./artist-collection-profile.server";
 
 const clean = (value) => String(value || "").trim() || null;
+
+const COLLECTION_PROFILE_FIELDS = [
+  "biography",
+  "websiteUrl",
+  "spotifyUrl",
+  "appleMusicUrl",
+  "instagramUrl",
+  "facebookUrl",
+  "tiktokUrl",
+  "youtubeUrl",
+  "xUrl",
+];
+
+function portalArtistView(artist) {
+  const collectionConnected = Boolean(artist?.shopifyCollectionId);
+  const profile = {
+    ...artist,
+    collectionConnected,
+    publicProfileEditable: collectionConnected,
+    partnerSetupRequired: !collectionConnected,
+  };
+
+  if (!collectionConnected) {
+    for (const field of COLLECTION_PROFILE_FIELDS) profile[field] = null;
+  }
+
+  return profile;
+}
+
+async function collectionAdmin(shop, admin = null) {
+  if (admin) return admin;
+  const context = await unauthenticated.admin(shop);
+  return context.admin;
+}
 
 async function portalArtistIds({ shop, customerId }) {
   const [policy, access, ownedReleases] = await Promise.all([
@@ -20,8 +57,30 @@ export async function listPortalArtistProfiles({ shop, customerId }) {
   const [artists, settings] = await Promise.all([
     ids.length
       ? db.artist.findMany({
-          where: { shop, id: { in: ids } }, orderBy: { name: "asc" },
-          select: { id: true, name: true, legalName: true, email: true, pro: true, ipi: true, publisherName: true, publisherIpi: true, imageUrl: true, biography: true, websiteUrl: true, spotifyUrl: true, appleMusicUrl: true, instagramUrl: true, facebookUrl: true, tiktokUrl: true, youtubeUrl: true, xUrl: true },
+          where: { shop, id: { in: ids } },
+          orderBy: { name: "asc" },
+          select: {
+            id: true,
+            name: true,
+            legalName: true,
+            email: true,
+            pro: true,
+            ipi: true,
+            publisherName: true,
+            publisherIpi: true,
+            imageUrl: true,
+            biography: true,
+            websiteUrl: true,
+            spotifyUrl: true,
+            appleMusicUrl: true,
+            instagramUrl: true,
+            facebookUrl: true,
+            tiktokUrl: true,
+            youtubeUrl: true,
+            xUrl: true,
+            shopifyCollectionId: true,
+            shopifyCollectionHandle: true,
+          },
         })
       : Promise.resolve([]),
     db.appSettings.findUnique({
@@ -30,7 +89,7 @@ export async function listPortalArtistProfiles({ shop, customerId }) {
     }),
   ]);
   return {
-    artists,
+    artists: artists.map(portalArtistView),
     policy: { lockArtistNameEditing: settings?.lockArtistNameEditing ?? true },
   };
 }
@@ -43,7 +102,16 @@ async function requirePortalArtist({ shop, customerId, artistId }) {
   return artist;
 }
 
-export async function updatePortalArtistProfile({ shop, customerId, formData }) {
+function requirePartnerSetup(artist) {
+  if (!artist?.shopifyCollectionId) {
+    throw publicError(
+      "Requires partner setup. Your label needs to connect this artist to a Shopify collection before public profile details can be edited.",
+      { status: 409 },
+    );
+  }
+}
+
+export async function updatePortalArtistProfile({ admin = null, shop, customerId, formData }) {
   const artistId = String(formData.get("artistId") || "");
   const artist = await requirePortalArtist({ shop, customerId, artistId });
   const settings = await db.appSettings.findUnique({
@@ -54,13 +122,35 @@ export async function updatePortalArtistProfile({ shop, customerId, formData }) 
   const requestedName = String(formData.get("name") || "").trim();
   const name = nameLocked ? artist.name : requestedName;
   if (!name) throw new Error("Artist name is required.");
+
+  const data = {
+    name,
+    legalName: clean(formData.get("legalName")),
+    email: clean(formData.get("email")),
+    pro: clean(formData.get("pro")),
+    ipi: clean(formData.get("ipi")),
+    publisherName: clean(formData.get("publisherName")),
+    publisherIpi: clean(formData.get("publisherIpi")),
+  };
+
+  if (artist.shopifyCollectionId) {
+    for (const field of COLLECTION_PROFILE_FIELDS) {
+      data[field] = clean(formData.get(field));
+    }
+  }
+
   const updated = await db.artist.update({
     where: { id: artist.id },
-    data: {
-      name,
-      legalName: clean(formData.get("legalName")), email: clean(formData.get("email")), pro: clean(formData.get("pro")), ipi: clean(formData.get("ipi")), publisherName: clean(formData.get("publisherName")), publisherIpi: clean(formData.get("publisherIpi")), biography: clean(formData.get("biography")), websiteUrl: clean(formData.get("websiteUrl")), spotifyUrl: clean(formData.get("spotifyUrl")), appleMusicUrl: clean(formData.get("appleMusicUrl")), instagramUrl: clean(formData.get("instagramUrl")), facebookUrl: clean(formData.get("facebookUrl")), tiktokUrl: clean(formData.get("tiktokUrl")), youtubeUrl: clean(formData.get("youtubeUrl")), xUrl: clean(formData.get("xUrl")),
-    },
+    data,
   });
+
+  if (updated.shopifyCollectionId) {
+    await syncArtistCollectionProfile({
+      admin: await collectionAdmin(shop, admin),
+      artist: updated,
+    });
+  }
+
   if (name !== artist.name) {
     const releaseAssignments = await db.releaseArtist.findMany({ where: { artistId }, select: { releaseId: true } });
     for (const assignment of releaseAssignments) {
@@ -68,12 +158,14 @@ export async function updatePortalArtistProfile({ shop, customerId, formData }) 
       await db.release.update({ where: { id: assignment.releaseId }, data: { artistName: primary?.artist?.name || null } });
     }
   }
-  return updated;
+
+  return portalArtistView(updated);
 }
 
 export async function stagePortalArtistImage({ admin, shop, customerId, formData }) {
   const artistId = String(formData.get("artistId") || "");
-  await requirePortalArtist({ shop, customerId, artistId });
+  const artist = await requirePortalArtist({ shop, customerId, artistId });
+  requirePartnerSetup(artist);
   const filename = String(formData.get("filename") || "artist.jpg").trim();
   const mimeType = String(formData.get("mimeType") || "image/jpeg").toLowerCase();
   const sizeBytes = Number(formData.get("sizeBytes") || 0);
@@ -89,6 +181,7 @@ mutation ReleaseCorePortalStageArtistImage($input:[StagedUploadInput!]!){stagedU
 export async function completePortalArtistImage({ admin, shop, customerId, formData }) {
   const artistId = String(formData.get("artistId") || "");
   const artist = await requirePortalArtist({ shop, customerId, artistId });
+  requirePartnerSetup(artist);
   const resourceUrl = String(formData.get("resourceUrl") || ""); if (!resourceUrl) throw new Error("Artist image resource URL is missing.");
   const response = await admin.graphql(`#graphql
 mutation ReleaseCorePortalCreateArtistImage($files:[FileCreateInput!]!){fileCreate(files:$files){files{id ... on MediaImage{image{url}}} userErrors{message}}}`, { variables: { files: [{ contentType: "IMAGE", originalSource: resourceUrl, alt: `${artist.name} artist profile` }] } });
@@ -96,7 +189,10 @@ mutation ReleaseCorePortalCreateArtistImage($files:[FileCreateInput!]!){fileCrea
   if (payload?.userErrors?.length) throw new Error(payload.userErrors.map((item) => item.message).join(" "));
   const file = payload?.files?.[0]; if (!file?.id) throw new Error("Shopify did not create the artist image.");
   const imageUrl = file.image?.url || resourceUrl;
-  await db.artist.update({ where: { id: artist.id }, data: { imageUrl, imageFileId: file.id } });
+  const updated = await db.artist.update({ where: { id: artist.id }, data: { imageUrl, imageFileId: file.id } });
+
+  await syncArtistCollectionProfile({ admin, artist: updated });
+
   if (artist.imageFileId && artist.imageFileId !== file.id) {
     await deleteShopifyFilesBestEffort(admin, artist.imageFileId, {
       context: "replaced portal artist image cleanup",

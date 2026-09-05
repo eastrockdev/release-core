@@ -1,7 +1,8 @@
 (() => {
   const profileFields=["name","legalName","email","pro","ipi","publisherName","publisherIpi","websiteUrl","biography","spotifyUrl","appleMusicUrl","instagramUrl","facebookUrl","tiktokUrl","youtubeUrl","xUrl"];
-
+  const collectionProfileFields=["websiteUrl","biography","spotifyUrl","appleMusicUrl","instagramUrl","facebookUrl","tiktokUrl","youtubeUrl","xUrl"];
   const completionFields=["name","imageUrl","biography","email","ipi","spotifyUrl","appleMusicUrl"];
+  const identityCompletionFields=["name","email","ipi","pro"];
 
   const requestJson = async (url, options = {}) => {
     const response = await fetch(url, {
@@ -55,6 +56,7 @@
     if (!form) return;
 
     const status = root.querySelector("[data-profile-status]");
+    const partnerNotice = root.querySelector("[data-profile-partner-setup]");
     const picker = root.querySelector("[data-artist-picker]");
     const select = root.querySelector("[data-profile-select]");
     const avatar = root.querySelector("[data-profile-avatar]");
@@ -65,8 +67,14 @@
     const progressLabel = root.querySelector("[data-profile-progress-label]");
     const imageInput = root.querySelector("[data-profile-image]");
     const uploadLabel = root.querySelector("[data-profile-upload-label]");
+    const uploadControl = imageInput?.closest("label");
     const submitButton = form.querySelector("button[type=submit]");
     const nameInput = form.elements.name;
+    const defaultUploadLabel = uploadLabel?.textContent || "Upload photo";
+    const originalPlaceholders = new Map();
+    collectionProfileFields.forEach((field) => {
+      if (form.elements[field]) originalPlaceholders.set(field, form.elements[field].getAttribute("placeholder") || "");
+    });
     let artists = [];
     let current = null;
     let policy = { lockArtistNameEditing: true };
@@ -77,9 +85,13 @@
       status.className = `rc-artist-profile__notice${tone ? ` rc-artist-profile__notice--${tone}` : ""}`;
     };
 
+    const requiresPartnerSetup = (artist) =>
+      artist?.partnerSetupRequired === true || artist?.publicProfileEditable === false;
+
     const completionPercent = (artist) => {
-      const completed = completionFields.filter((field) => String(artist?.[field] || "").trim()).length;
-      return Math.round((completed / completionFields.length) * 100);
+      const fields = requiresPartnerSetup(artist) ? identityCompletionFields : completionFields;
+      const completed = fields.filter((field) => String(artist?.[field] || "").trim()).length;
+      return Math.round((completed / fields.length) * 100);
     };
 
     const updateCompletion = (artist) => {
@@ -122,6 +134,35 @@
       nameInput.setAttribute("aria-readonly", String(locked));
     };
 
+    const applyCollectionPolicy = (artist) => {
+      const required = requiresPartnerSetup(artist);
+      root.dataset.partnerSetupRequired = String(required);
+      if (partnerNotice) partnerNotice.hidden = !required;
+
+      collectionProfileFields.forEach((field) => {
+        const input = form.elements[field];
+        if (!input) return;
+        input.disabled = required;
+        if (required) {
+          input.value = "";
+          input.setAttribute("placeholder", root.dataset.partnerSetupMessage || "Requires partner setup");
+        } else {
+          input.setAttribute("placeholder", originalPlaceholders.get(field) || "");
+        }
+      });
+
+      if (imageInput) imageInput.disabled = required;
+      if (uploadControl) {
+        uploadControl.setAttribute("aria-disabled", String(required));
+        uploadControl.classList.toggle("rc-artist-profile__button--disabled", required);
+      }
+      if (uploadLabel) {
+        uploadLabel.textContent = required
+          ? (root.dataset.partnerSetupMessage || "Requires partner setup")
+          : defaultUploadLabel;
+      }
+    };
+
     const render = (id) => {
       current = artists.find((item) => item.id === id) || artists[0];
       if (!current) return;
@@ -132,6 +173,7 @@
       select.value = current.id;
       drawAvatar(current);
       applyPolicy();
+      applyCollectionPolicy(current);
       updatePreview();
     };
 
@@ -159,6 +201,7 @@
             name: "Artist name",
             biography: "A public-facing artist biography will appear here as the profile is completed.",
             spotifyUrl: "https://open.spotify.com/",
+            publicProfileEditable: true,
           }];
           select.innerHTML = "";
           select.add(new Option(artists[0].name, artists[0].id));
@@ -196,7 +239,7 @@
 
     imageInput.addEventListener("change", async () => {
       const file = imageInput.files && imageInput.files[0];
-      if (!file || !current) return;
+      if (!file || !current || requiresPartnerSetup(current)) return;
       const originalLabel = uploadLabel.textContent;
       uploadLabel.textContent = root.dataset.uploadingMessage;
       setStatus(root.dataset.uploadingMessage);
@@ -230,6 +273,7 @@
       } finally {
         uploadLabel.textContent = originalLabel;
         imageInput.value = "";
+        applyCollectionPolicy(current);
       }
     });
 
