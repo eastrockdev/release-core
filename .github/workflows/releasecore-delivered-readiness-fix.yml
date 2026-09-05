@@ -1,0 +1,171 @@
+name: ReleaseCore delivered readiness fix
+
+on:
+  push:
+    branches:
+      - automation/delivered-readiness-fix-20260905
+    paths:
+      - .github/workflows/releasecore-delivered-readiness-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Patch post-submission readiness behavior
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              file = Path(path)
+              source = file.read_text()
+              if old not in source:
+                  raise SystemExit(f"Could not find expected source block for {label} in {path}")
+              file.write_text(source.replace(old, new, 1))
+
+          portal = "app/lib/portal.server.js"
+          dashboard = "extensions/releasecore-artist-portal/assets/releasecore-dashboard.js"
+          validator = "scripts/validate-m18.2-native-portal.mjs"
+
+          replace_once(
+              portal,
+              '''  const datePolicy = releaseDatePolicy(settings);
+          const releaseDate = releaseDateOnly(release.releaseDate);
+          const leadTimeCheck = validateReleaseDateLeadTime(releaseDate, settings);
+          readiness.checks.releaseDateLeadTimeReady = !datePolicy.enabled || Boolean(releaseDate && leadTimeCheck.ok);
+          if (releaseDate && !leadTimeCheck.ok) {
+            readiness.ready = false;
+            readiness.blockers = [
+              { code: "RELEASE_LEAD_TIME", message: leadTimeCheck.message },
+              ...readiness.blockers.filter((item) => item.code !== "RELEASE_LEAD_TIME"),
+            ];
+          }
+          ''',
+              '''  const datePolicy = releaseDatePolicy(settings);
+          const isInitialDraft = release.status === "DRAFT" && !release.submittedAt;
+          const releaseDate = releaseDateOnly(release.releaseDate);
+          const leadTimeCheck = validateReleaseDateLeadTime(releaseDate, settings);
+          readiness.checks.releaseDateLeadTimeReady =
+            !datePolicy.enabled ||
+            !isInitialDraft ||
+            Boolean(releaseDate && leadTimeCheck.ok);
+          if (isInitialDraft && releaseDate && !leadTimeCheck.ok) {
+            readiness.ready = false;
+            readiness.blockers = [
+              { code: "RELEASE_LEAD_TIME", message: leadTimeCheck.message },
+              ...readiness.blockers.filter((item) => item.code !== "RELEASE_LEAD_TIME"),
+            ];
+          }
+          ''',
+              "draft-only release date lead-time readiness",
+          )
+
+          replace_once(
+              portal,
+              '    releaseDatePolicy: datePolicy,',
+              '    releaseDatePolicy: isInitialDraft\n      ? datePolicy\n      : { ...datePolicy, enabled: false },',
+              "post-submission release date policy visibility",
+          )
+
+          replace_once(
+              portal,
+              '''  const leadTime = validateReleaseDateLeadTime(releaseDateRaw || null, settings);
+          if (!leadTime.ok) throw publicError(leadTime.message);
+          ''',
+              '''  if (release.status === "DRAFT" && !release.submittedAt) {
+            const leadTime = validateReleaseDateLeadTime(releaseDateRaw || null, settings);
+            if (!leadTime.ok) throw publicError(leadTime.message);
+          }
+          ''',
+              "draft-only release date lead-time mutation validation",
+          )
+
+          replace_once(
+              dashboard,
+              '      const splitSheet = fileByKind(release.files, "SPLIT_SHEET");',
+              '''      const splitSheet = fileByKind(release.files, "SPLIT_SHEET");
+          const showReadiness =
+            release.canSubmit &&
+            String(release.distributionStatus || "").toUpperCase() !== "DELIVERED";''',
+              "release readiness visibility guard",
+          )
+
+          replace_once(
+              dashboard,
+              '              <article class="rc-native-side-card">${renderReadiness(release)}</article>',
+              '              ${showReadiness ? `<article class="rc-native-side-card">${renderReadiness(release)}</article>` : ""}',
+              "readiness side card rendering",
+          )
+
+          validator_anchor = '''expect(
+            "app/lib/portal.server.js",
+            "artistId = null",
+            "artist-scoped portal release listing",
+          );
+          '''
+          validator_extra = '''expect(
+            "app/lib/portal.server.js",
+            'const isInitialDraft = release.status === "DRAFT" && !release.submittedAt;',
+            "draft-only release date lead-time guard",
+          );
+          expect(
+            "app/lib/portal.server.js",
+            "if (isInitialDraft && releaseDate && !leadTimeCheck.ok)",
+            "post-submission release date lead-time suppression",
+          );
+          expect(
+            "extensions/releasecore-artist-portal/assets/releasecore-dashboard.js",
+            "const showReadiness =",
+            "actionable release readiness visibility guard",
+          );
+          expect(
+            "extensions/releasecore-artist-portal/assets/releasecore-dashboard.js",
+            'String(release.distributionStatus || "").toUpperCase() !== "DELIVERED"',
+            "delivered release readiness suppression",
+          );
+          '''
+          replace_once(
+              validator,
+              validator_anchor,
+              validator_anchor + validator_extra,
+              "M18.2 regression checks",
+          )
+          PY
+
+      - name: Validate patched sources
+        shell: bash
+        run: |
+          node --check app/lib/portal.server.js
+          node --check extensions/releasecore-artist-portal/assets/releasecore-dashboard.js
+          node scripts/validate-m18.2-native-portal.mjs
+          node scripts/validate-release-timeline.mjs
+
+      - name: Commit fix to main
+        shell: bash
+        run: |
+          git config user.name "East Rock Developer Team"
+          git config user.email "87349597+eastrockdev@users.noreply.github.com"
+          git add app/lib/portal.server.js \
+            extensions/releasecore-artist-portal/assets/releasecore-dashboard.js \
+            scripts/validate-m18.2-native-portal.mjs
+          if git diff --cached --quiet; then
+            echo "No changes were produced."
+            exit 1
+          fi
+          git commit -m "Fix post-submission release readiness prompts"
+          git push origin HEAD:main
+
+      - name: Remove temporary automation branch
+        if: success()
+        shell: bash
+        run: git push origin --delete automation/delivered-readiness-fix-20260905 || true
