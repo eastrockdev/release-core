@@ -1,8 +1,4 @@
-import {
-  Link,
-  useLoaderData,
-  useNavigate,
-} from "react-router";
+import { Link, useLoaderData, useNavigate } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import {
@@ -13,23 +9,13 @@ import {
   ReleaseListItem,
   StatusBadge,
 } from "../components/releasecore-ui";
-import {
-  formatDate,
-  typeLabel,
-} from "../lib/releasecore";
-import {
-  distributionStatusLabel,
-  statusLabel,
-} from "../lib/workflow";
+import { formatDate, typeLabel } from "../lib/releasecore";
+import { distributionStatusLabel, statusLabel } from "../lib/workflow";
 import { loadOperationsCenter } from "../lib/operations-center.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
-  return loadOperationsCenter({
-    shop: session.shop,
-    releaseLimit: 250,
-    issueLimit: 60,
-  });
+  return loadOperationsCenter({ shop: session.shop, releaseLimit: 250, issueLimit: 60 });
 };
 
 function issueTone(severity) {
@@ -44,49 +30,24 @@ function SystemIssueSummary({ issue }) {
       <div className="rc-system-issue__body">
         <div className="rc-system-issue__badges">
           <StatusBadge
-            tone={
-              issue.severity === "CRITICAL"
-                ? "critical"
-                : issue.severity === "ERROR"
-                  ? "warning"
-                  : "info"
-            }
+            tone={issue.severity === "CRITICAL" ? "critical" : issue.severity === "ERROR" ? "warning" : "info"}
           >
             {issue.errorClass}
           </StatusBadge>
-          <span>
-            {issue.source} · {issue.operation}
-          </span>
         </div>
-        <strong>
-          {issue.release?.title ||
-            "ReleaseCore system"}
-        </strong>
-        <div className="rc-operations-issue__copy">
-          {issue.safeMessage}
-        </div>
+        <strong>{issue.release?.title || "ReleaseCore"}</strong>
+        <div className="rc-operations-issue__copy">{issue.safeMessage}</div>
         {issue.resolution ? (
           <div className="rc-system-issue__resolution">
-            <strong>Recommended resolution</strong>
+            <strong>What to do next</strong>
             <span>{issue.resolution}</span>
           </div>
         ) : null}
         <div className="rc-system-issue__reference">
-          {issue.requestId
-            ? `Reference: ${issue.requestId}`
-            : "No request reference"}
-          {" · "}
-          {new Date(
-            issue.lastSeenAt,
-          ).toLocaleString()}
+          {issue.requestId ? `Reference: ${issue.requestId}` : "No request reference"} · {new Date(issue.lastSeenAt).toLocaleString()}
         </div>
       </div>
-      <Link
-        to="/app/system-issues"
-        className="rc-button rc-button--compact"
-      >
-        View issue
-      </Link>
+      <Link to="/app/system-issues" className="rc-button rc-button--compact">View details</Link>
     </article>
   );
 }
@@ -96,26 +57,15 @@ function OperationsIssue({ issue }) {
     <article className="rc-operations-issue">
       <div className="rc-operations-issue__main">
         <div className="rc-operations-issue__meta">
-          <StatusBadge tone={issueTone(issue.severity)}>
-            {issue.category}
-          </StatusBadge>
+          <StatusBadge tone={issueTone(issue.severity)}>{issue.category}</StatusBadge>
           <span>{issue.release.title}</span>
           <span>·</span>
           <span>{statusLabel(issue.release.status)}</span>
         </div>
-        <strong className="rc-operations-issue__title">
-          {issue.title}
-        </strong>
-        <div className="rc-operations-issue__copy">
-          {issue.message}
-        </div>
+        <strong className="rc-operations-issue__title">{issue.title}</strong>
+        <div className="rc-operations-issue__copy">{issue.message}</div>
       </div>
-      <Link
-        to={issue.href}
-        className="rc-button rc-button--compact"
-      >
-        {issue.actionLabel}
-      </Link>
+      <Link to={issue.href} className="rc-button rc-button--compact">{issue.actionLabel}</Link>
     </article>
   );
 }
@@ -126,143 +76,37 @@ export default function Operations() {
 
   return (
     <s-page heading="Operations">
-      <s-button
-        slot="primary-action"
-        variant="primary"
-        onClick={() => navigate("/app/release/new")}
-      >
-        Create release
-      </s-button>
-
       <s-section>
         <PageIntro
-          eyebrow="Production workflow"
-          title="See what needs attention before the next release goes out."
+          title="Resolve work that needs intervention."
           actions={
             <>
-              <s-button
-                variant="primary"
-                onClick={() =>
-                  navigate("/app/submissions")
-                }
-              >
-                Review submissions
-              </s-button>
-              <s-button
-                onClick={() =>
-                  navigate("/app/distribution")
-                }
-              >
-                Distribution queue
-              </s-button>
-              <s-button
-                onClick={() =>
-                  navigate("/app/operations/metrics")
-                }
-              >
-                Operational metrics
-              </s-button>
+              <s-button variant="primary" onClick={() => navigate("/app/submissions")}>Review submissions</s-button>
+              <s-button onClick={() => navigate("/app/distribution")}>Distribution</s-button>
             </>
           }
         >
-          ReleaseCore evaluates active releases from local catalog
-          data, review state, delivery state, recent Shopify sync
-          outcomes, and notification failures. Nothing on this page
-          performs an external Shopify write.
+          Review release blockers, pending review work, distribution readiness, and system problems from one place.
         </PageIntro>
       </s-section>
 
-      <s-section heading="Current queue">
+      <s-section heading="At a glance">
         <MetricGrid>
-          <MetricCard
-            label="Needs attention"
-            value={data.stats.needsAttention}
-            detail="Active releases with an actionable issue"
-          />
-          <MetricCard
-            label="Waiting for review"
-            value={data.stats.waitingReview}
-            detail="Submitted or currently in review"
-            href="/app/submissions"
-          />
-          <MetricCard
-            label="Ready to distribute"
-            value={data.stats.readyToDistribute}
-            detail="Approved and locally preflight-complete"
-            href="/app/distribution"
-          />
-          <MetricCard
-            label="Next 7 days"
-            value={data.stats.scheduledNextSevenDays}
-            detail="Upcoming undelivered releases"
-          />
-          <MetricCard
-            label="Background jobs"
-            value={data.stats.activeBackgroundJobs}
-            detail="Queued or currently running"
-            href="/app/operations/metrics"
-          />
-          <MetricCard
-            label="System issues"
-            value={data.stats.openSystemIssues}
-            detail="Open production diagnostics"
-            href="/app/system-issues"
-          />
+          <MetricCard label="Needs attention" value={data.stats.needsAttention} detail="Releases with something to resolve" />
+          <MetricCard label="Waiting for review" value={data.stats.waitingReview} detail="Submitted or currently in review" href="/app/submissions" />
+          <MetricCard label="Ready to distribute" value={data.stats.readyToDistribute} detail="Approved and ready for delivery" href="/app/distribution" />
+          <MetricCard label="System issues" value={data.stats.openSystemIssues} detail="Open problems recorded by ReleaseCore" href="/app/system-issues" />
         </MetricGrid>
-        {data.capped ? (
-          <div className="rc-operations-note">
-            The active-release scan reached its 250-release safety
-            cap. Counts based on exact database totals remain
-            complete; readiness issue lists cover the first 250
-            active releases.
-          </div>
-        ) : null}
-      </s-section>
-
-      <s-section heading="Recent system issues">
-        {data.recentSystemIssues.length ? (
-          <div className="rc-system-issue-list">
-            {data.recentSystemIssues.map(
-              (issue) => (
-                <SystemIssueSummary
-                  key={issue.id}
-                  issue={issue}
-                />
-              ),
-            )}
-          </div>
-        ) : (
-          <EmptyState title="No open system issues">
-            ReleaseCore has not recorded a current
-            production failure for this store.
-          </EmptyState>
-        )}
-        <div className="rc-operations-footer">
-          <span>
-            Safe diagnostics only. Secrets and signed
-            URL query strings are redacted before
-            persistence.
-          </span>
-          <Link to="/app/system-issues">
-            View system issue history →
-          </Link>
-        </div>
       </s-section>
 
       <s-section heading="Needs attention">
         {data.issues.length ? (
           <div className="rc-operations-list">
-            {data.issues.map((issue) => (
-              <OperationsIssue
-                key={issue.key}
-                issue={issue}
-              />
-            ))}
+            {data.issues.map((issue) => <OperationsIssue key={issue.key} issue={issue} />)}
           </div>
         ) : (
-          <EmptyState title="No active release issues">
-            ReleaseCore did not find an actionable problem in the
-            current production queue.
+          <EmptyState title="Nothing needs attention">
+            There are no active release problems that require action right now.
           </EmptyState>
         )}
       </s-section>
@@ -277,34 +121,23 @@ export default function Operations() {
                 href={`/app/distribution/${release.id}`}
                 actionLabel="Open distribution"
                 badges={[
-                  {
-                    label: typeLabel(release.type),
-                    tone: "info",
-                  },
-                  {
-                    label: "Preflight ready",
-                    tone: "good",
-                  },
+                  { label: typeLabel(release.type), tone: "info" },
+                  { label: "Ready", tone: "good" },
                 ]}
                 meta={`${release.artistName || "Artist not set"} · ${release.trackCount} ${release.trackCount === 1 ? "track" : "tracks"}`}
-                aside={
-                  release.releaseDate
-                    ? `Release ${formatDate(release.releaseDate)}`
-                    : "No release date"
-                }
+                aside={release.releaseDate ? `Release ${formatDate(release.releaseDate)}` : "No release date"}
               />
             ))}
           </div>
         ) : (
           <EmptyState title="Nothing is waiting for distribution">
-            Approved releases will appear here once their local
-            preflight is complete.
+            Approved releases will appear here when they are ready to deliver.
           </EmptyState>
         )}
       </s-section>
 
-      <s-section heading="Scheduled next 7 days">
-        {data.scheduled.length ? (
+      {data.scheduled.length ? (
+        <s-section heading="Upcoming releases">
           <div className="rc-release-list">
             {data.scheduled.map((release) => (
               <ReleaseListItem
@@ -312,61 +145,47 @@ export default function Operations() {
                 release={release}
                 href={`/app/release/${release.id}`}
                 badges={[
+                  { label: typeLabel(release.type), tone: "info" },
                   {
-                    label: typeLabel(release.type),
-                    tone: "info",
-                  },
-                  {
-                    label: release.ready
-                      ? "Ready"
-                      : `${release.blockerCount} issue${release.blockerCount === 1 ? "" : "s"}`,
+                    label: release.ready ? "Ready" : `${release.blockerCount} issue${release.blockerCount === 1 ? "" : "s"}`,
                     tone: release.ready ? "good" : "warn",
                   },
                 ]}
                 meta={`${statusLabel(release.status)} · ${distributionStatusLabel(release.distributionStatus)}`}
-                aside={
-                  release.daysUntilRelease === 0
-                    ? "Today"
-                    : `${release.daysUntilRelease} day${release.daysUntilRelease === 1 ? "" : "s"} · ${formatDate(release.releaseDate)}`
-                }
-              />
-            ))}
-          </div>
-        ) : (
-          <EmptyState title="No releases in the next 7 days">
-            Upcoming release dates will appear here
-            automatically.
-          </EmptyState>
-        )}
-      </s-section>
-
-      {data.advisories.length ? (
-        <s-section heading="Workflow advisories">
-          <div className="rc-operations-list">
-            {data.advisories.map((issue) => (
-              <OperationsIssue
-                key={issue.key}
-                issue={issue}
+                aside={release.daysUntilRelease === 0 ? "Today" : `${release.daysUntilRelease} day${release.daysUntilRelease === 1 ? "" : "s"} · ${formatDate(release.releaseDate)}`}
               />
             ))}
           </div>
         </s-section>
       ) : null}
 
+      {data.recentSystemIssues.length ? (
+        <s-section heading="System issues">
+          <div className="rc-system-issue-list">
+            {data.recentSystemIssues.map((issue) => <SystemIssueSummary key={issue.id} issue={issue} />)}
+          </div>
+          <div className="rc-operations-footer">
+            <Link to="/app/system-issues">View all system issues →</Link>
+          </div>
+        </s-section>
+      ) : null}
+
+      {data.advisories.length ? (
+        <s-section heading="Advisories">
+          <div className="rc-operations-list">
+            {data.advisories.map((issue) => <OperationsIssue key={issue.key} issue={issue} />)}
+          </div>
+        </s-section>
+      ) : null}
+
       <s-section>
         <div className="rc-operations-footer">
-          <span>
-            Last evaluated{" "}
-            {new Date(data.checkedAt).toLocaleString()}.
-          </span>
-          <Link to="/app/releases">
-            Browse complete catalog →
-          </Link>
+          <Link to="/app/releases">View all releases →</Link>
+          <Link to="/app/operations/metrics">Advanced metrics</Link>
         </div>
       </s-section>
     </s-page>
   );
 }
 
-export const headers = (headersArgs) =>
-  boundary.headers(headersArgs);
+export const headers = (headersArgs) => boundary.headers(headersArgs);
