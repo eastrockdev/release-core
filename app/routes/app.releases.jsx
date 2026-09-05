@@ -78,9 +78,14 @@ export default function ReleasesIndex() {
           eyebrow="Catalog"
           title="Every release, organized from the start."
           actions={
-            <s-button onClick={() => navigate("/app/import")}>
-              Import Shopify product
-            </s-button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <s-button onClick={() => navigate("/app/import")}>
+                Import Shopify product
+              </s-button>
+              <s-button onClick={() => navigate("/app/import/back-catalog")}>
+                Import back catalog CSV
+              </s-button>
+            </div>
           }
         >
           Create or import singles, EPs, and albums. Artwork,
