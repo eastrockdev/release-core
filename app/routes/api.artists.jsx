@@ -4,6 +4,7 @@ import { apiErrorResponse, publicError } from "../lib/http-security.server";
 import { findShopArtist, findShopContributor } from "../lib/tenant-db.server";
 import { deleteShopifyFilesBestEffort } from "../lib/shopify-files.server";
 import { getShopifyArtistCollection, syncShopifyArtistCollection } from "../lib/shopify-artist-collections.server";
+import { syncArtistCollectionProfile } from "../lib/artist-collection-profile.server";
 
 const clean = (value) => String(value || "").trim() || null;
 
@@ -140,7 +141,7 @@ export const action = async ({ request }) => {
         sourceId,
       });
 
-      await db.artist.update({
+      const linkedArtist = await db.artist.update({
         where: { id: artist.id },
         data: {
           shopifyCollectionId: result.collection.id,
@@ -149,6 +150,8 @@ export const action = async ({ request }) => {
           shopifyCollectionSyncedAt: new Date(),
         },
       });
+
+      await syncArtistCollectionProfile({ admin, artist: linkedArtist });
 
       return Response.json({
         ok:true,
@@ -160,7 +163,6 @@ export const action = async ({ request }) => {
           : `Shopify artist collection synced with ${result.productCount} linked product${result.productCount === 1 ? "" : "s"}.`,
       });
     }
-
 
     if (intent === "stage-image") {
       const artist = await findShopArtist(session.shop, artistId);
@@ -194,7 +196,8 @@ mutation ReleaseCoreCreateArtistImage($files:[FileCreateInput!]!){fileCreate(fil
       const file = created?.files?.[0];
       if (!file?.id) throw new Error("Shopify did not create the artist image.");
       const imageUrl = file.image?.url || resourceUrl;
-      await db.artist.update({ where: { id: artist.id }, data: { imageUrl, imageFileId: file.id } });
+      const updated = await db.artist.update({ where: { id: artist.id }, data: { imageUrl, imageFileId: file.id } });
+      await syncArtistCollectionProfile({ admin, artist: updated });
       if (artist.imageFileId && artist.imageFileId !== file.id) {
         await deleteShopifyFilesBestEffort(admin, artist.imageFileId, {
           context: "old artist image cleanup",
@@ -237,6 +240,7 @@ mutation ReleaseCoreCreateArtistImage($files:[FileCreateInput!]!){fileCreate(fil
       const owned = await findShopArtist(session.shop, artistId);
       if (!owned) return Response.json({ ok:false, error:"Artist not found." }, { status:404 });
       const artist = await db.artist.update({ where:{id:owned.id}, data:payload });
+      await syncArtistCollectionProfile({ admin, artist });
 
       // Refresh the legacy release display cache anywhere this artist is the first primary release artist.
       const assignments = await db.releaseArtist.findMany({ where:{artistId:artist.id, release:{shop:session.shop}}, select:{releaseId:true} });
