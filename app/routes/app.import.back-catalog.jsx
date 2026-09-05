@@ -5,11 +5,6 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { authenticatedPost } from "../lib/authenticated-post";
-import {
-  importBackCatalogCsv,
-  previewBackCatalogCsv,
-} from "../lib/back-catalog-import.server";
-import { apiErrorResponse } from "../lib/http-security.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -21,39 +16,6 @@ export const loader = async ({ request }) => {
   });
 
   return { artists };
-};
-
-export const action = async ({ request }) => {
-  try {
-    const { session } = await authenticate.admin(request);
-    const form = await request.formData();
-    const intent = String(form.get("intent") || "preview");
-    const artistId = String(form.get("artistId") || "").trim();
-    const csvText = String(form.get("csvText") || "");
-    const importState = String(form.get("importState") || "CATALOG");
-
-    if (intent === "import") {
-      const result = await importBackCatalogCsv({
-        shop: session.shop,
-        artistId,
-        csvText,
-        importState,
-      });
-      return Response.json({ ok: true, ...result });
-    }
-
-    const preview = await previewBackCatalogCsv({
-      shop: session.shop,
-      artistId,
-      csvText,
-    });
-    return Response.json({ ok: true, preview });
-  } catch (error) {
-    return apiErrorResponse(request, error, {
-      context: "back catalog CSV import",
-      fallback: "ReleaseCore could not process this back catalog CSV.",
-    });
-  }
 };
 
 function formatReleaseDate(value) {
@@ -182,7 +144,7 @@ export default function BackCatalogImportPage() {
       form.set("artistId", artistId);
       form.set("csvText", csvText);
       form.set("importState", importState);
-      const result = await authenticatedPost(shopify, "/app/import/back-catalog", form);
+      const result = await authenticatedPost(shopify, "/api/back-catalog-import", form);
 
       if (intent === "preview") {
         setPreview(result.preview);
@@ -208,7 +170,7 @@ export default function BackCatalogImportPage() {
 
   return (
     <s-page heading="Import back catalog CSV">
-      <s-button slot="primary-action" onClick={() => navigate("/app/import")}>Shopify product import</s-button>
+      <s-button variant="primary" slot="primary-action" onClick={() => navigate("/app/import")}>Shopify product import</s-button>
 
       <s-section>
         <div style={styles.hero}>
