@@ -92,9 +92,6 @@ function releaseTypeLabel(type) {
 function releasePrimaryArtists(release) {
   return uniqueEastRockNames([
     ...names(release?.artists, "PRIMARY"),
-    ...(release?.tracks || []).flatMap((track) =>
-      names(track?.artists, "PRIMARY"),
-    ),
     release?.artistName,
   ]);
 }
@@ -352,8 +349,8 @@ export function eastRockCompatibilityMap() {
     "custom.mixing_engineer": "MIXING_ENGINEER credits",
     "custom.parental_advisory": "track/release explicit state",
     "custom.recording_engineer": "RECORDING_ENGINEER credits",
-    "custom.artist_primary": "track/release PRIMARY artists (legacy)",
-    "custom.release_artist": "track/release PRIMARY artist display name (current East Rock storefront)",
+    "custom.artist_primary": "release PRIMARY artists on Album/EP products; track PRIMARY artists on track products (legacy)",
+    "custom.release_artist": "release PRIMARY artist display name on Album/EP products; track PRIMARY artist display name on track products",
     "custom.release_date": "release.releaseDate",
     "custom.pre_order_date": "release.preOrderDate",
     "custom.release_type": "release.type",
