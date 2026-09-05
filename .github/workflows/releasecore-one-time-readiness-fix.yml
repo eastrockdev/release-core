@@ -25,33 +25,24 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
-          def replace_once(path, old, new, label):
-              file = Path(path)
-              source = file.read_text()
-              if old not in source:
-                  raise SystemExit(f"Could not find expected source block for {label} in {path}")
-              file.write_text(source.replace(old, new, 1))
+          portal_path = Path("app/lib/portal.server.js")
+          portal = portal_path.read_text()
 
-          portal = "app/lib/portal.server.js"
-          dashboard = "extensions/releasecore-artist-portal/assets/releasecore-dashboard.js"
-          validator = "scripts/validate-m18.2-native-portal.mjs"
-
-          replace_once(
-              portal,
-              '''  const datePolicy = releaseDatePolicy(settings);
-          const releaseDate = releaseDateOnly(release.releaseDate);
-          const leadTimeCheck = validateReleaseDateLeadTime(releaseDate, settings);
-          readiness.checks.releaseDateLeadTimeReady = !datePolicy.enabled || Boolean(releaseDate && leadTimeCheck.ok);
-          if (releaseDate && !leadTimeCheck.ok) {
-            readiness.ready = false;
-            readiness.blockers = [
-              { code: "RELEASE_LEAD_TIME", message: leadTimeCheck.message },
-              ...readiness.blockers.filter((item) => item.code !== "RELEASE_LEAD_TIME"),
-            ];
-          }
-          ''',
-              '''  const datePolicy = releaseDatePolicy(settings);
+          pattern = re.compile(
+              r'  const datePolicy = releaseDatePolicy\(settings\);\s*'
+              r'const releaseDate = releaseDateOnly\(release\.releaseDate\);\s*'
+              r'const leadTimeCheck = validateReleaseDateLeadTime\(releaseDate, settings\);\s*'
+              r'readiness\.checks\.releaseDateLeadTimeReady = !datePolicy\.enabled \|\| Boolean\(releaseDate && leadTimeCheck\.ok\);\s*'
+              r'if \(releaseDate && !leadTimeCheck\.ok\) \{\s*'
+              r'readiness\.ready = false;\s*'
+              r'readiness\.blockers = \[\s*'
+              r'\{ code: "RELEASE_LEAD_TIME", message: leadTimeCheck\.message \},\s*'
+              r'\.\.\.readiness\.blockers\.filter\(\(item\) => item\.code !== "RELEASE_LEAD_TIME"\),\s*'
+              r'\];\s*\}'
+          )
+          replacement = '''  const datePolicy = releaseDatePolicy(settings);
           const isInitialDraft = release.status === "DRAFT" && !release.submittedAt;
           const releaseDate = releaseDateOnly(release.releaseDate);
           const leadTimeCheck = validateReleaseDateLeadTime(releaseDate, settings);
@@ -65,76 +56,56 @@ jobs:
               { code: "RELEASE_LEAD_TIME", message: leadTimeCheck.message },
               ...readiness.blockers.filter((item) => item.code !== "RELEASE_LEAD_TIME"),
             ];
-          }
-          ''',
-              "draft-only release date lead-time readiness",
-          )
+          }'''
+          portal, count = pattern.subn(replacement, portal, count=1)
+          if count != 1:
+              raise SystemExit("Could not patch portal release-date readiness logic")
 
-          replace_once(
-              portal,
-              '    releaseDatePolicy: datePolicy,',
+          portal, count = re.subn(
+              r'    releaseDatePolicy: datePolicy,',
               '    releaseDatePolicy: isInitialDraft\n      ? datePolicy\n      : { ...datePolicy, enabled: false },',
-              "post-submission release date policy visibility",
-          )
-
-          replace_once(
               portal,
-              '''  const leadTime = validateReleaseDateLeadTime(releaseDateRaw || null, settings);
-          if (!leadTime.ok) throw publicError(leadTime.message);
-          ''',
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("Could not patch release-date policy visibility")
+
+          portal, count = re.subn(
+              r'  const leadTime = validateReleaseDateLeadTime\(releaseDateRaw \|\| null, settings\);\s*'
+              r'if \(!leadTime\.ok\) throw publicError\(leadTime\.message\);',
               '''  if (release.status === "DRAFT" && !release.submittedAt) {
             const leadTime = validateReleaseDateLeadTime(releaseDateRaw || null, settings);
             if (!leadTime.ok) throw publicError(leadTime.message);
-          }
-          ''',
-              "draft-only release date lead-time mutation validation",
+          }''',
+              portal,
+              count=1,
           )
+          if count != 1:
+              raise SystemExit("Could not patch draft-only release-date mutation validation")
+          portal_path.write_text(portal)
 
-          replace_once(
-              dashboard,
-              '      const splitSheet = fileByKind(release.files, "SPLIT_SHEET");',
-              '''      const splitSheet = fileByKind(release.files, "SPLIT_SHEET");
+          dashboard_path = Path("extensions/releasecore-artist-portal/assets/releasecore-dashboard.js")
+          dashboard = dashboard_path.read_text()
+          anchor = '      const splitSheet = fileByKind(release.files, "SPLIT_SHEET");'
+          if anchor not in dashboard:
+              raise SystemExit("Could not find release workspace file anchor")
+          dashboard = dashboard.replace(
+              anchor,
+              anchor + '''
           const showReadiness =
             release.canSubmit &&
             String(release.distributionStatus || "").toUpperCase() !== "DELIVERED";''',
-              "release readiness visibility guard",
+              1,
           )
-
-          replace_once(
-              dashboard,
-              '              <article class="rc-native-side-card">${renderReadiness(release)}</article>',
+          readiness_card = '              <article class="rc-native-side-card">${renderReadiness(release)}</article>'
+          if readiness_card not in dashboard:
+              raise SystemExit("Could not find readiness card")
+          dashboard = dashboard.replace(
+              readiness_card,
               '              ${showReadiness ? `<article class="rc-native-side-card">${renderReadiness(release)}</article>` : ""}',
-              "readiness side card rendering",
+              1,
           )
-
-          anchor = '''expect(
-            "app/lib/portal.server.js",
-            "artistId = null",
-            "artist-scoped portal release listing",
-          );
-          '''
-          extra = '''expect(
-            "app/lib/portal.server.js",
-            'const isInitialDraft = release.status === "DRAFT" && !release.submittedAt;',
-            "draft-only release date lead-time guard",
-          );
-          expect(
-            "app/lib/portal.server.js",
-            "if (isInitialDraft && releaseDate && !leadTimeCheck.ok)",
-            "post-submission release date lead-time suppression",
-          );
-          expect(
-            "extensions/releasecore-artist-portal/assets/releasecore-dashboard.js",
-            "const showReadiness =",
-            "actionable release readiness visibility guard",
-          );
-          expect(
-            "extensions/releasecore-artist-portal/assets/releasecore-dashboard.js",
-            'String(release.distributionStatus || "").toUpperCase() !== "DELIVERED"',
-            "delivered release readiness suppression",
-          );
-          '''
-          replace_once(validator, anchor, anchor + extra, "M18.2 regression checks")
+          dashboard_path.write_text(dashboard)
 
           Path(".github/workflows/releasecore-one-time-readiness-fix.yml").unlink()
           PY
